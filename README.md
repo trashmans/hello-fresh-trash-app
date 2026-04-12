@@ -4,7 +4,7 @@ A web app for cataloguing your HelloFresh recipe cards. Upload a PDF recipe card
 
 Installable on your phone home screen like a native app.
 
-**Live app:** *(URL will be updated after first Vercel deploy)*
+**Live app:** https://hello-fresh-trash-app.vercel.app/
 
 ---
 
