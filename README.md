@@ -1,15 +1,16 @@
-# Hell Fresh Trash
+# Hello Fresh Trash
 
 A web app for cataloguing your HelloFresh recipe cards. Upload a PDF recipe card, search by ingredient, and build a shopping list from the recipes you want to cook.
 
 Installable on your phone home screen like a native app.
 
-**Live app:** https://trashmans.github.io/hello-fresh-trash-app/
+**Live app:** *(URL will be updated after first Vercel deploy)*
 
 ---
 
 ## Contents
 
+- [Where Things Live](#where-things-live)
 - [Architecture](#architecture)
   - [Presentation Layer](#presentation-layer)
   - [Routing Layer](#routing-layer)
@@ -19,6 +20,22 @@ Installable on your phone home screen like a native app.
 - [Project Structure](#project-structure)
 - [Local Development](#local-development)
 - [Contributing](CONTRIBUTING.md)
+
+---
+
+## Where Things Live
+
+The app uses three platforms, each with a different job:
+
+| Platform | Job | What lives here |
+|---|---|---|
+| **GitHub** | Source control and CI/CD | The code, the git history, pull requests, and GitHub Actions workflows that run tests and trigger deploys |
+| **Vercel** | Frontend hosting | The compiled app that users visit. Every PR gets a temporary preview URL. Merging to `main` updates the live site. |
+| **Supabase** *(Phase 2)* | Backend | The database, user authentication, uploaded recipe PDFs, and the edge function that parses them |
+
+A useful way to think about it: GitHub is where you *build* the app, Vercel is where users *visit* the app, and Supabase is where the app *stores its data*.
+
+These platforms are independent — GitHub doesn't know what Vercel is hosting, and Vercel doesn't know what Supabase is storing. GitHub Actions is the glue: it runs on GitHub, calls the Vercel CLI to deploy the frontend, and in Phase 2 will call the Supabase CLI to run database migrations.
 
 ---
 
@@ -65,7 +82,7 @@ A useful way to think about it: React builds the rooms, Tailwind paints them, sh
 
 | Technology | Role |
 |---|---|
-| **React Router v7** | Handles navigation between pages entirely in the browser — no page reloads. Uses `HashRouter` mode (`/#/home`) because GitHub Pages is static hosting and cannot redirect unknown paths to `index.html`. |
+| **React Router v7** | Handles navigation between pages entirely in the browser — no page reloads. Uses `BrowserRouter` mode (`/home`) because Vercel can redirect unknown paths to `index.html`, allowing clean URLs. |
 
 ---
 
@@ -76,7 +93,7 @@ A useful way to think about it: React builds the rooms, Tailwind paints them, sh
 | **npm** | Package manager. Installs and manages all the third-party libraries the app depends on (React, Tailwind, shadcn/ui etc). Running `npm install` downloads them into `node_modules/`. Running `npm run dev` or `npm run build` hands off to Vite. npm is the launcher — Vite is the engine it starts. |
 | **Vite** | Build tool and local dev server. When you run `npm run dev`, npm calls Vite, which compiles your JSX and serves the app locally. When you run `npm run build`, Vite compiles everything into the `dist/` folder for deployment. npm and Vite are always used together — npm manages packages, Vite does the actual building. |
 | **GitHub Actions** | CI/CD pipeline. Three independent workflows watch different parts of the repo — changes to `src/` trigger a frontend deploy, changes to `supabase/migrations/` will trigger a database migration, changes to `supabase/functions/` will trigger a function deploy. |
-| **GitHub Pages** | Static hosting for the compiled frontend. Serves the contents of `dist/` at the live URL. The app logic runs entirely in the browser. |
+| **Vercel** | Frontend hosting. Chosen over GitHub Pages because it supports private repositories on the free tier, provides a live preview URL for every pull request, and serves clean `/home` style URLs. GitHub Actions calls the Vercel CLI to deploy — all build and deploy logs are visible in GitHub Actions so neither collaborator needs Vercel account access to diagnose a failure. |
 
 ---
 
@@ -101,7 +118,8 @@ Get a real, installable web app deployed with a working CI/CD pipeline.
 - [x] Login page and Home page (UI only, no real auth yet)
 - [x] Dark theme, green accents, mobile-friendly layout
 - [x] PWA manifest — installable on iPhone and Android home screen
-- [x] GitHub Actions pipeline — push to `main` → auto deploys to GitHub Pages
+- [x] GitHub Actions pipeline — PR opens → tests run → deploys preview to Vercel, merge to `main` → deploys to production
+- [x] Vercel hosting — private repo, clean URLs, preview deploy on every PR
 - [x] Independent pipeline stubs for Supabase migrations and functions
 
 ---
@@ -127,7 +145,6 @@ Wire up the backend so the app stores and retrieves real data.
 - [ ] Onboarding empty states
 - [ ] Lighthouse performance audit
 - [ ] Vitest unit tests for components and utility functions
-- [ ] Unit tests run as part of CI check on every PR
 
 ---
 
@@ -153,7 +170,7 @@ supabase/
     └── parse-recipe/     # edge function that parses uploaded PDFs
 
 .github/workflows/
-├── deploy-frontend.yml   # triggers on src/ changes → deploys to GitHub Pages
+├── deploy-frontend.yml   # triggers on src/ changes → runs tests, builds, deploys to Vercel
 ├── deploy-migrations.yml # triggers on supabase/migrations/ changes
 └── deploy-functions.yml  # triggers on supabase/functions/ changes
 ```
@@ -225,7 +242,7 @@ npm run dev
 The app is now running on your machine at:
 
 ```
-http://localhost:5173/hello-fresh-trash-app/
+http://localhost:5173/
 ```
 
 Open that URL in your browser. Changes you make to the code appear instantly in the browser without needing to refresh — this is called hot reload.
@@ -246,12 +263,10 @@ That stops the server. The app will no longer be accessible at the localhost URL
 
 ### Deploying
 
-You do not need to build or deploy manually. Push your changes to `main` and GitHub Actions handles everything automatically. The live site updates in about 2 minutes.
+You do not need to build or deploy manually. Commits and merges are handled through pull requests — GitHub Actions does the rest.
 
-```bash
-git add .
-git commit -m "your message here"
-git push origin main
-```
+**Opening a PR:** When you push a branch and open a pull request, one workflow runs automatically: it installs dependencies, runs tests, then builds and deploys to Vercel. If tests fail, the deploy never happens. If everything passes, a preview URL is posted as a status check on the PR — open it on your phone to check how it looks before merging.
+
+**Merging to main:** Once the check passes and the PR is merged, GitHub Actions deploys the updated app to the live production URL automatically. The site updates in about 2 minutes.
 
 > **Phase 2 note:** Copy `.env.example` to `.env` and fill in your Supabase credentials before working on any backend features.
