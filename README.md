@@ -125,6 +125,8 @@ Wire up the backend so the app stores and retrieves real data.
 - [ ] Analytics with PostHog or Plausible
 - [ ] Onboarding empty states
 - [ ] Lighthouse performance audit
+- [ ] Vitest unit tests for components and utility functions
+- [ ] Unit tests run as part of CI check on every PR
 
 ---
 

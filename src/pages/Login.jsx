@@ -22,10 +22,13 @@ export default function Login() {
             <Input type="email" placeholder="Email" />
             <Input type="password" placeholder="Password" />
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex flex-col gap-3">
             <Button className="w-full" size="lg" onClick={() => navigate('/home')}>
               Sign in
             </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Authentication is not yet active — sign in will pass through without verification.
+            </p>
           </CardFooter>
         </Card>
       </div>
