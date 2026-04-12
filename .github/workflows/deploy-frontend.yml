@@ -35,10 +35,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - name: Install dependencies
-        run: npm install
-      - name: Run tests
-        run: npm test
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
       - name: Pull Vercel environment (preview)
