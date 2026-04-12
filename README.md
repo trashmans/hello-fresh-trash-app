@@ -19,6 +19,7 @@ Installable on your phone home screen like a native app.
 - [Roadmap](#roadmap)
 - [Project Structure](#project-structure)
 - [Local Development](#local-development)
+- [Contributing](CONTRIBUTING.md)
 
 ---
 
