@@ -84,6 +84,12 @@ Use a prefix that describes what the branch is for:
 
 Examples: `feature/recipe-upload`, `fix/login-button`, `chore/update-readme`
 
+**Commit messages** use the same prefix as the branch, followed by a short lowercase imperative description:
+
+- `feature: add recipe upload component`
+- `fix: login button not responding on mobile`
+- `chore: update readme with vercel deployment steps`
+
 ---
 
 ## Workflow: GitHub Desktop

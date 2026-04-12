@@ -42,11 +42,11 @@ Secrets (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`) are stored in Git
 
 Examples: `feature/recipe-upload`, `fix/login-button`, `chore/update-readme`
 
-**Commit messages** should be lowercase, imperative, and describe what the change does — not what you did:
+**Commit messages** use the same prefix as the branch, followed by a short lowercase imperative description:
 
-- `add recipe upload component`
-- `fix login button not responding on mobile`
-- `update readme with vercel deployment steps`
+- `feature: add recipe upload component`
+- `fix: login button not responding on mobile`
+- `chore: update readme with vercel deployment steps`
 
 Before a PR is opened, suggest a branch name and a commit message that follows these conventions.
 
