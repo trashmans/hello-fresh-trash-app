@@ -1,0 +1,27 @@
+name: Dependabot Build Check
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'index.html'
+      - 'vite.config.js'
+      - 'package.json'
+
+jobs:
+  build:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build
