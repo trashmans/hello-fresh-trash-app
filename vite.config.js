@@ -11,10 +11,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  base: '/hello-fresh-trash-app/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
   },
 })
