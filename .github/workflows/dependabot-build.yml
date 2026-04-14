@@ -5,14 +5,11 @@ on:
     branches:
       - main
     paths:
-      - 'src/**'
-      - 'index.html'
-      - 'vite.config.js'
       - 'package.json'
 
 jobs:
   build:
-    if: github.actor == 'dependabot[bot]'
+    if: github.actor == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/')
     runs-on: ubuntu-latest
     permissions:
       contents: read
