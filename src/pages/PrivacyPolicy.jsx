@@ -56,8 +56,8 @@ export default function PrivacyPolicy() {
             <p>
               You have the right to access, correct, or delete the data we hold about you.
               To request deletion of your account and data, email us at{' '}
-              <a href="mailto:trashmanss@gmail.com" className="underline">
-                trashmanss@gmail.com
+              <a href="mailto:there's_no_email@gmail.com" className="underline">
+                There's no email
               </a>
               . We will action your request within 30 days.
             </p>
