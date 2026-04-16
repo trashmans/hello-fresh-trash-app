@@ -1,3 +1,4 @@
+-- RLS audit 2026-04-16: policies reviewed and confirmed correct.
 -- Create the profiles table
 -- GDPR deletion strategy:
 --   - This table cascades from auth.users (deleting auth record wipes profile)

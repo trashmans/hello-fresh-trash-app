@@ -15,7 +15,8 @@ Installable on your phone home screen like a native app.
   - [Presentation Layer](#presentation-layer)
   - [Routing Layer](#routing-layer)
   - [Build & Deployment Layer](#build--deployment-layer)
-  - [Backend & Data Layer](#backend--data-layer-phase-2)
+  - [Backend & Data Layer](#backend--data-layer)
+  - [Security](#security)
 - [Roadmap](#roadmap)
 - [Project Structure](#project-structure)
 - [Development](#development)
@@ -32,7 +33,8 @@ The app uses three platforms, each with a different job:
 |---|---|---|
 | **GitHub** | Source control and CI/CD | The code, git history, pull requests, and GitHub Actions workflows that trigger deploys |
 | **Vercel** | Frontend hosting | The compiled app that users visit. Every PR gets a preview URL. Merging to `main` updates the live site. |
-| **Supabase** | Backend | The database, user authentication, uploaded recipe PDFs, and the edge function that parses them |
+| **Supabase (prod)** | Production backend | Real user accounts, real data. Connected only to production Vercel deploys. |
+| **Supabase (preview)** | Preview backend | Isolated environment for PR previews and local dev. No real data — safe to wipe. |
 
 GitHub is where you *build* the app, Vercel is where users *visit* the app, and Supabase is where the app *stores its data*.
 
@@ -127,11 +129,40 @@ To revoke access at any time, delete the token from your Vercel account settings
 
 | Technology | Role |
 |---|---|
-| **Supabase Auth** | User authentication. Google OAuth with email allowlist. Sessions managed by the Supabase JS client and stored in localStorage. |
-| **Supabase Database** | Postgres database hosted by Supabase. Stores recipes, ingredients, and shopping lists. Schema defined in `supabase/migrations/`. |
+| **Supabase Auth** | User authentication. Google OAuth with email allowlist enforced at the database level. Sessions managed by the Supabase JS client and stored in localStorage. |
+| **Supabase Database** | Postgres database hosted by Supabase. Stores recipes, ingredients, and shopping lists. Schema defined in `supabase/migrations/`. Row Level Security enabled on all tables. |
 | **Supabase Storage** | File storage for uploaded recipe PDFs. |
 | **Supabase Edge Functions** | Serverless functions running on Deno. The `parse-recipe` function receives an uploaded PDF, extracts the recipe name, ingredients, and steps, and writes the result to the database. |
 | **pdf.js** | PDF parsing library used inside the edge function to read text content from uploaded HelloFresh recipe cards. |
+
+---
+
+### Security
+
+**This is a public GitHub repository.** Every PR generates a Vercel preview URL that is publicly accessible. The security model is designed around this constraint.
+
+#### Two Supabase projects — preview isolation
+
+The core mitigation for public preview URLs is running two completely separate Supabase projects:
+
+| Environment | Supabase project | Connected to |
+|---|---|---|
+| Production | `hello-fresh-trash` | Vercel Production deploys only (`main` branch) |
+| Preview | `hello-fresh-trash-preview` | Vercel Preview deploys (PRs) and local dev |
+
+Vercel scopes `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON` separately per environment — same variable names, different values injected at build time. If a preview URL is shared or indexed publicly, it connects to the preview Supabase project which holds no real user data.
+
+Local development always points at the preview project via `.env`. Production credentials exist only in Vercel and are never in code or `.env`.
+
+#### Deny-by-default database access
+
+Row Level Security (RLS) is enabled on every table the moment it is created. With no policy, access is denied to everyone — including authenticated users. Policies only open access for the operations a feature explicitly needs.
+
+The email allowlist is enforced at two layers:
+1. **Database trigger** — a `BEFORE INSERT` trigger on `auth.users` rejects the signup entirely if the email is not in `allowed_emails`. No account is created.
+2. **Client-side check** — `AuthContext` signs out any authenticated session where the email is not on the list. A second layer of defence.
+
+The Supabase anon key is the only credential the browser ever sees. The service role key (which bypasses RLS) exists only as a Supabase-managed secret inside Edge Functions and never touches the frontend.
 
 ---
 
@@ -154,6 +185,22 @@ Get a real, installable web app deployed with a working CI/CD pipeline.
 ### 🔜 Phase 2 — Supabase Integration
 Wire up the backend so the app stores and retrieves real data.
 
+#### Security & environments
+- [x] Preview Supabase project — isolated from prod, used by PR previews and local dev
+- [x] Vercel env vars scoped per environment — Production and Preview use different Supabase projects
+- [x] Production anon key rotated after environment separation
+- [x] Local `.env` points at preview project — never prod
+- [x] Branch protection enabled on `main`
+- [x] Server-side allowlist enforcement — `BEFORE INSERT` trigger on `auth.users` blocks unauthorised signups at the database level
+- [x] RLS audit — `allowed_emails` and `profiles` tables reviewed and confirmed
+
+#### RLS — applied per table as tables are built
+- [ ] `recipes` table — RLS enabled with per-user policies
+- [ ] `ingredients` table — RLS enabled with per-user policies
+- [ ] `shopping_lists` table — RLS enabled with per-user policies
+- [ ] Storage bucket access policies defined
+
+#### Features
 - [x] Supabase project setup
 - [x] User authentication (Google OAuth via Supabase Auth, email allowlist)
 - [ ] PDF upload to Supabase Storage
@@ -197,7 +244,8 @@ src/
     └── utils.js           # cn() helper for combining Tailwind classes
 
 supabase/
-├── migrations/           # database schema changes (SQL)
+├── migrations/           # database schema changes (SQL) — run in order on every environment
+├── seed.sql              # template for seeding initial data (no real emails — swap in locally)
 └── functions/
     └── parse-recipe/     # edge function that parses uploaded PDFs
 
