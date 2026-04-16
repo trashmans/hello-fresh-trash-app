@@ -59,12 +59,29 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            github.rest.issues.createComment({
+            const marker = '<!-- vercel-preview-url -->';
+            const body = `${marker}\n✅ Preview deployed: ${{ steps.deploy-preview.outputs.url }}`;
+            const comments = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ Preview deployed: ${{ steps.deploy-preview.outputs.url }}'
-            })
+            });
+            const existing = comments.data.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                comment_id: existing.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            }
       - name: Deploy production
         if: github.event_name == 'push'
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

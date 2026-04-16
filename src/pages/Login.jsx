@@ -1,10 +1,20 @@
-import { useNavigate } from 'react-router-dom'
+import { Navigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 export default function Login() {
-  const navigate = useNavigate()
+  const { session, authError } = useAuth()
+
+  if (session) return <Navigate to="/home" replace />
+
+  const handleGoogleSignIn = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    })
+  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -16,18 +26,21 @@ export default function Login() {
         <Card>
           <CardHeader>
             <CardTitle>Sign in</CardTitle>
-            <CardDescription>Enter your details to access your recipes</CardDescription>
+            <CardDescription>Use your Google account to access your recipes</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Input type="email" placeholder="Email" />
-            <Input type="password" placeholder="Password" />
+          <CardContent>
+            {authError && (
+              <p className="text-sm text-destructive">{authError}</p>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
-            <Button className="w-full" size="lg" onClick={() => navigate('/home')}>
-              Sign in
+            <Button className="w-full" size="lg" onClick={handleGoogleSignIn}>
+              Sign in with Google
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Authentication is not yet active — sign in will pass through without verification.
+              By signing in, you agree that we store your name and email from Google
+              to attribute your uploads.{' '}
+              <Link to="/privacy" className="underline">Privacy Policy</Link>.
             </p>
           </CardFooter>
         </Card>

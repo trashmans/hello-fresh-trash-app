@@ -32,7 +32,7 @@ The app uses three platforms, each with a different job:
 |---|---|---|
 | **GitHub** | Source control and CI/CD | The code, git history, pull requests, and GitHub Actions workflows that trigger deploys |
 | **Vercel** | Frontend hosting | The compiled app that users visit. Every PR gets a preview URL. Merging to `main` updates the live site. |
-| **Supabase** *(Phase 2)* | Backend | The database, user authentication, uploaded recipe PDFs, and the edge function that parses them |
+| **Supabase** | Backend | The database, user authentication, uploaded recipe PDFs, and the edge function that parses them |
 
 GitHub is where you *build* the app, Vercel is where users *visit* the app, and Supabase is where the app *stores its data*.
 
@@ -119,15 +119,15 @@ GitHub Actions needs credentials to talk to Vercel. These are stored as reposito
 
 To revoke access at any time, delete the token from your Vercel account settings.
 
-> **Phase 2 note:** Copy `.env.example` to `.env` and fill in your Supabase credentials before working on any backend features.
+> **Local setup:** Copy `.env.example` to `.env` and fill in your Supabase credentials. See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup steps.
 
 ---
 
-### Backend & Data Layer *(Phase 2)*
+### Backend & Data Layer
 
 | Technology | Role |
 |---|---|
-| **Supabase Auth** | User authentication. Handles sign up, login, and session management with email/password. |
+| **Supabase Auth** | User authentication. Google OAuth with email allowlist. Sessions managed by the Supabase JS client and stored in localStorage. |
 | **Supabase Database** | Postgres database hosted by Supabase. Stores recipes, ingredients, and shopping lists. Schema defined in `supabase/migrations/`. |
 | **Supabase Storage** | File storage for uploaded recipe PDFs. |
 | **Supabase Edge Functions** | Serverless functions running on Deno. The `parse-recipe` function receives an uploaded PDF, extracts the recipe name, ingredients, and steps, and writes the result to the database. |
@@ -154,8 +154,8 @@ Get a real, installable web app deployed with a working CI/CD pipeline.
 ### 🔜 Phase 2 — Supabase Integration
 Wire up the backend so the app stores and retrieves real data.
 
-- [ ] Supabase project setup
-- [ ] User authentication (email/password)
+- [x] Supabase project setup
+- [x] User authentication (Google OAuth via Supabase Auth, email allowlist)
 - [ ] PDF upload to Supabase Storage
 - [ ] `parse-recipe` edge function — extracts recipe data from uploaded PDFs
 - [ ] Recipe catalogue — display all uploaded recipes
@@ -181,15 +181,20 @@ Wire up the backend so the app stores and retrieves real data.
 src/
 ├── components/
 │   ├── ui/               # shadcn/ui base components (Button, Card, Input)
+│   ├── ProtectedRoute    # redirects unauthenticated users to login
 │   ├── RecipeCatalogue   # displays all recipes
 │   ├── PDFUploader       # handles PDF upload
 │   ├── IngredientSearch  # search recipes by ingredient
 │   └── ShoppingList      # shopping list generator
+├── context/
+│   └── AuthContext       # session state, allowlist check, signOut
 ├── pages/
-│   ├── Login             # login screen
-│   └── Home              # main app screen
+│   ├── Login             # login screen with Google OAuth
+│   ├── Home              # main app screen
+│   └── PrivacyPolicy     # GDPR privacy policy (/privacy)
 └── lib/
-    └── utils.js          # cn() helper for combining Tailwind classes
+    ├── supabase.js        # Supabase client
+    └── utils.js           # cn() helper for combining Tailwind classes
 
 supabase/
 ├── migrations/           # database schema changes (SQL)
