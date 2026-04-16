@@ -2,20 +2,16 @@ import { FileUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { useAuth } from '@/context/AuthContext'
+import UserMenu from '@/components/UserMenu'
 
 export default function Home() {
-  const { signOut } = useAuth()
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <Link to="/home">
           <h1 className="text-lg font-semibold text-primary hover:opacity-80 transition-opacity">Hello Fresh Trash</h1>
         </Link>
-        <Button variant="ghost" size="sm" onClick={signOut}>
-          Sign out
-        </Button>
+        <UserMenu />
       </header>
       <main className="max-w-4xl mx-auto px-6 py-12">
         <div className="mb-8">

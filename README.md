@@ -219,6 +219,7 @@ Wire up the backend so the app stores and retrieves real data.
 - [ ] Onboarding empty states
 - [ ] Lighthouse performance audit
 - [ ] Vitest unit tests for components and utility functions
+- [ ] Avatar storage — evaluate copying Google profile photo to Supabase Storage on signup for reliable recipe attribution (assess storage cost against free tier limit before implementing)
 
 ---
 
