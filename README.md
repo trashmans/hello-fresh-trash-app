@@ -195,17 +195,18 @@ Wire up the backend so the app stores and retrieves real data.
 - [x] RLS audit — `allowed_emails` and `profiles` tables reviewed and confirmed
 
 #### RLS — applied per table as tables are built
-- [ ] `recipes` table — RLS enabled with per-user policies
+
+- [x] `recipes` table — RLS enabled; all authenticated users can read (shared catalogue); any authenticated user can upload; only the uploader can delete their own recipes; updates reserved for the parse-recipe edge function (service role)
 - [ ] `ingredients` table — RLS enabled with per-user policies
 - [ ] `shopping_lists` table — RLS enabled with per-user policies
-- [ ] Storage bucket access policies defined
+- [x] Storage bucket access policies defined — authenticated users can upload and read; only the uploader can delete their own files (enforced by joining storage objects back to the recipes table)
 
 #### Features
 - [x] Supabase project setup
 - [x] User authentication (Google OAuth via Supabase Auth, email allowlist)
-- [ ] PDF upload to Supabase Storage
-- [ ] `parse-recipe` edge function — extracts recipe data from uploaded PDFs
-- [ ] Recipe catalogue — display all uploaded recipes
+- [x] PDF upload to Supabase Storage — with client-side MIME/size validation, UUID storage paths, sanitized filenames, and toast notifications
+- [x] Recipe catalogue — shared gallery of all uploaded recipes with side-panel PDF preview and per-uploader delete
+- [ ] `parse-recipe` edge function — extracts recipe name and ingredients from uploaded PDFs; will populate the `name` column and promote status from `pending` to `ready`
 - [ ] Ingredient search
 - [ ] Shopping list generator
 - [ ] Migrations and functions pipelines go live
@@ -230,10 +231,11 @@ src/
 ├── components/
 │   ├── ui/               # shadcn/ui base components (Button, Card, Input)
 │   ├── ProtectedRoute    # redirects unauthenticated users to login
-│   ├── RecipeCatalogue   # displays all recipes
-│   ├── PDFUploader       # handles PDF upload
-│   ├── IngredientSearch  # search recipes by ingredient
-│   └── ShoppingList      # shopping list generator
+│   ├── RecipeCatalogue      # shared gallery of all uploaded recipes; clicking a card opens the preview panel; uploaders can delete their own
+│   ├── PDFUploader          # validates, uploads PDFs to Supabase Storage, inserts recipes row with toast notifications
+│   ├── RecipePreviewPanel   # side panel; generates signed URL and renders PDF in iframe
+│   ├── IngredientSearch     # search recipes by ingredient
+│   └── ShoppingList         # shopping list generator
 ├── context/
 │   └── AuthContext       # session state, allowlist check, signOut
 ├── pages/

@@ -1,15 +1,15 @@
 name: Dependabot Build Check
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - 'dependabot/**'
     paths:
       - 'package.json'
 
 jobs:
   build:
-    if: github.actor == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/')
+    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
