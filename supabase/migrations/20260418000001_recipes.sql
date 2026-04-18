@@ -34,6 +34,17 @@ CREATE POLICY "uploaders can delete their own recipes"
   TO authenticated
   USING (auth.uid() = uploaded_by);
 
+-- Admins can delete any recipe (ORed with the uploader policy above).
+CREATE POLICY "admins can delete any recipe"
+  ON public.recipes FOR DELETE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND is_admin = true
+    )
+  );
+
 -- No UPDATE policy — reserved for the parse-recipe edge function (service role)
 
 -- Storage policies for the recipe-pdfs bucket.
@@ -62,5 +73,17 @@ CREATE POLICY "recipe-pdfs: uploaders can delete their own files"
       SELECT 1 FROM public.recipes
       WHERE recipes.storage_path = storage.objects.name
       AND recipes.uploaded_by = auth.uid()
+    )
+  );
+
+-- Admins can delete any file in the recipe-pdfs bucket.
+CREATE POLICY "recipe-pdfs: admins can delete any file"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (
+    bucket_id = 'recipe-pdfs'
+    AND EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND is_admin = true
     )
   );

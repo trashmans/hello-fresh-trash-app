@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import {
   DropdownMenu,
@@ -21,7 +22,7 @@ function getInitials(fullName, email) {
 }
 
 export default function UserMenu() {
-  const { session, signOut } = useAuth()
+  const { session, signOut, isAdmin, adminMode, toggleAdminMode } = useAuth()
   const [imgError, setImgError] = useState(false)
   const user = session?.user
   const avatarUrl = user?.user_metadata?.avatar_url
@@ -32,7 +33,7 @@ export default function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="cursor-pointer rounded-full w-8 h-8 overflow-hidden transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+        <button className={`cursor-pointer rounded-full w-8 h-8 overflow-hidden transition-opacity hover:opacity-80 focus:outline-none focus:ring-offset-2 ${adminMode ? 'ring-2 ring-primary ring-offset-2' : 'focus:ring-2 focus:ring-primary'}`}>
           {avatarUrl && !imgError ? (
             <img
               src={avatarUrl}
@@ -47,7 +48,7 @@ export default function UserMenu() {
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 animate-none"  style={{ opacity: 1 }}>
+      <DropdownMenuContent align="end" className="w-48 animate-none" style={{ opacity: 1 }}>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             {fullName && <p className="text-sm font-semibold">{fullName}</p>}
@@ -55,6 +56,13 @@ export default function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {isAdmin && (
+          <DropdownMenuItem className="cursor-pointer gap-2" onClick={toggleAdminMode}>
+            <ShieldCheck className={`h-4 w-4 ${adminMode ? 'text-primary' : 'text-muted-foreground'}`} />
+            <span>Admin mode {adminMode ? 'on' : 'off'}</span>
+          </DropdownMenuItem>
+        )}
+        {isAdmin && <DropdownMenuSeparator />}
         <DropdownMenuItem variant="destructive" className="cursor-pointer" onClick={signOut}>
           Sign out
         </DropdownMenuItem>

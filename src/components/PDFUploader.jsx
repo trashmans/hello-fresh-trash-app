@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext'
 const MAX_SIZE_BYTES = 10 * 1024 * 1024
 
 function sanitizeFilename(name) {
-  return name.replace(/[^a-zA-Z0-9 \-_.]/g, '').trim() || name
+  return name.replace(/[^a-zA-Z0-9 \-_.]/g, '').trim() || null
 }
 
 export default function PDFUploader({ onUploadComplete }) {
@@ -39,6 +39,11 @@ export default function PDFUploader({ onUploadComplete }) {
     try {
       const storagePath = `pending/${crypto.randomUUID()}.pdf`
       const sanitizedFilename = sanitizeFilename(file.name)
+      if (!sanitizedFilename) {
+        toast.error('Filename contains only unsupported characters. Please rename the file and try again.')
+        setUploading(false)
+        return
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('recipe-pdfs')
