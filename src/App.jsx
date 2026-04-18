@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { AuthProvider } from '@/context/AuthContext'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import Login from './pages/Login'
@@ -8,6 +9,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy'
 export default function App() {
   return (
     <BrowserRouter>
+      <Toaster position="bottom-right" richColors />
       <AuthProvider>
         <Routes>
           <Route path="/" element={<Login />} />

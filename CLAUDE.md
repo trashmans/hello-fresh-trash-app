@@ -50,6 +50,7 @@ The human runs all npm commands. After code changes, prompt them to run the appr
 ## CI/CD
 
 Two GitHub Actions workflows:
+
 - `deploy-frontend.yml` — human PRs and pushes to `main`. Runs `vercel build` and deploys. Posts preview URL as a PR comment.
 - `dependabot-build.yml` — Dependabot PRs only. Build check with no secrets.
 
@@ -78,6 +79,7 @@ Before a PR is opened, suggest a branch name and a commit message that follows t
 ## Keeping the README up to date
 
 When completing work that changes the project's capabilities or structure, update `README.md` to reflect it:
+
 - Check off roadmap items when a feature is fully implemented
 - Update the Project Structure section if files or folders are added or removed
 - Update the Architecture section if a new platform or technology is introduced
@@ -85,15 +87,18 @@ When completing work that changes the project's capabilities or structure, updat
 ## Security rules
 
 ### Environments
+
 - Local `.env` always points at the **preview** Supabase project — never prod
 - Prod credentials exist only in Vercel (Production scope) — never in `.env`, never in code
 - `.env` is gitignored and must remain so — `.env.example` contains only empty placeholders, never real keys
 
 ### Supabase keys
+
 - The **anon key** (`VITE_SUPABASE_ANON`) is the only Supabase credential the browser ever sees
 - The **service role key** bypasses RLS entirely — it must never appear in frontend code, `.env`, or GitHub secrets — it only lives as a Supabase-managed secret inside Edge Functions
 
 ### Migrations
+
 - Every `CREATE TABLE` migration must enable RLS and define explicit access policies **in the same file** — no table may exist without RLS
 - Deny all by default — no policy means no access — grant only what the feature explicitly requires
 - Policies for SELECT, INSERT, UPDATE, and DELETE are defined separately — only add what the feature needs
@@ -126,5 +131,6 @@ CREATE POLICY "users can insert own <table_name>"
 ```
 
 ### Seed data
+
 - Real email addresses and user data never go in git — this is a public repo
 - Use `supabase/seed.sql` as a template — swap in real values locally when seeding a new environment
