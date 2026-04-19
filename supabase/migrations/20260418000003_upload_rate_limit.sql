@@ -12,7 +12,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$func$ LANGUAGE plpgsql SECURITY DEFINER;
+$func$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 CREATE TRIGGER enforce_upload_rate_limit
   BEFORE INSERT ON public.recipes
