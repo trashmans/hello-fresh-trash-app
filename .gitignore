@@ -12,5 +12,8 @@ dist
 # editor
 .DS_Store
 
+# Supabase CLI local state
+supabase/.temp/
+
 # AI planning docs (local only)
 docs/superpowers/
