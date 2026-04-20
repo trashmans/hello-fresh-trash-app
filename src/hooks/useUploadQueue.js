@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { computeContentHash } from '@/lib/pdfUtils'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const MAX_BATCH_BYTES = 50 * 1024 * 1024
@@ -13,19 +14,22 @@ function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9 \-_.]/g, '').trim() || null
 }
 
-async function hasPDFMagicBytes(file) {
-  const buffer = await file.slice(0, 4).arrayBuffer()
-  const bytes = new Uint8Array(buffer)
-  return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
-}
-
-async function validateFile(file) {
-  if (!(await hasPDFMagicBytes(file))) return { error: 'Not a valid PDF file' }
+async function validateAndPrepare(file) {
   if (file.type !== 'application/pdf') return { error: 'Only PDF files are allowed' }
   if (file.size > MAX_FILE_SIZE) return { error: 'File must be 10 MB or smaller' }
+
   const sanitizedName = sanitizeFilename(file.name)
   if (!sanitizedName) return { error: 'Filename contains only unsupported characters' }
-  return { sanitizedName }
+
+  const arrayBuffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(arrayBuffer)
+
+  if (bytes[0] !== 0x25 || bytes[1] !== 0x50 || bytes[2] !== 0x44 || bytes[3] !== 0x46) {
+    return { error: 'Not a valid PDF file' }
+  }
+
+  const contentHash = await computeContentHash(arrayBuffer)
+  return { sanitizedName, contentHash }
 }
 
 async function runConcurrent(fns, limit) {
@@ -52,19 +56,42 @@ export function useUploadQueue({ onUploadComplete }) {
   async function uploadFile(item) {
     updateItem(item.id, { status: 'uploading' })
     try {
-      const storagePath = `pending/${crypto.randomUUID()}.pdf`
+      const fileUuid = crypto.randomUUID()
+      const storagePath = `recipes/${fileUuid}.pdf`
+
+      // Content hash duplicate check (client-side pre-check, UX only)
+      const { data: existingByHash } = await supabase
+        .from('recipes')
+        .select('id, name, filename')
+        .eq('content_hash', item.contentHash)
+        .in('status', ['processing', 'ready'])
+        .maybeSingle()
+
+      if (existingByHash) {
+        const label = existingByHash.name ?? existingByHash.filename
+        updateItem(item.id, {
+          status: 'failed',
+          error: `Duplicate: "${label}" already exists`,
+          duplicateId: existingByHash.id,
+        })
+        return false
+      }
+
+      // Upload PDF
       const { error: uploadError } = await supabase.storage
         .from('recipe-pdfs')
         .upload(storagePath, item.file, { contentType: 'application/pdf' })
       if (uploadError) throw uploadError
 
+      // Insert DB row — status pending, triggers parse-recipe via DB webhook
       const { error: insertError } = await supabase
         .from('recipes')
         .insert({
           uploaded_by: session.user.id,
           filename: item.sanitizedName,
           storage_path: storagePath,
-          status: 'ready',
+          content_hash: item.contentHash,
+          status: 'pending',
         })
       if (insertError) throw insertError
 
@@ -88,7 +115,7 @@ export function useUploadQueue({ onUploadComplete }) {
 
     const entries = await Promise.all(
       capped.map(async file => {
-        const result = await validateFile(file)
+        const result = await validateAndPrepare(file)
         return {
           id: crypto.randomUUID(),
           file,
@@ -97,6 +124,7 @@ export function useUploadQueue({ onUploadComplete }) {
           status: result.error ? 'failed' : 'pending',
           error: result.error ?? null,
           sanitizedName: result.sanitizedName ?? null,
+          contentHash: result.contentHash ?? null,
         }
       })
     )
@@ -124,7 +152,6 @@ export function useUploadQueue({ onUploadComplete }) {
 
     setIsRunning(true)
     try {
-      // Client-side pre-check — UX only. The Postgres trigger is the hard enforcement.
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
       const { count, error: countError } = await supabase
         .from('recipes')

@@ -121,7 +121,58 @@ GitHub Actions needs credentials to talk to Vercel. These are stored as reposito
 
 To revoke access at any time, delete the token from your Vercel account settings.
 
+For the functions pipeline you also need:
+
+| Secret | What it is | Where to find it |
+|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Authenticates the Supabase CLI | supabase.com → Account → Access Tokens |
+| `SUPABASE_PROJECT_ID` | Production project ref | `app.supabase.com/project/`**`this-part`** |
+| `SUPABASE_PREVIEW_PROJECT_ID` | Preview project ref | Same, for your preview project |
+
 > **Local setup:** Copy `.env.example` to `.env` and fill in your Supabase credentials. See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup steps.
+
+#### Supabase Environment Setup
+
+Some configuration lives outside git because it is environment-specific or secret. Do this once per Supabase project (both preview and production).
+
+**1. Deploy edge functions**
+
+For preview, deploy manually via the Supabase CLI:
+```
+supabase functions deploy parse-recipe
+supabase functions deploy retry-parse
+supabase functions deploy cleanup-recipes
+```
+For production, the `deploy-functions.yml` pipeline handles this automatically on merge to `main`.
+
+**2. Set edge function secrets**
+
+In **Supabase Dashboard → Edge Functions → Secrets**, add for each project:
+
+| Secret | Value |
+|---|---|
+| `GEMINI_API_KEY` | Your Google AI Studio API key |
+
+> **Note:** `WEBHOOK_SECRET` was removed — the Supabase Edge Function webhook type does not forward custom headers, so the secret check was abandoned. The atomic claim pattern (UPDATE WHERE status='pending') prevents duplicate processing instead.
+
+**3. Create the DB webhook**
+
+In **Supabase Dashboard → Database → Webhooks → Create webhook**:
+
+| Setting       | Value                                              |
+|---------------|----------------------------------------------------|
+| Type          | Supabase Edge Function                             |
+| Name          | `on-recipe-pending`                                |
+| Table         | `public.recipes`                                   |
+| Events        | `INSERT` only — not UPDATE (causes 3× firing)      |
+| Edge Function | `parse-recipe`                                     |
+| HTTP Headers  | none                                               |
+
+**4. Schedule the cleanup function**
+
+In **Supabase Dashboard → Edge Functions → cleanup-recipes → Schedule**, set cron: `0 * * * *` (hourly).
+
+Repeat steps 2–4 for both preview and production, using the correct secrets for each environment.
 
 ---
 
@@ -132,8 +183,38 @@ To revoke access at any time, delete the token from your Vercel account settings
 | **Supabase Auth** | User authentication. Google OAuth with email allowlist enforced at the database level. Sessions managed by the Supabase JS client and stored in localStorage. |
 | **Supabase Database** | Postgres database hosted by Supabase. Stores recipes, ingredients, and shopping lists. Schema defined in `supabase/migrations/`. Row Level Security enabled on all tables. |
 | **Supabase Storage** | File storage for uploaded recipe PDFs. |
-| **Supabase Edge Functions** | Serverless functions running on Deno. The `parse-recipe` function receives an uploaded PDF, extracts the recipe name, ingredients, and steps, and writes the result to the database. |
-| **pdf.js** | PDF parsing library used inside the edge function to read text content from uploaded HelloFresh recipe cards. |
+| **Supabase Edge Functions** | Serverless functions running on Deno. Three functions handle the parsing pipeline: `parse-recipe` sends uploaded PDFs to Gemini and writes results to the database; `retry-parse` resets failed recipes for re-processing; `cleanup-recipes` runs hourly to remove stale records. |
+| **Gemini 2.5 Flash** | Google AI model used inside `parse-recipe` to extract recipe name, ingredients, steps, and metadata from uploaded PDFs. The PDF is sent as a base64-encoded inline attachment. |
+
+---
+
+### Database Schema
+
+All tables have RLS enabled. Migrations live in `supabase/migrations/` and must be run in filename order on every environment.
+
+| Table | Purpose |
+|---|---|
+| `allowed_emails` | Email allowlist — signups rejected at DB level if email not present |
+| `profiles` | Display name and avatar URL per user, synced from Google OAuth on first login |
+| `user_roles` | `is_admin` flag per user — grants delete-any-recipe in the UI |
+| `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected` |
+| `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only |
+| `app_config` | Key/value config for environment-specific settings; service role only |
+
+#### recipes status machine
+
+| Status | Meaning |
+|---|---|
+| `pending` | Uploaded, waiting for parse-recipe to claim it |
+| `processing` | Claimed by parse-recipe; Gemini call in progress |
+| `ready` | Parsed successfully; visible in the shared gallery |
+| `failed` | Parsing failed; uploader can retry up to 3 times |
+| `rejected` | Duplicate detected (matching content hash, ingredient fingerprint, or name) |
+
+#### Key relationships
+
+- `recipes.uploaded_by` → `auth.users.id`
+- `ingredients.recipe_id` → `recipes.id` (CASCADE DELETE)
 
 ---
 
@@ -197,7 +278,7 @@ Wire up the backend so the app stores and retrieves real data.
 #### RLS — applied per table as tables are built
 
 - [x] `recipes` table — RLS enabled; all authenticated users can read (shared catalogue); any authenticated user can upload; only the uploader can delete their own recipes; updates reserved for the parse-recipe edge function (service role)
-- [ ] `ingredients` table — RLS enabled with per-user policies
+- [x] `ingredients` table — RLS enabled; all authenticated users can read; INSERT is service-role only (parse-recipe edge function writes via service role key, bypassing RLS — no client INSERT policy needed)
 - [ ] `shopping_lists` table — RLS enabled with per-user policies
 - [x] Storage bucket access policies defined — authenticated users can upload and read; only the uploader can delete their own files (enforced by joining storage objects back to the recipes table)
 
@@ -206,10 +287,19 @@ Wire up the backend so the app stores and retrieves real data.
 - [x] User authentication (Google OAuth via Supabase Auth, email allowlist)
 - [x] PDF upload to Supabase Storage — with client-side MIME/size validation, UUID storage paths, sanitized filenames, and toast notifications
 - [x] Recipe catalogue — shared gallery of all uploaded recipes with side-panel PDF preview and per-uploader delete
-- [ ] `parse-recipe` edge function — extracts recipe name and ingredients from uploaded PDFs; will populate the `name` column and promote status from `pending` to `ready`
+- [x] `parse-recipe` edge function — Gemini 2.5 Flash extracts recipe name, ingredients, steps, and metadata from uploaded PDFs; promotes status from `pending` → `ready`; duplicate detection via content hash, ingredient fingerprint, and case-insensitive name match
+- [x] `retry-parse` edge function — resets a failed recipe to `pending` (max 3 retries) so the webhook re-fires
+- [x] `cleanup-recipes` edge function — hourly cron; deletes failed recipes after 48 h, resets ghost pending/stuck processing
+- [x] `deploy-functions.yml` CI pipeline — deploys edge functions to preview on PR, production on merge to `main`
+- [ ] Recipe gallery cover images — deferred to its own feature branch; JPEG 2000 format used by HelloFresh PDFs is not natively supported in browsers or available via simple WASM packages
 - [ ] Ingredient search
 - [ ] Shopping list generator
-- [ ] Migrations and functions pipelines go live
+
+---
+
+### 🔧 Follow-up fixes
+- [ ] PWA manifest warnings — add `<meta name="mobile-web-app-capable">` to `index.html` and fix missing `icons/icon-192.png`
+- [ ] Cleanup preview Supabase — remove `WEBHOOK_SECRET` from edge function secrets; confirm webhook is set to `INSERT` only
 
 ---
 
@@ -229,34 +319,41 @@ Wire up the backend so the app stores and retrieves real data.
 ```
 src/
 ├── components/
-│   ├── ui/               # shadcn/ui base components (Button, Card, Input)
-│   ├── ProtectedRoute    # redirects unauthenticated users to login
+│   ├── ui/                  # shadcn/ui base components (Button, Card, Input)
+│   ├── ProtectedRoute       # redirects unauthenticated users to login
 │   ├── RecipeCatalogue      # shared gallery of all uploaded recipes; clicking a card opens the preview panel; uploaders can delete their own
-│   ├── PDFUploader          # validates, uploads PDFs to Supabase Storage, inserts recipes row with toast notifications
+│   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
+│   ├── UploadQueue          # per-file progress list shown during batch upload
 │   ├── RecipePreviewPanel   # side panel; generates signed URL and renders PDF in iframe
-│   ├── IngredientSearch     # search recipes by ingredient
-│   └── ShoppingList         # shopping list generator
+│   ├── UserMenu             # avatar dropdown with sign-out and admin toggle
+│   ├── IngredientSearch     # search recipes by ingredient (stub)
+│   └── ShoppingList         # shopping list generator (stub)
 ├── context/
-│   └── AuthContext       # session state, allowlist check, signOut
+│   └── AuthContext          # session state, allowlist check, signOut, adminMode
+├── hooks/
+│   └── useUploadQueue.js    # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
 ├── pages/
-│   ├── Login             # login screen with Google OAuth
-│   ├── Home              # main app screen
-│   └── PrivacyPolicy     # GDPR privacy policy (/privacy)
+│   ├── Login                # login screen with Google OAuth
+│   ├── Home                 # main app screen
+│   └── PrivacyPolicy        # GDPR privacy policy (/privacy)
 └── lib/
-    ├── supabase.js        # Supabase client
-    └── utils.js           # cn() helper for combining Tailwind classes
+    ├── supabase.js           # Supabase client
+    ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
+    └── utils.js              # cn() helper for combining Tailwind classes
 
 supabase/
-├── migrations/           # database schema changes (SQL) — run in order on every environment
-├── seed.sql              # template for seeding initial data (no real emails — swap in locally)
+├── migrations/              # database schema changes (SQL) — run in order on every environment
+├── seed.sql                 # template for seeding initial data (no real emails — swap in locally)
 └── functions/
-    └── parse-recipe/     # edge function that parses uploaded PDFs
+    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini, writes ingredients + status=ready
+    ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
+    └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
 
 .github/workflows/
-├── deploy-frontend.yml   # human PRs → preview deploy, merge to main → production deploy
-├── dependabot-build.yml  # dependabot PRs → build check only, no secrets, no deploy
-├── deploy-migrations.yml # triggers on supabase/migrations/ changes
-└── deploy-functions.yml  # triggers on supabase/functions/ changes
+├── deploy-frontend.yml      # human PRs → preview deploy, merge to main → production deploy
+├── dependabot-build.yml     # dependabot PRs → build check only, no secrets, no deploy
+├── deploy-migrations.yml    # triggers on supabase/migrations/ changes
+└── deploy-functions.yml     # PR → deploy to preview; merge to main → deploy to production
 ```
 
 ---
