@@ -6,10 +6,40 @@ on:
       - main
     paths:
       - 'supabase/functions/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/functions/**'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - name: Placeholder
-        run: echo "Functions pipeline — not yet implemented"
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy to preview
+        if: github.event_name == 'pull_request'
+        run: |
+          supabase functions deploy parse-recipe --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy retry-parse --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy cleanup-recipes --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy to production
+        if: github.event_name == 'push'
+        run: |
+          supabase functions deploy parse-recipe --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+          supabase functions deploy retry-parse --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+          supabase functions deploy cleanup-recipes --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
