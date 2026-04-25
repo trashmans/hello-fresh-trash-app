@@ -9,6 +9,7 @@ const GEMINI_URL =
 
 interface Ingredient {
   name: string
+  canonical_name: string | null
   quantity: number | null
   unit: string | null
   preparation: string | null
@@ -164,6 +165,7 @@ Deno.serve(async (req) => {
   "ingredients": [
     {
       "name": "ingredient name only (e.g. chicken breast, garlic clove)",
+      "canonical_name": "base-form ingredient for search — strip preparation, quantity words, and adjectives (e.g. 'chicken breast' → 'chicken', 'fresh garlic cloves' → 'garlic', 'extra virgin olive oil' → 'olive oil', 'baby spinach leaves' → 'spinach', 'soy sauce' → 'soy sauce'). Use the shortest recognisable common name.",
       "quantity": numeric value or null,
       "unit": "unit string or null",
       "preparation": "prep method (e.g. diced, sliced) or null",
@@ -267,6 +269,7 @@ Return only valid JSON. No markdown fences, no explanation.`,
     const ingredientRows = parsed.ingredients.map(ing => ({
       recipe_id: recipeId,
       name: ing.name,
+      canonical_name: ing.canonical_name ?? null,
       quantity: ing.quantity ?? null,
       unit: ing.unit ?? null,
       preparation: ing.preparation ?? null,
