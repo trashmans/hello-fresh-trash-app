@@ -132,7 +132,7 @@ function FailedCard({ recipe, onRetry, onDelete, deleting, retrying }) {
   )
 }
 
-export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle }) {
+export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle, ingredientMatches = null, termCount = 0 }) {
   const { session, adminMode } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [profiles, setProfiles] = useState({})
@@ -273,6 +273,17 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     }
   }
 
+  const displayRecipes = ingredientMatches
+    ? recipes
+        .filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
+        .sort((a, b) => {
+          if (a.status === 'ready' && b.status === 'ready') {
+            return (ingredientMatches.get(b.id) ?? 0) - (ingredientMatches.get(a.id) ?? 0)
+          }
+          return 0
+        })
+    : recipes
+
   if (loading) {
     return <p className="text-muted-foreground text-sm">Loading recipes…</p>
   }
@@ -289,6 +300,18 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     )
   }
 
+  if (ingredientMatches && displayRecipes.length === 0) {
+    return (
+      <Card className="flex flex-col items-center text-center py-16">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+          <FileText className="h-7 w-7 text-muted-foreground" />
+        </div>
+        <p className="text-lg font-semibold">No matches found</p>
+        <p className="text-sm text-muted-foreground mt-1">None of your recipes contain those ingredients</p>
+      </Card>
+    )
+  }
+
   const canDelete = (recipe) =>
     recipe.uploaded_by === session?.user?.id || adminMode
 
@@ -301,7 +324,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-      {recipes.map(recipe => {
+      {displayRecipes.map(recipe => {
         const { status } = recipe
 
         if ((status === 'pending' || status === 'processing') && isOwn(recipe)) {
@@ -370,6 +393,11 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
                 <p className="text-xs text-muted-foreground">
                   {new Date(recipe.created_at).toLocaleDateString()}
                 </p>
+                {ingredientMatches && termCount >= 2 && (
+                  <p className="text-xs text-primary font-medium">
+                    {ingredientMatches.get(recipe.id)} of {termCount} ingredients matched
+                  </p>
+                )}
                 <UploaderAvatar profile={profiles[recipe.uploaded_by] ?? null} />
               </CardContent>
               {adminMode && (

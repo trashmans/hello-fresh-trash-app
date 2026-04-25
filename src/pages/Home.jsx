@@ -7,13 +7,17 @@ import RecipeCatalogue from '@/components/RecipeCatalogue'
 import RecipePreviewPanel from '@/components/RecipePreviewPanel'
 import ShoppingListDrawer from '@/components/ShoppingListDrawer'
 import { useShoppingList } from '@/hooks/useShoppingList'
+import { useIngredientSearch } from '@/hooks/useIngredientSearch'
 import { Button } from '@/components/ui/button'
+import IngredientSearchBar from '@/components/IngredientSearch'
 
 export default function Home() {
   const [selectedRecipe, setSelectedRecipe] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const shoppingList = useShoppingList()
+  const [searchQuery, setSearchQuery] = useState('')
+  const { matches: ingredientMatches, loading: searchLoading, termCount } = useIngredientSearch(searchQuery)
 
   function handleUploadComplete() {
     setRefreshKey(k => k + 1)
@@ -64,12 +68,21 @@ export default function Home() {
               Upload HelloFresh recipe cards to build the catalogue
             </p>
           </div>
+          <div className="mb-4">
+            <IngredientSearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              loading={searchLoading}
+            />
+          </div>
           <RecipeCatalogue
             refreshKey={refreshKey}
             onSelect={setSelectedRecipe}
             onDelete={handleDelete}
             selectedIds={shoppingList.selectedIds}
             onToggle={shoppingList.toggleRecipe}
+            ingredientMatches={ingredientMatches}
+            termCount={termCount}
           />
         </div>
         {selectedRecipe && (
