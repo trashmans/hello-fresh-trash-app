@@ -171,6 +171,12 @@ Deno.serve(async (req) => {
     }
   ]
 }
+
+DUAL-QUANTITY INGREDIENTS: Some recipes list quantities for multiple serving sizes in the same column, separated by a delimiter such as "|" or "/". Examples: "4 oz | 8 oz", "1 | 2", "2 Cloves | 4 Cloves", "¾ Cup | 1½ Cups". When you see this pattern:
+- Always extract the FIRST value as "quantity" and the FIRST unit as "unit" (e.g. "4 oz | 8 oz" → quantity: 4, unit: "oz"; "¾ Cup | 1½ Cups" → quantity: 0.75, unit: "Cup").
+- Set "servings" to the serving count that corresponds to the first column (e.g. if the header reads "2-person | 4-person", set servings: 2).
+- Never average the two values or return null just because two quantities are shown.
+
 Return only valid JSON. No markdown fences, no explanation.`,
           },
         ],

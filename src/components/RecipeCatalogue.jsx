@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { FileText, Trash2, RotateCcw, Loader2 } from 'lucide-react'
+import { FileText, Trash2, RotateCcw, Loader2, ShoppingCart } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -132,7 +132,7 @@ function FailedCard({ recipe, onRetry, onDelete, deleting, retrying }) {
   )
 }
 
-export default function RecipeCatalogue({ refreshKey, onSelect, onDelete }) {
+export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle }) {
   const { session, adminMode } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [profiles, setProfiles] = useState({})
@@ -324,13 +324,27 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete }) {
         }
 
         if (status === 'ready') {
+          const isSelected = selectedIds.includes(recipe.id)
           return (
             <Card
               key={recipe.id}
-              className="cursor-pointer hover:border-primary transition-colors relative"
+              className={`cursor-pointer hover:border-primary transition-colors relative ${isSelected ? 'border-primary' : ''}`}
               onClick={() => onSelect(recipe)}
             >
               <CardContent className="p-4 flex flex-col gap-2">
+                {onToggle && (
+                  <button
+                    className={`absolute top-2 left-2 z-10 rounded p-1 transition-colors ${
+                      isSelected
+                        ? 'text-primary bg-primary/15'
+                        : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
+                    }`}
+                    onClick={(e) => { e.stopPropagation(); onToggle(recipe) }}
+                    title={isSelected ? 'Remove from shopping list' : 'Add to shopping list'}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                  </button>
+                )}
                 <div className="w-full aspect-video bg-muted flex items-center justify-center rounded-md mb-2">
                   <FileText className="h-8 w-8 text-muted-foreground" />
                 </div>
