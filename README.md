@@ -38,7 +38,7 @@ The app uses three platforms, each with a different job:
 
 GitHub is where you *build* the app, Vercel is where users *visit* the app, and Supabase is where the app *stores its data*.
 
-These platforms are independent — GitHub Actions is the glue that connects them: it calls the Vercel CLI to deploy the frontend, and in Phase 2 will call the Supabase CLI to run database migrations.
+These platforms are independent — GitHub Actions is the glue that connects them: it calls the Vercel CLI to deploy the frontend, and the Supabase CLI to deploy edge functions and run database migrations.
 
 **Why Vercel instead of GitHub Pages:** GitHub Pages only works with public repositories on the free tier, doesn't support per-PR preview URLs, and requires a base path workaround (`/repo-name/`) that complicates routing. Vercel supports private repos, generates a unique preview URL for every pull request, and serves clean `/home` style URLs with no config hacks.
 
@@ -95,7 +95,7 @@ A useful way to think about it: React builds the rooms, Tailwind paints them, sh
 |---|---|
 | **npm** | Package manager. Installs and manages all third-party libraries (React, Tailwind, shadcn/ui etc). `npm install` downloads them into `node_modules/`. `npm run dev` starts the local server. npm is the launcher — Vite is the engine it starts. |
 | **Vite** | Build tool and local dev server. Compiles JSX and serves the app locally for development. `npm run build` compiles everything into `dist/` for deployment. |
-| **GitHub Actions** | CI/CD pipeline. Two independent workflows handle different cases: `deploy-frontend.yml` for human PRs (full Vercel build and deploy), `dependabot-build.yml` for automated dependency bumps (build-only, no secrets needed). |
+| **GitHub Actions** | CI/CD pipeline. Four workflows cover frontend deploys, dependency bumps, database migrations, and edge function deploys — each triggered only when its relevant files change. |
 | **Vercel CLI** | The tool GitHub Actions uses to build and deploy to Vercel. Runs `vercel build` then `vercel deploy`. All output is logged in GitHub Actions — no Vercel dashboard access needed to debug failures. |
 | **Vercel** | Frontend hosting. Supports private repositories on the free tier, provides a preview URL for every PR, and serves clean `/home` style URLs. |
 | **Dependabot** | Automated dependency updates. Opens weekly PRs to bump npm packages and GitHub Actions versions. |
@@ -106,8 +106,8 @@ A useful way to think about it: React builds the rooms, Tailwind paints them, sh
 |---|---|---|
 | `deploy-frontend.yml` | Human PRs and pushes to `main` | Full Vercel build and deploy. Preview URL posted as PR comment. Production deploy on merge. |
 | `dependabot-build.yml` | Dependabot PRs only | Build check with no secrets. Confirms the bump doesn't break the build. |
-| `deploy-migrations.yml` | Changes to `supabase/migrations/` | *(Phase 2)* Runs database migrations |
-| `deploy-functions.yml` | Changes to `supabase/functions/` | *(Phase 2)* Deploys edge functions |
+| `deploy-migrations.yml` | Changes to `supabase/migrations/**` | PR → `supabase db push` to preview Supabase project. Merge to `main` → production. Only fires when migration files change. |
+| `deploy-functions.yml` | Changes to `supabase/functions/**` | PR → deploys functions to preview Supabase project. Merge to `main` → production. Only fires when function files change. |
 
 #### GitHub Secrets
 
@@ -129,6 +129,8 @@ For the functions pipeline you also need:
 | `SUPABASE_PROJECT_ID` | Production project ref | `app.supabase.com/project/`**`this-part`** |
 | `SUPABASE_PREVIEW_PROJECT_ID` | Preview project ref | Same, for your preview project |
 
+> **Migration CI:** `deploy-migrations.yml` uses `supabase db push`, which tracks applied migrations by filename so it never re-runs the same file twice. Any migrations applied manually before CI was set up must be registered in the tracking table — use the Supabase dashboard SQL editor to do this once per environment. After that, CI owns migrations; do not apply migration files manually.
+>
 > **Local setup:** Copy `.env.example` to `.env` and fill in your Supabase credentials. See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup steps.
 
 #### Supabase Environment Setup
@@ -137,13 +139,7 @@ Some configuration lives outside git because it is environment-specific or secre
 
 **1. Deploy edge functions**
 
-For preview, deploy manually via the Supabase CLI:
-```
-supabase functions deploy parse-recipe
-supabase functions deploy retry-parse
-supabase functions deploy cleanup-recipes
-```
-For production, the `deploy-functions.yml` pipeline handles this automatically on merge to `main`.
+`deploy-functions.yml` handles this automatically — opening a PR deploys all three functions to the preview project; merging to `main` deploys to production. No manual deploy needed.
 
 **2. Set edge function secrets**
 
@@ -181,16 +177,16 @@ Repeat steps 2–4 for both preview and production, using the correct secrets fo
 | Technology | Role |
 |---|---|
 | **Supabase Auth** | User authentication. Google OAuth with email allowlist enforced at the database level. Sessions managed by the Supabase JS client and stored in localStorage. |
-| **Supabase Database** | Postgres database hosted by Supabase. Stores recipes, ingredients, and shopping lists. Schema defined in `supabase/migrations/`. Row Level Security enabled on all tables. |
+| **Supabase Database** | Postgres database hosted by Supabase. Stores recipes, ingredients, and shopping lists. Schema defined in `supabase/migrations/` and deployed automatically by CI. Row Level Security enabled on all tables. |
 | **Supabase Storage** | File storage for uploaded recipe PDFs. |
 | **Supabase Edge Functions** | Serverless functions running on Deno. Three functions handle the parsing pipeline: `parse-recipe` sends uploaded PDFs to Gemini and writes results to the database; `retry-parse` resets failed recipes for re-processing; `cleanup-recipes` runs hourly to remove stale records. |
-| **Gemini 2.5 Flash** | Google AI model used inside `parse-recipe` to extract recipe name, ingredients, steps, and metadata from uploaded PDFs. The PDF is sent as a base64-encoded inline attachment. |
+| **Gemini 2.5 Flash** | Google AI model used inside `parse-recipe` to extract recipe name, ingredients, steps, and metadata from uploaded PDFs. The PDF is sent as a base64-encoded inline attachment. Handles dual-quantity ingredient formats (e.g. "4 oz \| 8 oz" for 2-person \| 4-person) by always extracting the first/base quantity and setting `servings` from the corresponding column header. |
 
 ---
 
 ### Database Schema
 
-All tables have RLS enabled. Migrations live in `supabase/migrations/` and must be run in filename order on every environment.
+All tables have RLS enabled. Migrations live in `supabase/migrations/` and are deployed automatically by `deploy-migrations.yml`. New environments require a one-time bootstrap — see the Migration bootstrap note in GitHub Secrets above.
 
 | Table | Purpose |
 |---|---|
@@ -198,7 +194,8 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and must 
 | `profiles` | Display name and avatar URL per user, synced from Google OAuth on first login |
 | `user_roles` | `is_admin` flag per user — grants delete-any-recipe in the UI |
 | `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected` |
-| `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only |
+| `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only; CASCADE deleted when recipe is deleted |
+| `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
 | `app_config` | Key/value config for environment-specific settings; service role only |
 
 #### recipes status machine
@@ -215,6 +212,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and must 
 
 - `recipes.uploaded_by` → `auth.users.id`
 - `ingredients.recipe_id` → `recipes.id` (CASCADE DELETE)
+- `shopping_lists.user_id` → `auth.users.id` (UNIQUE — one list per user)
 
 ---
 
@@ -259,7 +257,7 @@ Get a real, installable web app deployed with a working CI/CD pipeline.
 - [x] Vercel hosting — private repo, clean URLs, preview deploy on every PR
 - [x] GitHub Actions pipeline — PR opens → preview deploy, merge to `main` → production deploy
 - [x] Dependabot — weekly automated dependency update PRs
-- [x] Independent pipeline stubs for Supabase migrations and functions
+- [x] Independent CI pipelines for Supabase migrations and edge functions
 
 ---
 
@@ -279,7 +277,7 @@ Wire up the backend so the app stores and retrieves real data.
 
 - [x] `recipes` table — RLS enabled; all authenticated users can read (shared catalogue); any authenticated user can upload; only the uploader can delete their own recipes; updates reserved for the parse-recipe edge function (service role)
 - [x] `ingredients` table — RLS enabled; all authenticated users can read; INSERT is service-role only (parse-recipe edge function writes via service role key, bypassing RLS — no client INSERT policy needed)
-- [ ] `shopping_lists` table — RLS enabled with per-user policies
+- [x] `shopping_lists` table — RLS enabled; per-user SELECT / INSERT / UPDATE policies; one row per user enforced by UNIQUE constraint on `user_id`
 - [x] Storage bucket access policies defined — authenticated users can upload and read; only the uploader can delete their own files (enforced by joining storage objects back to the recipes table)
 
 #### Features
@@ -291,15 +289,17 @@ Wire up the backend so the app stores and retrieves real data.
 - [x] `retry-parse` edge function — resets a failed recipe to `pending` (max 3 retries) so the webhook re-fires
 - [x] `cleanup-recipes` edge function — hourly cron; deletes failed recipes after 48 h, resets ghost pending/stuck processing
 - [x] `deploy-functions.yml` CI pipeline — deploys edge functions to preview on PR, production on merge to `main`
-- [ ] Recipe gallery cover images — deferred to its own feature branch; JPEG 2000 format used by HelloFresh PDFs is not natively supported in browsers or available via simple WASM packages
+- [x] `deploy-migrations.yml` CI pipeline — runs `supabase db push` to preview on PR, production on merge to `main`; replaces manual migration deployment
+- [x] Shopping list generator — cart icon with badge in header; add-to-list button on each ready recipe card; sliding drawer with three zones: selected recipes with per-recipe serving size steppers, merged + scaled ingredient list with per-item quantity adjustments and check-off, sticky footer with copy-to-clipboard for Apple Reminders; persists to Supabase on every change, restores on page load
+- [ ] Recipe gallery cover images — deferred; JPEG 2000 format used by HelloFresh PDFs is not natively supported in browsers or available via simple WASM packages
 - [ ] Ingredient search
-- [ ] Shopping list generator
+- [x] Admin re-parse — `RefreshCw` button on ready recipe cards (admin only); clears ingredients and resets recipe to `pending` so the webhook re-fires parse-recipe; implemented via `admin-reparse` edge function with server-side admin verification
 
 ---
 
 ### 🔧 Follow-up fixes
-- [ ] PWA manifest warnings — add `<meta name="mobile-web-app-capable">` to `index.html` and fix missing `icons/icon-192.png`
-- [ ] Cleanup preview Supabase — remove `WEBHOOK_SECRET` from edge function secrets; confirm webhook is set to `INSERT` only
+- [x] PWA manifest warnings — add `<meta name="mobile-web-app-capable">` to `index.html` and fix missing `icons/icon-192.png`
+- [x] Cleanup preview Supabase — remove `WEBHOOK_SECRET` from edge function secrets; confirm webhook is set to `INSERT` only
 
 ---
 
@@ -319,41 +319,43 @@ Wire up the backend so the app stores and retrieves real data.
 ```
 src/
 ├── components/
-│   ├── ui/                  # shadcn/ui base components (Button, Card, Input)
+│   ├── ui/                  # shadcn/ui base components (Button, Card, Input, Sheet, Tooltip, …)
 │   ├── ProtectedRoute       # redirects unauthenticated users to login
-│   ├── RecipeCatalogue      # shared gallery of all uploaded recipes; clicking a card opens the preview panel; uploaders can delete their own
+│   ├── RecipeCatalogue      # gallery of all ready recipes; cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own
+│   ├── ShoppingListDrawer   # slide-in drawer: recipe servings steppers, merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload
 │   ├── RecipePreviewPanel   # side panel; generates signed URL and renders PDF in iframe
 │   ├── UserMenu             # avatar dropdown with sign-out and admin toggle
-│   ├── IngredientSearch     # search recipes by ingredient (stub)
-│   └── ShoppingList         # shopping list generator (stub)
+│   └── IngredientSearch     # search recipes by ingredient (stub)
 ├── context/
 │   └── AuthContext          # session state, allowlist check, signOut, adminMode
 ├── hooks/
-│   └── useUploadQueue.js    # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
+│   ├── useUploadQueue.js    # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
+│   └── useShoppingList.js   # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists
 ├── pages/
 │   ├── Login                # login screen with Google OAuth
-│   ├── Home                 # main app screen
+│   ├── Home                 # main app screen; cart icon in header opens ShoppingListDrawer
 │   └── PrivacyPolicy        # GDPR privacy policy (/privacy)
 └── lib/
     ├── supabase.js           # Supabase client
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
+    ├── ingredientMerge.js    # mergeIngredients() — scales by servings, merges same-name+unit items across recipes, returns sorted list with per-recipe contribution breakdown
     └── utils.js              # cn() helper for combining Tailwind classes
 
 supabase/
-├── migrations/              # database schema changes (SQL) — run in order on every environment
+├── migrations/              # database schema changes (SQL) — deployed automatically via deploy-migrations.yml CI; never run manually after bootstrap
 ├── seed.sql                 # template for seeding initial data (no real emails — swap in locally)
 └── functions/
-    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini, writes ingredients + status=ready
+    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), writes ingredients + status=ready
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
 
 .github/workflows/
-├── deploy-frontend.yml      # human PRs → preview deploy, merge to main → production deploy
+├── deploy-frontend.yml      # PR → Vercel preview deploy (posts URL as comment); merge to main → production deploy
 ├── dependabot-build.yml     # dependabot PRs → build check only, no secrets, no deploy
-├── deploy-migrations.yml    # triggers on supabase/migrations/ changes
-└── deploy-functions.yml     # PR → deploy to preview; merge to main → deploy to production
+├── deploy-migrations.yml    # PR touching supabase/migrations/ → push to preview; merge to main → push to production
+└── deploy-functions.yml     # PR touching supabase/functions/ → deploy to preview; merge to main → deploy to production
 ```
 
 ---

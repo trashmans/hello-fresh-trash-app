@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { FileText, Trash2, RotateCcw, Loader2 } from 'lucide-react'
+import { FileText, Trash2, RotateCcw, Loader2, ShoppingCart, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -132,13 +132,14 @@ function FailedCard({ recipe, onRetry, onDelete, deleting, retrying }) {
   )
 }
 
-export default function RecipeCatalogue({ refreshKey, onSelect, onDelete }) {
+export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle }) {
   const { session, adminMode } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [profiles, setProfiles] = useState({})
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(null)
   const [retrying, setRetrying] = useState(null)
+  const [reparsing, setReparsing] = useState(null)
 
   const fetchRecipes = useCallback(async () => {
     setLoading(true)
@@ -255,6 +256,23 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete }) {
     }
   }
 
+  async function handleReparse(recipeId, e) {
+    e?.stopPropagation()
+    setReparsing(recipeId)
+    const toastId = toast.loading('Queuing re-parse…')
+    try {
+      const { error } = await supabase.functions.invoke('admin-reparse', {
+        body: { recipeId },
+      })
+      if (error) throw error
+      toast.success('Recipe queued for re-parsing.', { id: toastId })
+    } catch (err) {
+      toast.error(`Re-parse failed: ${err.message ?? 'unknown error'}`, { id: toastId })
+    } finally {
+      setReparsing(null)
+    }
+  }
+
   if (loading) {
     return <p className="text-muted-foreground text-sm">Loading recipes…</p>
   }
@@ -324,13 +342,27 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete }) {
         }
 
         if (status === 'ready') {
+          const isSelected = selectedIds.includes(recipe.id)
           return (
             <Card
               key={recipe.id}
-              className="cursor-pointer hover:border-primary transition-colors relative"
+              className={`cursor-pointer hover:border-primary transition-colors relative ${isSelected ? 'border-primary' : ''}`}
               onClick={() => onSelect(recipe)}
             >
               <CardContent className="p-4 flex flex-col gap-2">
+                {onToggle && (
+                  <button
+                    className={`absolute top-2 left-2 z-10 rounded p-1 transition-colors ${
+                      isSelected
+                        ? 'text-primary bg-primary/15'
+                        : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
+                    }`}
+                    onClick={(e) => { e.stopPropagation(); onToggle(recipe) }}
+                    title={isSelected ? 'Remove from shopping list' : 'Add to shopping list'}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                  </button>
+                )}
                 <div className="w-full aspect-video bg-muted flex items-center justify-center rounded-md mb-2">
                   <FileText className="h-8 w-8 text-muted-foreground" />
                 </div>
@@ -340,6 +372,20 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete }) {
                 </p>
                 <UploaderAvatar profile={profiles[recipe.uploaded_by] ?? null} />
               </CardContent>
+              {adminMode && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={reparsing === recipe.id}
+                  onClick={(e) => handleReparse(recipe.id, e)}
+                  className="absolute bottom-2 right-2 text-muted-foreground hover:text-primary"
+                  title="Re-parse recipe (admin)"
+                >
+                  {reparsing === recipe.id
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <RefreshCw className="h-4 w-4" />}
+                </Button>
+              )}
               {canDelete(recipe) && (
                 <Button
                   variant="ghost"
