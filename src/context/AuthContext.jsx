@@ -40,6 +40,8 @@ export function AuthProvider({ children }) {
         setIsAdmin(await fetchIsAdmin(session.user.id))
       }
       setSession(session ?? null)
+    }).catch(() => {
+      setSession(null)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
