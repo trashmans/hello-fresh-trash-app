@@ -16,23 +16,23 @@ Deno.serve(async (req) => {
 
   // Verify caller is authenticated
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return new Response('Unauthorized', { status: 401 })
+  if (!authHeader) return new Response('Unauthorized', { status: 401, headers: corsHeaders })
 
   const supabaseAuth = createClient(SUPABASE_URL, ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
   })
   const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
-  if (authError || !user) return new Response('Unauthorized', { status: 401 })
+  if (authError || !user) return new Response('Unauthorized', { status: 401, headers: corsHeaders })
 
   let body: { recipeId?: string }
   try {
     body = await req.json()
   } catch {
-    return new Response('Bad Request', { status: 400 })
+    return new Response('Bad Request', { status: 400, headers: corsHeaders })
   }
 
   const { recipeId } = body
-  if (!recipeId) return new Response('Missing recipeId', { status: 400 })
+  if (!recipeId) return new Response('Missing recipeId', { status: 400, headers: corsHeaders })
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
@@ -42,10 +42,10 @@ Deno.serve(async (req) => {
     .eq('id', recipeId)
     .single()
 
-  if (!recipe) return new Response('Not found', { status: 404 })
-  if (recipe.uploaded_by !== user.id) return new Response('Forbidden', { status: 403 })
-  if (recipe.status !== 'failed') return new Response('Recipe is not failed', { status: 400 })
-  if ((recipe.retry_count ?? 0) >= 3) return new Response('Max retries exceeded', { status: 400 })
+  if (!recipe) return new Response('Not found', { status: 404, headers: corsHeaders })
+  if (recipe.uploaded_by !== user.id) return new Response('Forbidden', { status: 403, headers: corsHeaders })
+  if (recipe.status !== 'failed') return new Response('Recipe is not failed', { status: 400, headers: corsHeaders })
+  if ((recipe.retry_count ?? 0) >= 3) return new Response('Max retries exceeded', { status: 400, headers: corsHeaders })
 
   // Reset to pending — DB webhook will re-fire parse-recipe automatically
   await supabase.from('recipes').update({
@@ -57,6 +57,6 @@ Deno.serve(async (req) => {
 
   return new Response(JSON.stringify({ success: true }), {
     status: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 })

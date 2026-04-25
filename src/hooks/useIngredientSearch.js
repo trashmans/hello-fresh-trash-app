@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 export function parseTerms(raw) {
   return [...new Set(
     (raw ?? '').split(/[,\s]+/)
-      .map(t => t.trim())
+      .map(t => t.replace(/[^a-zA-Z0-9'\-]/g, '').trim())
       .filter(t => t.length >= 2)
   )]
 }

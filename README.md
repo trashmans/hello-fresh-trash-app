@@ -292,7 +292,7 @@ Wire up the backend so the app stores and retrieves real data.
 - [x] `deploy-migrations.yml` CI pipeline — runs `supabase db push` to preview on PR, production on merge to `main`; replaces manual migration deployment
 - [x] Shopping list generator — cart icon with badge in header; add-to-list button on each ready recipe card; sliding drawer with three zones: selected recipes with per-recipe serving size steppers, merged + scaled ingredient list with per-item quantity adjustments and check-off, sticky footer with copy-to-clipboard for Apple Reminders; persists to Supabase on every change, restores on page load
 - [ ] Recipe gallery cover images — deferred; JPEG 2000 format used by HelloFresh PDFs is not natively supported in browsers or available via simple WASM packages
-- [ ] Ingredient search
+- [x] Ingredient search — live search bar above the recipe gallery; 300 ms debounce; splits query into terms, matches against `canonical_name` and raw `name` in the `ingredients` table; recipes ranked by how many distinct search terms matched; clear query to restore the full gallery
 - [x] Admin re-parse — `RefreshCw` button on ready recipe cards (admin only); clears ingredients and resets recipe to `pending` so the webhook re-fires parse-recipe; implemented via `admin-reparse` edge function with server-side admin verification
 
 ---
@@ -327,12 +327,13 @@ src/
 │   ├── UploadQueue          # per-file progress list shown during batch upload
 │   ├── RecipePreviewPanel   # side panel; generates signed URL and renders PDF in iframe
 │   ├── UserMenu             # avatar dropdown with sign-out and admin toggle
-│   └── IngredientSearch     # search recipes by ingredient (stub)
+│   └── IngredientSearch     # search bar above the recipe gallery; controlled input with spinner; delegates query state to useIngredientSearch
 ├── context/
 │   └── AuthContext          # session state, allowlist check, signOut, adminMode
 ├── hooks/
-│   ├── useUploadQueue.js    # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
-│   └── useShoppingList.js   # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists
+│   ├── useUploadQueue.js      # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
+│   ├── useShoppingList.js     # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists
+│   └── useIngredientSearch.js # debounced ingredient search; splits query into terms; queries ingredients table by canonical_name + name; returns a Map of recipe_id → matched term count
 ├── pages/
 │   ├── Login                # login screen with Google OAuth
 │   ├── Home                 # main app screen; cart icon in header opens ShoppingListDrawer
