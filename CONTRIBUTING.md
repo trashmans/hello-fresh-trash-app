@@ -7,6 +7,7 @@ All changes go through pull requests. No one pushes directly to `main`. This doc
 ## Contents
 
 - [Getting started locally](#getting-started-locally)
+- [Environment setup](#environment-setup)
 - [Branch naming](#branch-naming)
 - [Workflow: GitHub Desktop](#workflow-github-desktop)
 - [Workflow: VS Code](#workflow-vs-code)
@@ -69,6 +70,67 @@ npm run dev
 The app is now running at `http://localhost:5173/`. Changes you make to the code appear instantly without refreshing — this is called hot reload.
 
 To stop the server, press `Ctrl + C` in Terminal.
+
+---
+
+## Environment setup
+
+Some configuration lives outside git because it is environment-specific or secret. Do this once when setting up a new environment (both preview and production).
+
+### GitHub Actions secrets
+
+Store these in **GitHub repo → Settings → Secrets and variables → Actions**. They are never visible in logs or code.
+
+**Vercel (required for frontend deploys):**
+
+| Secret | What it is | Where to find it |
+| --- | --- | --- |
+| `VERCEL_TOKEN` | Authenticates GitHub Actions to your Vercel account | vercel.com → Account Settings → Tokens |
+| `VERCEL_ORG_ID` | Identifies your Vercel account | vercel.com → Account Settings → General → "Your ID" |
+| `VERCEL_PROJECT_ID` | Identifies this Vercel project | vercel.com → Project → Settings → General → "Project ID" |
+
+To revoke access at any time, delete the token from your Vercel account settings.
+
+**Supabase (required for function and migration deploys):**
+
+| Secret | What it is | Where to find it |
+| --- | --- | --- |
+| `SUPABASE_ACCESS_TOKEN` | Authenticates the Supabase CLI | supabase.com → Account → Access Tokens |
+| `SUPABASE_PROJECT_ID` | Production project ref | `app.supabase.com/project/`**`this-part`** |
+| `SUPABASE_PREVIEW_PROJECT_ID` | Preview project ref | Same, for your preview project |
+
+### Supabase project configuration
+
+Do steps 1–3 for both the preview and production Supabase projects.
+
+#### 1. Deploy edge functions
+
+`deploy-functions.yml` handles this automatically — opening a PR deploys all three functions to the preview project; merging to `main` deploys to production. No manual deploy needed.
+
+#### 2. Set edge function secrets
+
+In **Supabase Dashboard → Edge Functions → Secrets**, add:
+
+| Secret | Value |
+| --- | --- |
+| `GEMINI_API_KEY` | Your Google AI Studio API key |
+
+#### 3. Create the DB webhook
+
+In **Supabase Dashboard → Database → Webhooks → Create webhook**:
+
+| Setting | Value |
+| --- | --- |
+| Type | Supabase Edge Function |
+| Name | `on-recipe-pending` |
+| Table | `public.recipes` |
+| Events | `INSERT` only — not UPDATE (causes 3× firing) |
+| Edge Function | `parse-recipe` |
+| HTTP Headers | none |
+
+#### 4. Schedule the cleanup function
+
+In **Supabase Dashboard → Edge Functions → cleanup-recipes → Schedule**, set cron: `0 * * * *` (hourly).
 
 ---
 
