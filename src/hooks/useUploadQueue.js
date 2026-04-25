@@ -57,7 +57,7 @@ export function useUploadQueue({ onUploadComplete }) {
     updateItem(item.id, { status: 'uploading' })
     try {
       const fileUuid = crypto.randomUUID()
-      const storagePath = `recipes/${fileUuid}.pdf`
+      const storagePath = `recipes/${session.user.id}/${fileUuid}.pdf`
 
       // Content hash duplicate check (client-side pre-check, UX only)
       const { data: existingByHash } = await supabase

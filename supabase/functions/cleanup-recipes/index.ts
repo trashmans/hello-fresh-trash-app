@@ -3,7 +3,15 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-Deno.serve(async (_req) => {
+Deno.serve(async (req) => {
+  const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '')
+  if (token !== SERVICE_ROLE_KEY) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
   const now = new Date()
   const iso = now.toISOString()
