@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { FileText, Trash2, RotateCcw, Loader2, ShoppingCart } from 'lucide-react'
+import { FileText, Trash2, RotateCcw, Loader2, ShoppingCart, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -139,6 +139,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(null)
   const [retrying, setRetrying] = useState(null)
+  const [reparsing, setReparsing] = useState(null)
 
   const fetchRecipes = useCallback(async () => {
     setLoading(true)
@@ -255,6 +256,23 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     }
   }
 
+  async function handleReparse(recipeId, e) {
+    e?.stopPropagation()
+    setReparsing(recipeId)
+    const toastId = toast.loading('Queuing re-parse…')
+    try {
+      const { error } = await supabase.functions.invoke('admin-reparse', {
+        body: { recipeId },
+      })
+      if (error) throw error
+      toast.success('Recipe queued for re-parsing.', { id: toastId })
+    } catch (err) {
+      toast.error(`Re-parse failed: ${err.message ?? 'unknown error'}`, { id: toastId })
+    } finally {
+      setReparsing(null)
+    }
+  }
+
   if (loading) {
     return <p className="text-muted-foreground text-sm">Loading recipes…</p>
   }
@@ -354,6 +372,20 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
                 </p>
                 <UploaderAvatar profile={profiles[recipe.uploaded_by] ?? null} />
               </CardContent>
+              {adminMode && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={reparsing === recipe.id}
+                  onClick={(e) => handleReparse(recipe.id, e)}
+                  className="absolute bottom-2 right-2 text-muted-foreground hover:text-primary"
+                  title="Re-parse recipe (admin)"
+                >
+                  {reparsing === recipe.id
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <RefreshCw className="h-4 w-4" />}
+                </Button>
+              )}
               {canDelete(recipe) && (
                 <Button
                   variant="ghost"

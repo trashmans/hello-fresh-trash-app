@@ -293,7 +293,7 @@ Wire up the backend so the app stores and retrieves real data.
 - [x] Shopping list generator — cart icon with badge in header; add-to-list button on each ready recipe card; sliding drawer with three zones: selected recipes with per-recipe serving size steppers, merged + scaled ingredient list with per-item quantity adjustments and check-off, sticky footer with copy-to-clipboard for Apple Reminders; persists to Supabase on every change, restores on page load
 - [ ] Recipe gallery cover images — deferred; JPEG 2000 format used by HelloFresh PDFs is not natively supported in browsers or available via simple WASM packages
 - [ ] Ingredient search
-- [ ] Admin re-parse — button on ready recipe cards (admin only) to reset a recipe to `pending` and re-run extraction; needed after prompt changes
+- [x] Admin re-parse — `RefreshCw` button on ready recipe cards (admin only); clears ingredients and resets recipe to `pending` so the webhook re-fires parse-recipe; implemented via `admin-reparse` edge function with server-side admin verification
 
 ---
 
