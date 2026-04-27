@@ -45,7 +45,6 @@ export default function RecipePreviewPanel({ recipe, onClose }) {
           src={url}
           className="flex-1 w-full rounded border border-border min-h-0"
           title={recipe.name ?? recipe.filename}
-          sandbox="allow-scripts allow-same-origin"
         />
       )}
     </div>
