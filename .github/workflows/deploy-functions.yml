@@ -33,6 +33,7 @@ jobs:
           supabase functions deploy retry-parse --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
           supabase functions deploy cleanup-recipes --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
           supabase functions deploy admin-reparse --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy admin-set-cover --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
@@ -43,5 +44,6 @@ jobs:
           supabase functions deploy retry-parse --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
           supabase functions deploy cleanup-recipes --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
           supabase functions deploy admin-reparse --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+          supabase functions deploy admin-set-cover --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

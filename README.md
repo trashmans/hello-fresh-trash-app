@@ -166,6 +166,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 
 ### Key relationships
 
+- `recipes.cover_path` — storage path of the recipe's cover thumbnail (`covers/<user-id>/<uuid>.jpg` in the `recipe-pdfs` bucket), or `null` if none was generated. Rendered client-side from PDF page 1 — see `src/lib/pdfCover.js`.
 - `recipes.uploaded_by` → `auth.users.id`
 - `ingredients.recipe_id` → `recipes.id` (CASCADE DELETE)
 - `shopping_lists.user_id` → `auth.users.id` (UNIQUE — one list per user)
@@ -201,6 +202,7 @@ src/
     ├── supabase.js           # Supabase client
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
     ├── ingredientMerge.js    # mergeIngredients() — scales by servings, merges same-name+unit items across recipes, returns sorted list with per-recipe contribution breakdown
+    ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
     └── utils.js              # cn() helper for combining Tailwind classes
 
 supabase/
@@ -209,6 +211,7 @@ supabase/
 └── functions/
     ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), writes ingredients + status=ready
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
+    ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
     └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
 
 .github/workflows/
@@ -222,7 +225,6 @@ supabase/
 
 ## Known Limitations
 
-- **Recipe cover images** — HelloFresh PDFs use the JPEG 2000 format, which is not natively supported in browsers and has no lightweight WASM alternative. Cover images are deferred indefinitely; recipe cards show metadata only.
 - **Semantic ingredient search** — current search is chip-based: typing shows a typeahead of real stored ingredient values (`ilike` over `canonical_name`/`name`), and selecting chips filters to recipes containing all of them (AND). Vector/embedding-based search (finding recipes by meaning rather than exact token match) is deferred.
 
 ---
