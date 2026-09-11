@@ -132,7 +132,7 @@ function FailedCard({ recipe, onRetry, onDelete, deleting, retrying }) {
   )
 }
 
-export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle, ingredientMatches = null, termCount = 0 }) {
+export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle, ingredientMatches = null }) {
   const { session, adminMode } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [profiles, setProfiles] = useState({})
@@ -273,15 +273,10 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     }
   }
 
+  // ingredientMatches already contains only recipes matching every
+  // selected ingredient chip (AND match) — see useIngredientFilter.
   const displayRecipes = ingredientMatches
-    ? recipes
-        .filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
-        .sort((a, b) => {
-          if (a.status === 'ready' && b.status === 'ready') {
-            return (ingredientMatches.get(b.id) ?? 0) - (ingredientMatches.get(a.id) ?? 0)
-          }
-          return 0
-        })
+    ? recipes.filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
     : recipes
 
   if (loading) {
@@ -393,11 +388,6 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
                 <p className="text-xs text-muted-foreground">
                   {new Date(recipe.created_at).toLocaleDateString()}
                 </p>
-                {ingredientMatches && termCount >= 2 && (
-                  <p className="text-xs text-primary font-medium">
-                    {ingredientMatches.get(recipe.id)} of {termCount} ingredients matched
-                  </p>
-                )}
                 <UploaderAvatar profile={profiles[recipe.uploaded_by] ?? null} />
               </CardContent>
               {adminMode && (
