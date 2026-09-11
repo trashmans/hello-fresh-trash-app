@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { computeContentHash } from '@/lib/pdfUtils'
+import { renderPdfCoverBlob } from '@/lib/pdfCover'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const MAX_BATCH_BYTES = 50 * 1024 * 1024
@@ -58,6 +59,7 @@ export function useUploadQueue({ onUploadComplete }) {
     try {
       const fileUuid = crypto.randomUUID()
       const storagePath = `recipes/${session.user.id}/${fileUuid}.pdf`
+      const coverStoragePath = `covers/${session.user.id}/${fileUuid}.jpg`
 
       // Content hash duplicate check (client-side pre-check, UX only)
       const { data: existingByHash } = await supabase
@@ -83,6 +85,22 @@ export function useUploadQueue({ onUploadComplete }) {
         .upload(storagePath, item.file, { contentType: 'application/pdf' })
       if (uploadError) throw uploadError
 
+      // Best-effort cover thumbnail — rendered client-side from page 1 (see
+      // src/lib/pdfCover.js). Never blocks or fails the upload.
+      let coverPath = null
+      try {
+        const arrayBuffer = await item.file.arrayBuffer()
+        const coverBlob = await renderPdfCoverBlob(arrayBuffer)
+        if (coverBlob) {
+          const { error: coverUploadError } = await supabase.storage
+            .from('recipe-pdfs')
+            .upload(coverStoragePath, coverBlob, { contentType: 'image/jpeg' })
+          if (!coverUploadError) coverPath = coverStoragePath
+        }
+      } catch (coverErr) {
+        console.warn('Cover generation/upload failed, continuing without a cover:', coverErr)
+      }
+
       // Insert DB row — status pending, triggers parse-recipe via DB webhook
       const { error: insertError } = await supabase
         .from('recipes')
@@ -90,6 +108,7 @@ export function useUploadQueue({ onUploadComplete }) {
           uploaded_by: session.user.id,
           filename: item.sanitizedName,
           storage_path: storagePath,
+          cover_path: coverPath,
           content_hash: item.contentHash,
           status: 'pending',
         })

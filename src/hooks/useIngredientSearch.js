@@ -1,33 +1,79 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
-export function parseTerms(raw) {
-  return [...new Set(
-    (raw ?? '').split(/[,\s]+/)
-      .map(t => t.replace(/[^a-zA-Z0-9'\-]/g, '').trim())
-      .filter(t => t.length >= 2)
-  )]
-}
+const MAX_SUGGESTIONS = 8
 
-export function useIngredientSearch(query) {
-  const [matches, setMatches] = useState(null)
+/**
+ * Typeahead suggestions for the ingredient search box.
+ * Queries real, stored ingredient values (not free text) so the dropdown
+ * only ever offers things that actually exist in the catalogue.
+ */
+export function useIngredientSuggestions(query) {
+  const [suggestions, setSuggestions] = useState([])
   const [loading, setLoading] = useState(false)
-  const [termCount, setTermCount] = useState(0)
 
   useEffect(() => {
-    const terms = parseTerms(query)
-    setTermCount(terms.length)
+    const term = (query ?? '').trim()
 
-    if (terms.length === 0) {
+    if (term.length < 2) {
+      setSuggestions([])
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    let cancelled = false
+
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from('ingredients')
+        .select('canonical_name, name')
+        .or(`canonical_name.ilike.%${term}%,name.ilike.%${term}%`)
+        .limit(100)
+
+      if (cancelled) return
+
+      if (error || !data) {
+        setSuggestions([])
+        setLoading(false)
+        return
+      }
+
+      const unique = [...new Set(
+        data.map(row => row.canonical_name ?? row.name).filter(Boolean)
+      )].sort((a, b) => a.localeCompare(b))
+
+      setSuggestions(unique.slice(0, MAX_SUGGESTIONS))
+      setLoading(false)
+    }, 250)
+
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [query])
+
+  return { suggestions, loading }
+}
+
+/**
+ * Given a list of selected ingredient chips, finds recipes that contain
+ * EVERY selected ingredient (AND match), keyed by recipe id.
+ */
+export function useIngredientFilter(selected) {
+  const [matches, setMatches] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const key = selected.join('|')
+
+  useEffect(() => {
+    if (selected.length === 0) {
       setMatches(null)
       setLoading(false)
       return
     }
 
     setLoading(true)
+    let cancelled = false
 
-    const timer = setTimeout(async () => {
-      const orParts = terms.flatMap(term => [
+    ;(async () => {
+      const orParts = selected.flatMap(term => [
         `canonical_name.ilike.%${term}%`,
         `name.ilike.%${term}%`,
       ])
@@ -36,7 +82,9 @@ export function useIngredientSearch(query) {
         .from('ingredients')
         .select('recipe_id, canonical_name, name')
         .or(orParts.join(','))
-        .limit(200)
+        .limit(1000)
+
+      if (cancelled) return
 
       if (error || !data) {
         setMatches(null)
@@ -44,32 +92,38 @@ export function useIngredientSearch(query) {
         return
       }
 
-      // Group ingredient rows by recipe, count how many distinct terms matched
-      const recipeTerms = new Map()
+      // Group ingredient rows by recipe, tracking which selected chips
+      // each recipe has at least one ingredient matching.
+      const recipeChipSets = new Map()
       for (const row of data) {
-        const matchedTerms = terms.filter(term => {
+        const matchedChips = selected.filter(term => {
           const t = term.toLowerCase()
           return (
             (row.canonical_name ?? '').toLowerCase().includes(t) ||
             (row.name ?? '').toLowerCase().includes(t)
           )
         })
-        const existing = recipeTerms.get(row.recipe_id) ?? new Set()
-        matchedTerms.forEach(t => existing.add(t))
-        recipeTerms.set(row.recipe_id, existing)
+        if (matchedChips.length === 0) continue
+        const existing = recipeChipSets.get(row.recipe_id) ?? new Set()
+        matchedChips.forEach(c => existing.add(c))
+        recipeChipSets.set(row.recipe_id, existing)
       }
 
-      const countMap = new Map()
-      for (const [recipeId, termSet] of recipeTerms) {
-        countMap.set(recipeId, termSet.size)
+      // AND match: keep only recipes that matched every selected chip.
+      const result = new Map()
+      for (const [recipeId, chipSet] of recipeChipSets) {
+        if (chipSet.size === selected.length) {
+          result.set(recipeId, [...chipSet])
+        }
       }
 
-      setMatches(countMap)
+      setMatches(result)
       setLoading(false)
-    }, 300)
+    })()
 
-    return () => clearTimeout(timer)
-  }, [query])
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
 
-  return { matches, loading, termCount }
+  return { matches, loading }
 }

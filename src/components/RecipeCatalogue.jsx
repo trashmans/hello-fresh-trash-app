@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { renderPdfCoverBlob } from '@/lib/pdfCover'
 
 function UploaderAvatar({ profile }) {
   const [imgError, setImgError] = useState(false)
@@ -132,14 +133,16 @@ function FailedCard({ recipe, onRetry, onDelete, deleting, retrying }) {
   )
 }
 
-export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle, ingredientMatches = null, termCount = 0 }) {
+export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle, ingredientMatches = null }) {
   const { session, adminMode } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [profiles, setProfiles] = useState({})
+  const [coverUrls, setCoverUrls] = useState({})
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(null)
   const [retrying, setRetrying] = useState(null)
   const [reparsing, setReparsing] = useState(null)
+  const [backfilling, setBackfilling] = useState(false)
 
   const fetchRecipes = useCallback(async () => {
     setLoading(true)
@@ -171,6 +174,22 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
         profileData.forEach(p => { map[p.id] = p })
         setProfiles(map)
       }
+    }
+
+    // Batch-sign cover thumbnail URLs (one request instead of one per card)
+    const coverPaths = [...new Set(data.map(r => r.cover_path).filter(Boolean))]
+    if (coverPaths.length > 0) {
+      const { data: signedCovers } = await supabase.storage
+        .from('recipe-pdfs')
+        .createSignedUrls(coverPaths, 3600)
+
+      if (signedCovers) {
+        const map = {}
+        signedCovers.forEach(s => { if (s.signedUrl) map[s.path] = s.signedUrl })
+        setCoverUrls(map)
+      }
+    } else {
+      setCoverUrls({})
     }
 
     setLoading(false)
@@ -218,7 +237,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     const toastId = toast.loading('Deleting recipe…')
 
     try {
-      const pathsToDelete = [recipe.storage_path].filter(Boolean)
+      const pathsToDelete = [recipe.storage_path, recipe.cover_path].filter(Boolean)
       if (pathsToDelete.length > 0) {
         const { error: storageError } = await supabase.storage
           .from('recipe-pdfs')
@@ -273,15 +292,60 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     }
   }
 
-  const displayRecipes = ingredientMatches
-    ? recipes
-        .filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
-        .sort((a, b) => {
-          if (a.status === 'ready' && b.status === 'ready') {
-            return (ingredientMatches.get(b.id) ?? 0) - (ingredientMatches.get(a.id) ?? 0)
-          }
-          return 0
+  const recipesMissingCovers = recipes.filter(r => r.status === 'ready' && !r.cover_path)
+
+  async function handleBackfillCovers() {
+    const targets = recipesMissingCovers
+    if (targets.length === 0) return
+
+    setBackfilling(true)
+    const toastId = toast.loading(`Generating covers\u2026 0/${targets.length}`)
+    let done = 0
+    let succeeded = 0
+
+    for (const recipe of targets) {
+      try {
+        const { data: pdfBlob, error: downloadError } = await supabase.storage
+          .from('recipe-pdfs')
+          .download(recipe.storage_path)
+        if (downloadError || !pdfBlob) throw downloadError ?? new Error('download failed')
+
+        const arrayBuffer = await pdfBlob.arrayBuffer()
+        const coverBlob = await renderPdfCoverBlob(arrayBuffer)
+        if (!coverBlob) throw new Error('render failed')
+
+        // Uploaded under the *current* (admin) user's own path so this satisfies
+        // the standard "own path" storage policy — no special admin storage
+        // policy needed. Ownership of the recipe itself is unaffected.
+        const coverStoragePath = `covers/${session.user.id}/${crypto.randomUUID()}.jpg`
+        const { error: uploadError } = await supabase.storage
+          .from('recipe-pdfs')
+          .upload(coverStoragePath, coverBlob, { contentType: 'image/jpeg' })
+        if (uploadError) throw uploadError
+
+        const { error: setCoverError } = await supabase.functions.invoke('admin-set-cover', {
+          body: { recipeId: recipe.id, coverPath: coverStoragePath },
         })
+        if (setCoverError) throw setCoverError
+
+        succeeded++
+      } catch (err) {
+        console.warn(`Backfill failed for recipe ${recipe.id}:`, err)
+      } finally {
+        done++
+        toast.loading(`Generating covers\u2026 ${done}/${targets.length}`, { id: toastId })
+      }
+    }
+
+    toast.success(`Generated ${succeeded} of ${targets.length} covers.`, { id: toastId })
+    setBackfilling(false)
+    fetchRecipes()
+  }
+
+  // ingredientMatches already contains only recipes matching every
+  // selected ingredient chip (AND match) — see useIngredientFilter.
+  const displayRecipes = ingredientMatches
+    ? recipes.filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
     : recipes
 
   if (loading) {
@@ -323,8 +387,25 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-      {displayRecipes.map(recipe => {
+    <>
+      {adminMode && recipesMissingCovers.length > 0 && (
+        <div className="mb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={backfilling}
+            onClick={handleBackfillCovers}
+          >
+            {backfilling
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : <RefreshCw className="h-4 w-4 mr-2" />
+            }
+            Generate {recipesMissingCovers.length} missing cover{recipesMissingCovers.length === 1 ? '' : 's'} (admin)
+          </Button>
+        </div>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        {displayRecipes.map(recipe => {
         const { status } = recipe
 
         if ((status === 'pending' || status === 'processing') && isOwn(recipe)) {
@@ -386,18 +467,22 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
                     <ShoppingCart className="h-4 w-4" />
                   </button>
                 )}
-                <div className="w-full aspect-video bg-muted flex items-center justify-center rounded-md mb-2">
-                  <FileText className="h-8 w-8 text-muted-foreground" />
+                <div className="w-full aspect-video bg-muted flex items-center justify-center rounded-md mb-2 overflow-hidden">
+                  {coverUrls[recipe.cover_path] ? (
+                    <img
+                      src={coverUrls[recipe.cover_path]}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  ) : (
+                    <FileText className="h-8 w-8 text-muted-foreground" />
+                  )}
                 </div>
                 <p className="text-sm font-medium truncate">{recipe.name ?? recipe.filename}</p>
                 <p className="text-xs text-muted-foreground">
                   {new Date(recipe.created_at).toLocaleDateString()}
                 </p>
-                {ingredientMatches && termCount >= 2 && (
-                  <p className="text-xs text-primary font-medium">
-                    {ingredientMatches.get(recipe.id)} of {termCount} ingredients matched
-                  </p>
-                )}
                 <UploaderAvatar profile={profiles[recipe.uploaded_by] ?? null} />
               </CardContent>
               {adminMode && (
@@ -431,6 +516,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
         return null
       })}
-    </div>
+      </div>
+    </>
   )
 }

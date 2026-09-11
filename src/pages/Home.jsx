@@ -7,7 +7,7 @@ import RecipeCatalogue from '@/components/RecipeCatalogue'
 import RecipePreviewPanel from '@/components/RecipePreviewPanel'
 import ShoppingListDrawer from '@/components/ShoppingListDrawer'
 import { useShoppingList } from '@/hooks/useShoppingList'
-import { useIngredientSearch } from '@/hooks/useIngredientSearch'
+import { useIngredientSuggestions, useIngredientFilter } from '@/hooks/useIngredientSearch'
 import { Button } from '@/components/ui/button'
 import IngredientSearchBar from '@/components/IngredientSearch'
 
@@ -16,8 +16,18 @@ export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const shoppingList = useShoppingList()
-  const [searchQuery, setSearchQuery] = useState('')
-  const { matches: ingredientMatches, loading: searchLoading, termCount } = useIngredientSearch(searchQuery)
+  const [ingredientQuery, setIngredientQuery] = useState('')
+  const [selectedIngredients, setSelectedIngredients] = useState([])
+  const { suggestions: ingredientSuggestions, loading: suggestionsLoading } = useIngredientSuggestions(ingredientQuery)
+  const { matches: ingredientMatches } = useIngredientFilter(selectedIngredients)
+
+  function handleSelectIngredient(term) {
+    setSelectedIngredients(prev => prev.includes(term) ? prev : [...prev, term])
+  }
+
+  function handleRemoveIngredient(term) {
+    setSelectedIngredients(prev => prev.filter(t => t !== term))
+  }
 
   function handleUploadComplete() {
     setRefreshKey(k => k + 1)
@@ -70,9 +80,13 @@ export default function Home() {
           </div>
           <div className="mb-4">
             <IngredientSearchBar
-              value={searchQuery}
-              onChange={setSearchQuery}
-              loading={searchLoading}
+              query={ingredientQuery}
+              onQueryChange={setIngredientQuery}
+              suggestions={ingredientSuggestions}
+              loading={suggestionsLoading}
+              selected={selectedIngredients}
+              onSelect={handleSelectIngredient}
+              onRemove={handleRemoveIngredient}
             />
           </div>
           <RecipeCatalogue
@@ -82,7 +96,6 @@ export default function Home() {
             selectedIds={shoppingList.selectedIds}
             onToggle={shoppingList.toggleRecipe}
             ingredientMatches={ingredientMatches}
-            termCount={termCount}
           />
         </div>
         {selectedRecipe && (
