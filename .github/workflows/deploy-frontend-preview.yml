@@ -12,6 +12,7 @@ env:
 
 jobs:
   deploy:
+    name: Deploy Frontend Preview
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
