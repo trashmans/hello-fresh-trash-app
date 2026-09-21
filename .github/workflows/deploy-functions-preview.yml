@@ -1,0 +1,37 @@
+name: Deploy Functions Preview
+run-name: "Deploy Functions: Preview (PR #${{ github.event.number }})"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/functions/**'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: latest
+
+      - name: Deploy to preview
+        run: |
+          supabase functions deploy parse-recipe --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy retry-parse --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy cleanup-recipes --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy admin-reparse --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy admin-set-cover --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

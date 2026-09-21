@@ -105,7 +105,7 @@ Do steps 1–3 for both the preview and production Supabase projects.
 
 #### 1. Deploy edge functions
 
-`deploy-functions.yml` handles this automatically — opening a PR deploys all three functions to the preview project; merging to `main` deploys to production. No manual deploy needed.
+`deploy-functions-preview.yml` / `deploy-functions-prod.yml` handle this automatically — opening a PR deploys all three functions to the preview project; merging to `main` deploys to production. No manual deploy needed.
 
 #### 2. Set edge function secrets
 
@@ -192,7 +192,7 @@ Examples: `feature/recipe-upload`, `fix/login-button`, `chore/update-readme`
 
 ## What happens when you open a PR
 
-When a PR is opened targeting `main`, GitHub Actions automatically runs the **Deploy Frontend** workflow:
+When a PR is opened targeting `main`, GitHub Actions automatically runs the **Deploy Preview** workflow:
 
 1. Spins up a fresh Ubuntu machine
 2. Installs Node 24 and the Vercel CLI
