@@ -10,6 +10,8 @@ node_modules
 dist
 
 # editor
+.idea/
+.vscode/
 .DS_Store
 
 # Supabase CLI local state

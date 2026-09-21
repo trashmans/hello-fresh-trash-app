@@ -15,6 +15,18 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
+// pdf.js v6+ decodes JPEG 2000 (JPX) images — exactly what HelloFresh's cover
+// photos are — via a separate WebAssembly module, not the worker bundle
+// itself. It has to be told where to find it via `wasmUrl` on getDocument()
+// (below), a directory it appends filenames like "openjpeg.wasm" to.
+// Without this, JPX images silently fail to decode and render as blank —
+// the render doesn't throw, so this is easy to miss. The wasm files are
+// copied from node_modules/pdfjs-dist/wasm/ into public/pdfjs-wasm/ (see
+// that folder's contents) since pdf.js needs them at their original
+// filenames, which Vite's normal asset pipeline doesn't guarantee — if
+// pdfjs-dist is ever upgraded, re-copy that folder.
+const PDFJS_WASM_URL = '/pdfjs-wasm/'
+
 // Fraction of the rendered page height to keep. HelloFresh's card layout puts
 // the hero photo across roughly the top ~40-45% of the page, with the title
 // and ingredient list below — this is a starting guess, tune it once you can
@@ -30,7 +42,7 @@ const JPEG_QUALITY = 0.85
  */
 export async function renderPdfCoverBlob(arrayBuffer, { cropRatio = DEFAULT_CROP_RATIO } = {}) {
   try {
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, wasmUrl: PDFJS_WASM_URL }).promise
     const page = await pdf.getPage(1)
     const viewport = page.getViewport({ scale: RENDER_SCALE })
 
