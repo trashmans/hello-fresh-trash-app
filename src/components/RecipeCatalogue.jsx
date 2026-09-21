@@ -359,7 +359,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
           <FileText className="h-7 w-7 text-primary" />
         </div>
         <p className="text-lg font-semibold">No recipes yet</p>
-        <p className="text-sm text-muted-foreground mt-1">Upload your first HelloFresh recipe card to get started</p>
+        <p className="text-sm text-muted-foreground mt-1">Upload your first recipe card to get started — HelloFresh is our favorite, but anything works</p>
       </Card>
     )
   }
