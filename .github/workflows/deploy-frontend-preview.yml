@@ -1,15 +1,7 @@
-name: Deploy Frontend
+name: Deploy Frontend Preview
+run-name: "Deploy Frontend: Preview (PR #${{ github.event.number }})"
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'src/**'
-      - 'index.html'
-      - 'vite.config.js'
-      - 'package.json'
-      - 'vercel.json'
   pull_request:
     branches:
       - main
@@ -39,23 +31,13 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
       - name: Pull Vercel environment (preview)
-        if: github.event_name == 'pull_request'
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-      - name: Pull Vercel environment (production)
-        if: github.event_name == 'push'
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-      - name: Build (preview)
-        if: github.event_name == 'pull_request'
+      - name: Build
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
-      - name: Build (production)
-        if: github.event_name == 'push'
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
       - name: Deploy preview
-        if: github.event_name == 'pull_request'
         id: deploy-preview
         run: echo "url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})" >> $GITHUB_OUTPUT
       - name: Comment preview URL on PR
-        if: github.event_name == 'pull_request'
         uses: actions/github-script@v9
         with:
           script: |
@@ -82,6 +64,3 @@ jobs:
                 body,
               });
             }
-      - name: Deploy production
-        if: github.event_name == 'push'
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

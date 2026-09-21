@@ -1,11 +1,7 @@
-name: Deploy Migrations
+name: Deploy Migrations Preview
+run-name: "Deploy Migrations: Preview (PR #${{ github.event.number }})"
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'supabase/migrations/**'
   pull_request:
     branches:
       - main
@@ -27,17 +23,8 @@ jobs:
           version: latest
 
       - name: Deploy to preview
-        if: github.event_name == 'pull_request'
         run: |
           supabase link --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
-          supabase db push
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-
-      - name: Deploy to production
-        if: github.event_name == 'push'
-        run: |
-          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
           supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

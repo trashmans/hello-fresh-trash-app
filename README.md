@@ -83,7 +83,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 |---|---|
 | **npm** | Package manager. Installs and manages all third-party libraries. |
 | **Vite** | Build tool and local dev server. Compiles JSX and serves the app locally. `npm run build` compiles everything into `dist/` for deployment. |
-| **GitHub Actions** | CI/CD pipeline. Four workflows cover frontend deploys, dependency bumps, database migrations, and edge function deploys — each triggered only when its relevant files change. |
+| **GitHub Actions** | CI/CD pipeline. Seven workflows cover frontend, database migration, and edge function deploys (each split into preview/production), plus dependency bump checks — each triggered only when its relevant files change. |
 | **Vercel CLI** | The tool GitHub Actions uses to build and deploy to Vercel. All output is logged in GitHub Actions — no Vercel dashboard needed to debug failures. |
 | **Vercel** | Frontend hosting. Supports private repositories, provides a preview URL for every PR, and serves clean `/home` style URLs. |
 | **Dependabot** | Automated dependency updates. Opens weekly PRs to bump npm packages and GitHub Actions versions. |
@@ -92,12 +92,15 @@ The app itself is split into four layers. Each layer has one job and can be upda
 
 | Workflow | Triggers on | What it does |
 |---|---|---|
-| `deploy-frontend.yml` | Human PRs and pushes to `main` | Full Vercel build and deploy. Preview URL posted as PR comment. Production deploy on merge. |
+| `deploy-frontend-preview.yml` | Human PRs to `main` | Vercel preview build and deploy. Preview URL posted as PR comment. |
+| `deploy-frontend-prod.yml` | Pushes to `main` | Vercel production build and deploy. |
 | `dependabot-build.yml` | Dependabot PRs only | Build check with no secrets. Confirms the bump doesn't break the build. |
-| `deploy-migrations.yml` | Changes to `supabase/migrations/**` | PR → `supabase db push` to preview Supabase project. Merge to `main` → production. Only fires when migration files change. |
-| `deploy-functions.yml` | Changes to `supabase/functions/**` | PR → deploys functions to preview Supabase project. Merge to `main` → production. Only fires when function files change. |
+| `deploy-migrations-preview.yml` | PRs touching `supabase/migrations/**` | `supabase db push` to the preview Supabase project. |
+| `deploy-migrations-prod.yml` | Pushes to `main` touching `supabase/migrations/**` | `supabase db push` to the production Supabase project. |
+| `deploy-functions-preview.yml` | PRs touching `supabase/functions/**` | Deploys edge functions to the preview Supabase project. |
+| `deploy-functions-prod.yml` | Pushes to `main` touching `supabase/functions/**` | Deploys edge functions to the production Supabase project. |
 
-> **Migration CI:** `deploy-migrations.yml` tracks applied migrations by filename and never re-runs the same file twice. Any migrations applied manually before CI was set up must be registered in the tracking table via the Supabase dashboard SQL editor. After that, CI owns migrations — do not apply migration files manually.
+> **Migration CI:** `deploy-migrations-preview.yml` / `deploy-migrations-prod.yml` track applied migrations by filename and never re-run the same file twice. Any migrations applied manually before CI was set up must be registered in the tracking table via the Supabase dashboard SQL editor. After that, CI owns migrations — do not apply migration files manually.
 
 ---
 
@@ -142,7 +145,7 @@ The Supabase anon key is the only credential the browser ever sees. The service 
 
 ## Database Schema
 
-All tables have RLS enabled. Migrations live in `supabase/migrations/` and are deployed automatically by `deploy-migrations.yml`.
+All tables have RLS enabled. Migrations live in `supabase/migrations/` and are deployed automatically by `deploy-migrations-preview.yml` / `deploy-migrations-prod.yml`.
 
 | Table | Purpose |
 |---|---|
@@ -206,7 +209,7 @@ src/
     └── utils.js              # cn() helper for combining Tailwind classes
 
 supabase/
-├── migrations/              # database schema changes (SQL) — deployed automatically via deploy-migrations.yml CI; never run manually after bootstrap
+├── migrations/              # database schema changes (SQL) — deployed automatically via deploy-migrations-preview/prod CI; never run manually after bootstrap
 ├── seed.sql                 # template for seeding initial data (no real emails — swap in locally)
 └── functions/
     ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), writes ingredients + status=ready
@@ -215,10 +218,13 @@ supabase/
     └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
 
 .github/workflows/
-├── deploy-frontend.yml      # PR → Vercel preview deploy (posts URL as comment); merge to main → production deploy
-├── dependabot-build.yml     # dependabot PRs → build check only, no secrets, no deploy
-├── deploy-migrations.yml    # PR touching supabase/migrations/ → push to preview; merge to main → push to production
-└── deploy-functions.yml     # PR touching supabase/functions/ → deploy to preview; merge to main → deploy to production
+├── deploy-frontend-preview.yml   # PR → Vercel preview deploy, posts URL as PR comment
+├── deploy-frontend-prod.yml      # merge to main → Vercel production deploy
+├── dependabot-build.yml          # dependabot PRs → build check only, no secrets, no deploy
+├── deploy-migrations-preview.yml # PR touching supabase/migrations/ → push to preview
+├── deploy-migrations-prod.yml    # merge to main touching supabase/migrations/ → push to production
+├── deploy-functions-preview.yml  # PR touching supabase/functions/ → deploy to preview
+└── deploy-functions-prod.yml     # merge to main touching supabase/functions/ → deploy to production
 ```
 
 ---
