@@ -12,6 +12,9 @@ on:
     paths:
       - 'supabase/migrations/**'
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     if: github.actor != 'dependabot[bot]'
