@@ -75,7 +75,7 @@ export default function Home() {
           <div className="mb-6">
             <h2 className="text-2xl font-bold">Recipes</h2>
             <p className="text-muted-foreground mt-1">
-              Upload HelloFresh recipe cards to build the catalogue
+              Upload a recipe card to build the catalogue — we love HelloFresh, but anything works
             </p>
           </div>
           <div className="mb-4">
