@@ -112,7 +112,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 | **Supabase Database** | Postgres database hosted by Supabase. Stores recipes, ingredients, and shopping lists. Schema defined in `supabase/migrations/` and deployed automatically by CI. Row Level Security enabled on all tables. |
 | **Supabase Storage** | File storage for uploaded recipe PDFs. |
 | **Supabase Edge Functions** | Serverless functions running on Deno. Three functions handle the parsing pipeline: `parse-recipe` sends uploaded PDFs to Gemini and writes results to the database; `retry-parse` resets failed recipes for re-processing; `cleanup-recipes` runs hourly to remove stale records. |
-| **Gemini 2.5 Flash** | Google AI model used inside `parse-recipe` to extract recipe name, ingredients, steps, and metadata from uploaded PDFs. The PDF is sent as a base64-encoded inline attachment. Handles dual-quantity HelloFresh ingredient formats (e.g. "4 oz \| 8 oz") by always extracting the first/base quantity and setting `servings` from the corresponding column header. |
+| **Gemini 2.5 Flash** | Google AI model used inside `parse-recipe` to extract recipe name, ingredients, steps, and metadata from uploaded PDFs. The PDF is sent as a base64-encoded inline attachment. Handles dual-quantity HelloFresh ingredient formats (e.g. "4 oz \| 8 oz") by always extracting the first/base quantity and setting `servings` from the corresponding column header. The source PDF can be in any language — Gemini translates every extracted field into English as part of parsing (except `source_name`, kept as written), so recipe name, ingredients, and steps always end up stored and displayed in English regardless of the original language. |
 
 ---
 
