@@ -151,24 +151,24 @@ Deno.serve(async (req) => {
             },
           },
           {
-            text: `Extract the recipe from this PDF and return a JSON object with exactly these fields:
+            text: `This PDF may be written in any language. Extract the recipe and translate every text field into English, regardless of the PDF's original language — the only exception is "source_name", which should be kept exactly as written if it is a brand or publisher name (e.g. HelloFresh stays HelloFresh, do not translate it). Return a JSON object with exactly these fields:
 {
-  "name": "primary recipe title only — the main heading (e.g. 'Korean Beef Bibimbap'), NOT the subtitle or ingredient description that follows. Title case, not all caps.",
-  "source_name": "brand or publisher if identifiable (e.g. HelloFresh), null otherwise",
+  "name": "primary recipe title only, in English — the main heading (e.g. 'Korean Beef Bibimbap'), NOT the subtitle or ingredient description that follows. Title case, not all caps.",
+  "source_name": "brand or publisher if identifiable (e.g. HelloFresh), null otherwise — keep as written, do not translate",
   "cook_time_minutes": integer or null,
   "prep_time_minutes": integer or null,
   "servings": integer or null,
-  "difficulty": "Easy" or "Medium" or "Hard" or null,
-  "cuisine": "cuisine type if identifiable (e.g. Mexican, Italian), null otherwise",
-  "tags": ["array", "of", "tags"],
-  "steps": ["Step 1 text", "Step 2 text"],
+  "difficulty": "Easy" or "Medium" or "Hard" or null (translate the source label into one of these English values),
+  "cuisine": "cuisine type in English if identifiable (e.g. Mexican, Italian), null otherwise",
+  "tags": ["array", "of", "tags", "in English"],
+  "steps": ["Step 1 text, in English", "Step 2 text, in English"],
   "ingredients": [
     {
-      "name": "ingredient name only (e.g. chicken breast, garlic clove)",
-      "canonical_name": "base-form ingredient for search — strip preparation, quantity words, and adjectives (e.g. 'chicken breast' → 'chicken', 'fresh garlic cloves' → 'garlic', 'extra virgin olive oil' → 'olive oil', 'baby spinach leaves' → 'spinach', 'soy sauce' → 'soy sauce'). Use the shortest recognisable common name.",
+      "name": "ingredient name only, in English (e.g. chicken breast, garlic clove)",
+      "canonical_name": "base-form ingredient for search, in English — strip preparation, quantity words, and adjectives (e.g. 'chicken breast' → 'chicken', 'fresh garlic cloves' → 'garlic', 'extra virgin olive oil' → 'olive oil', 'baby spinach leaves' → 'spinach', 'soy sauce' → 'soy sauce'). Use the shortest recognisable common name.",
       "quantity": numeric value or null,
       "unit": "unit string or null",
-      "preparation": "prep method (e.g. diced, sliced) or null",
+      "preparation": "prep method, in English (e.g. diced, sliced) or null",
       "display_order": 1
     }
   ]
