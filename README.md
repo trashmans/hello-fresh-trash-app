@@ -154,6 +154,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `user_roles` | `is_admin` flag per user — grants delete-any-recipe in the UI |
 | `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected` |
 | `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only; CASCADE deleted when recipe is deleted |
+| `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
 | `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
 | `app_config` | Key/value config for environment-specific settings; service role only |
 
@@ -170,6 +171,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 ### Key relationships
 
 - `recipes.cover_path` — storage path of the recipe's cover thumbnail (`covers/<user-id>/<uuid>.jpg` in the `recipe-pdfs` bucket), or `null` if none was generated. Rendered client-side from PDF page 1 — see `src/lib/pdfCover.js`.
+- `recipe_step_images.recipe_id` → `recipes.id` (CASCADE DELETE) — per-step photos, one row per matched step, stored under `steps/<user-id>/<uuid>/<index>.jpg` in the `recipe-pdfs` bucket. Rendered client-side from the PDF's steps page — see `src/lib/pdfStepImages.js`. Only shown in the UI when the row count exactly matches the recipe's parsed step count (extraction and parsing run independently — see `src/hooks/useRecipeStepImages.js`).
 - `recipes.uploaded_by` → `auth.users.id`
 - `ingredients.recipe_id` → `recipes.id` (CASCADE DELETE)
 - `shopping_lists.user_id` → `auth.users.id` (UNIQUE — one list per user)
@@ -181,13 +183,13 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 ```text
 src/
 ├── components/
-│   ├── ui/                  # shadcn/ui base components (Button, Card, Input, Sheet, Tooltip, …)
+│   ├── ui/                  # shadcn/ui base components (Button, Card, Input, Sheet, Tabs, Tooltip, …)
 │   ├── ProtectedRoute       # redirects unauthenticated users to login
 │   ├── RecipeCatalogue      # gallery of all ready recipes; cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own
 │   ├── ShoppingListDrawer   # slide-in drawer: recipe servings steppers, merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload
-│   ├── RecipePreviewPanel   # side panel; generates signed URL and renders PDF in iframe
+│   ├── RecipePreviewPanel   # side panel; Instructions tab (ingredients + steps, with per-step photos when available) and Original PDF tab (signed URL in an iframe)
 │   ├── UserMenu             # avatar dropdown with sign-out and admin toggle
 │   └── IngredientSearch     # chip-based ingredient typeahead; select suggestions, remove with the chip's × button
 ├── context/
@@ -195,8 +197,10 @@ src/
 ├── hooks/
 │   ├── useUploadQueue.js      # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
 │   ├── useShoppingList.js     # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists
-│   └── useIngredientSearch.js # useIngredientSuggestions() — debounced typeahead over stored canonical_name/name values;
-│                               # useIngredientFilter() — given selected chips, returns recipes matching ALL of them (AND)
+│   ├── useIngredientSearch.js # useIngredientSuggestions() — debounced typeahead over stored canonical_name/name values;
+│   │                           # useIngredientFilter() — given selected chips, returns recipes matching ALL of them (AND)
+│   ├── useRecipeIngredients.js # ingredient list for a single recipe, in display order
+│   └── useRecipeStepImages.js  # per-step photo URLs for a single recipe, gated on an exact count match with parsed steps
 ├── pages/
 │   ├── Login                # login screen with Google OAuth
 │   ├── Home                 # main app screen; cart icon in header opens ShoppingListDrawer
@@ -206,6 +210,7 @@ src/
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
     ├── ingredientMerge.js    # mergeIngredients() — scales by servings, merges same-name+unit items across recipes, returns sorted list with per-recipe contribution breakdown
     ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
+    ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
     └── utils.js              # cn() helper for combining Tailwind classes
 
 supabase/

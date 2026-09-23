@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { supabase } from '@/lib/supabase'
 import { useRecipeIngredients } from '@/hooks/useRecipeIngredients'
+import { useRecipeStepImages } from '@/hooks/useRecipeStepImages'
 
 function formatIngredientLine(ingredient) {
   const parts = []
@@ -38,6 +39,7 @@ function RecipeMeta({ recipe }) {
 function InstructionsView({ recipe }) {
   const { ingredients, loading } = useRecipeIngredients(recipe.id)
   const steps = recipe.steps ?? []
+  const { stepImageUrls } = useRecipeStepImages(recipe.id, steps.length)
 
   return (
     <div className="flex-1 overflow-y-auto min-h-0">
@@ -61,9 +63,19 @@ function InstructionsView({ recipe }) {
         <p className="text-sm text-muted-foreground">No instructions recorded for this recipe.</p>
       )}
       {steps.length > 0 && (
-        <ol className="space-y-3 text-sm list-decimal list-outside pl-5">
+        <ol className="space-y-4 text-sm list-decimal list-outside pl-5">
           {steps.map((step, i) => (
-            <li key={i}>{step}</li>
+            <li key={i}>
+              {stepImageUrls[i] && (
+                <img
+                  src={stepImageUrls[i]}
+                  alt=""
+                  className="w-full max-w-sm aspect-video object-cover rounded-md mb-2"
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                />
+              )}
+              {step}
+            </li>
           ))}
         </ol>
       )}

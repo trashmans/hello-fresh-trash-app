@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { computeContentHash } from '@/lib/pdfUtils'
 import { renderPdfCoverBlob } from '@/lib/pdfCover'
+import { extractStepImageBlobs } from '@/lib/pdfStepImages'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const MAX_BATCH_BYTES = 50 * 1024 * 1024
@@ -101,8 +102,32 @@ export function useUploadQueue({ onUploadComplete }) {
         console.warn('Cover generation/upload failed, continuing without a cover:', coverErr)
       }
 
+      // Best-effort per-step photos — extracted client-side from the PDF's
+      // steps page (see src/lib/pdfStepImages.js). Uploaded now, under the
+      // same fileUuid as the PDF/cover; the rows linking them to a recipe
+      // are inserted below, once the recipe itself exists. Never blocks or
+      // fails the upload — and note this can't check the extracted photo
+      // count against the recipe's step count yet, since parsing (which
+      // produces that count) hasn't run yet at upload time. That check
+      // happens at display time instead (see useRecipeStepImages.js).
+      const stepImageUploads = []
+      try {
+        const arrayBuffer = await item.file.arrayBuffer()
+        const stepBlobs = await extractStepImageBlobs(arrayBuffer)
+        for (let index = 0; index < stepBlobs.length; index++) {
+          const stepStoragePath = `steps/${session.user.id}/${fileUuid}/${index}.jpg`
+          // eslint-disable-next-line no-await-in-loop
+          const { error: stepUploadError } = await supabase.storage
+            .from('recipe-pdfs')
+            .upload(stepStoragePath, stepBlobs[index], { contentType: 'image/jpeg' })
+          if (!stepUploadError) stepImageUploads.push({ step_index: index, storage_path: stepStoragePath })
+        }
+      } catch (stepErr) {
+        console.warn('Step image generation/upload failed, continuing without step photos:', stepErr)
+      }
+
       // Insert DB row — status pending, triggers parse-recipe via DB webhook
-      const { error: insertError } = await supabase
+      const { data: insertedRecipe, error: insertError } = await supabase
         .from('recipes')
         .insert({
           uploaded_by: session.user.id,
@@ -112,7 +137,25 @@ export function useUploadQueue({ onUploadComplete }) {
           content_hash: item.contentHash,
           status: 'pending',
         })
+        .select('id')
+        .single()
       if (insertError) throw insertError
+
+      // Link up any step photos now that the recipe row (and its id) exists.
+      // Best-effort: the recipe upload itself has already succeeded at this
+      // point, so a failure here shouldn't be reported as a failed upload.
+      if (stepImageUploads.length > 0) {
+        const { error: stepRowsError } = await supabase
+          .from('recipe_step_images')
+          .insert(stepImageUploads.map(({ step_index, storage_path }) => ({
+            recipe_id: insertedRecipe.id,
+            step_index,
+            storage_path,
+          })))
+        if (stepRowsError) {
+          console.warn('Saving step image rows failed, continuing without step photos:', stepRowsError)
+        }
+      }
 
       updateItem(item.id, { status: 'done' })
       return true
