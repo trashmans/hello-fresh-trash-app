@@ -237,7 +237,19 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     const toastId = toast.loading('Deleting recipe…')
 
     try {
-      const pathsToDelete = [recipe.storage_path, recipe.cover_path].filter(Boolean)
+      // Step image rows are cascade-deleted with the recipe row itself, but
+      // that doesn't remove their underlying Storage files — those have to
+      // be listed and deleted explicitly, the same as the PDF and cover.
+      const { data: stepImages } = await supabase
+        .from('recipe_step_images')
+        .select('storage_path')
+        .eq('recipe_id', recipe.id)
+
+      const pathsToDelete = [
+        recipe.storage_path,
+        recipe.cover_path,
+        ...(stepImages ?? []).map(row => row.storage_path),
+      ].filter(Boolean)
       if (pathsToDelete.length > 0) {
         const { error: storageError } = await supabase.storage
           .from('recipe-pdfs')
