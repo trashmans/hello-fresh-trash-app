@@ -35,6 +35,45 @@ const DEFAULT_CROP_RATIO = 0.42
 const RENDER_SCALE = 1.5
 const JPEG_QUALITY = 0.85
 
+// Some HelloFresh cards embed their hero photo in a way pdf.js's WASM JPX
+// decoder silently fails to decode (a known pdf.js limitation, see
+// https://github.com/mozilla/pdf.js/issues/19517) — the render call succeeds
+// and doesn't throw, but the photo area comes out as a flat, uniform block
+// (usually white) while the text/logo above it renders fine. A real food
+// photo always has texture, shadows, and color variation, so we can catch
+// this by sampling pixel luminance in the lower part of the crop (below
+// where the title/logo header sits) and checking whether it's suspiciously
+// uniform. If so, we treat it the same as any other render failure: no
+// cover is better than a broken-looking one.
+const BLANK_SAMPLE_TOP_RATIO = 0.4 // skip the top of the crop (title/logo/header)
+const BLANK_SAMPLE_STEP_PX = 4 // sample every 4th pixel (in RGBA units) for speed
+const BLANK_STDDEV_THRESHOLD = 10 // luminance std-dev below this reads as "flat"
+
+function isCropSuspiciouslyBlank(cropCanvas) {
+  const sampleTop = Math.round(cropCanvas.height * BLANK_SAMPLE_TOP_RATIO)
+  const sampleHeight = cropCanvas.height - sampleTop
+  if (sampleHeight <= 0) return false
+
+  const { data } = cropCanvas
+    .getContext('2d')
+    .getImageData(0, sampleTop, cropCanvas.width, sampleHeight)
+
+  let sum = 0
+  let sumSq = 0
+  let count = 0
+  for (let i = 0; i < data.length; i += 4 * BLANK_SAMPLE_STEP_PX) {
+    const luminance = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+    sum += luminance
+    sumSq += luminance * luminance
+    count += 1
+  }
+  if (count === 0) return false
+
+  const mean = sum / count
+  const variance = Math.max(0, sumSq / count - mean * mean)
+  return Math.sqrt(variance) < BLANK_STDDEV_THRESHOLD
+}
+
 /**
  * Renders page 1 of a PDF (given as an ArrayBuffer) to a cropped JPEG Blob.
  * Returns null (never throws) if rendering fails for any reason — cover
@@ -62,6 +101,11 @@ export async function renderPdfCoverBlob(arrayBuffer, { cropRatio = DEFAULT_CROP
       0, 0, pageCanvas.width, cropHeight,
       0, 0, pageCanvas.width, cropHeight,
     )
+
+    if (isCropSuspiciouslyBlank(cropCanvas)) {
+      console.warn('Cover generation produced a suspiciously blank crop, skipping it')
+      return null
+    }
 
     const blob = await new Promise(resolve =>
       cropCanvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY)
