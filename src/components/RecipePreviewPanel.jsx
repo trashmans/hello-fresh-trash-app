@@ -5,11 +5,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { supabase } from '@/lib/supabase'
 import { useRecipeIngredients } from '@/hooks/useRecipeIngredients'
 import { useRecipeStepImages } from '@/hooks/useRecipeStepImages'
+import { useAuth } from '@/context/AuthContext'
+import { convertIngredientUnit, formatTemperatureText } from '@/lib/units'
 
-function formatIngredientLine(ingredient) {
+function formatIngredientLine(ingredient, unitPrefs) {
+  const { quantity, unit } = convertIngredientUnit(ingredient.quantity, ingredient.unit, unitPrefs)
   const parts = []
-  if (ingredient.quantity != null) parts.push(String(ingredient.quantity))
-  if (ingredient.unit) parts.push(ingredient.unit)
+  if (quantity != null) parts.push(String(quantity))
+  if (unit) parts.push(unit)
   parts.push(ingredient.name)
   let line = parts.join(' ')
   if (ingredient.preparation) line += `, ${ingredient.preparation}`
@@ -37,6 +40,7 @@ function RecipeMeta({ recipe }) {
 }
 
 function InstructionsView({ recipe }) {
+  const { unitPrefs } = useAuth()
   const { ingredients, loading } = useRecipeIngredients(recipe.id)
   const steps = recipe.steps ?? []
   const { stepImageUrls } = useRecipeStepImages(recipe.id, steps.length)
@@ -53,7 +57,7 @@ function InstructionsView({ recipe }) {
       {!loading && ingredients.length > 0 && (
         <ul className="mb-6 space-y-1 text-sm">
           {ingredients.map(ing => (
-            <li key={ing.id}>{formatIngredientLine(ing)}</li>
+            <li key={ing.id}>{formatIngredientLine(ing, unitPrefs)}</li>
           ))}
         </ul>
       )}
@@ -74,7 +78,7 @@ function InstructionsView({ recipe }) {
                   onError={(e) => { e.currentTarget.style.display = 'none' }}
                 />
               )}
-              {step}
+              {formatTemperatureText(step, unitPrefs.temperature_unit)}
             </li>
           ))}
         </ol>

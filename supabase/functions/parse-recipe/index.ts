@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
   "difficulty": "Easy" or "Medium" or "Hard" or null (translate the source label into one of these English values),
   "cuisine": "cuisine type in English if identifiable (e.g. Mexican, Italian), null otherwise",
   "tags": ["array", "of", "tags", "in English"],
-  "steps": ["Step 1 text, in English", "Step 2 text, in English"],
+  "steps": ["Step 1 text, in English — wrap any oven/cooking temperature using {{temp:VALUEU}}, see TEMPERATURES below", "Step 2 text, in English"],
   "ingredients": [
     {
       "name": "ingredient name only, in English (e.g. chicken breast, garlic clove)",
@@ -178,6 +178,11 @@ DUAL-QUANTITY INGREDIENTS: Some recipes list quantities for multiple serving siz
 - Always extract the FIRST value as "quantity" and the FIRST unit as "unit" (e.g. "4 oz | 8 oz" → quantity: 4, unit: "oz"; "¾ Cup | 1½ Cups" → quantity: 0.75, unit: "Cup").
 - Set "servings" to the serving count that corresponds to the first column (e.g. if the header reads "2-person | 4-person", set servings: 2).
 - Never average the two values or return null just because two quantities are shown.
+
+TEMPERATURES: Whenever a step mentions an oven or cooking temperature, wrap the numeric value in the step text using this exact marker syntax: {{temp:VALUEU}}, where VALUE is the number as written (digits only, no unit symbol, no comma) and U is F for Fahrenheit or C for Celsius, matching whichever the source PDF states. This lets the app convert and display it in the reader's preferred unit. Examples:
+- "Preheat oven to 425 degrees." → "Preheat oven to {{temp:425F}} degrees."
+- A step originally in Celsius, after translating to English: "Preheat the oven to 220°C." → "Preheat the oven to {{temp:220C}}."
+- Do not wrap non-temperature numbers such as cook times, quantities, or oven rack positions — only actual temperature values.
 
 Return only valid JSON. No markdown fences, no explanation.`,
           },

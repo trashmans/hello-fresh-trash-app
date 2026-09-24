@@ -21,11 +21,26 @@ async function fetchIsAdmin(userId) {
   return data?.is_admin ?? false
 }
 
+// Matches the profiles migration's own column defaults, so the app behaves
+// identically whether the profile hasn't loaded yet or has genuinely never
+// been changed from default.
+const DEFAULT_UNIT_PREFS = { temperature_unit: 'F', volume_unit: 'us', mass_unit: 'us' }
+
+async function fetchUnitPrefs(userId) {
+  const { data } = await supabase
+    .from('profiles')
+    .select('temperature_unit, volume_unit, mass_unit')
+    .eq('id', userId)
+    .single()
+  return data ?? DEFAULT_UNIT_PREFS
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined)
   const [authError, setAuthError] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminMode, setAdminMode] = useState(() => localStorage.getItem('adminMode') === 'true')
+  const [unitPrefs, setUnitPrefs] = useState(DEFAULT_UNIT_PREFS)
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -38,6 +53,7 @@ export function AuthProvider({ children }) {
           return
         }
         setIsAdmin(await fetchIsAdmin(session.user.id))
+        setUnitPrefs(await fetchUnitPrefs(session.user.id))
       }
       setSession(session ?? null)
     }).catch(() => {
@@ -57,6 +73,7 @@ export function AuthProvider({ children }) {
             return
           }
           setIsAdmin(await fetchIsAdmin(session.user.id))
+          setUnitPrefs(await fetchUnitPrefs(session.user.id))
           setAuthError(null)
         }
 
@@ -64,6 +81,7 @@ export function AuthProvider({ children }) {
           setSession(null)
           setIsAdmin(false)
           setAdminMode(false)
+          setUnitPrefs(DEFAULT_UNIT_PREFS)
           localStorage.removeItem('adminMode')
           return
         }
@@ -86,8 +104,26 @@ export function AuthProvider({ children }) {
     })
   }
 
+  // Optimistically updates local state so the UI reflects the change
+  // immediately, then persists it in the background — covered by the
+  // existing "users can update own profile" RLS policy, no new one needed.
+  // This is a display preference, not something the rest of the upload/
+  // parsing flow depends on, so a failed save just gets logged rather than
+  // surfaced or retried.
+  function updateUnitPref(field, value) {
+    if (!session?.user?.id) return
+    setUnitPrefs(prev => ({ ...prev, [field]: value }))
+    supabase
+      .from('profiles')
+      .update({ [field]: value })
+      .eq('id', session.user.id)
+      .then(({ error }) => {
+        if (error) console.warn(`Failed to save ${field} preference:`, error)
+      })
+  }
+
   return (
-    <AuthContext.Provider value={{ session, authError, signOut, isAdmin, adminMode, toggleAdminMode }}>
+    <AuthContext.Provider value={{ session, authError, signOut, isAdmin, adminMode, toggleAdminMode, unitPrefs, updateUnitPref }}>
       {children}
     </AuthContext.Provider>
   )
