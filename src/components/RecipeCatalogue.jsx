@@ -66,7 +66,7 @@ function PendingCard({ recipe, onDelete, deleting }) {
   )
 }
 
-function RejectedCard({ recipe, existingRecipe, onSelect }) {
+function RejectedCard({ recipe, existingRecipe, onSelect, onDelete, deleting }) {
   const existingLabel = existingRecipe?.name ?? existingRecipe?.filename ?? 'existing recipe'
 
   return (
@@ -85,6 +85,16 @@ function RejectedCard({ recipe, existingRecipe, onSelect }) {
             View: {existingLabel}
           </button>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs text-destructive hover:text-destructive mt-1"
+          disabled={deleting}
+          onClick={() => onDelete(recipe)}
+        >
+          <Trash2 className="h-3 w-3 mr-1" />
+          Delete
+        </Button>
       </CardContent>
     </Card>
   )
@@ -440,6 +450,8 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
               recipe={recipe}
               existingRecipe={existingRecipe}
               onSelect={onSelect}
+              onDelete={(r) => handleDelete(r)}
+              deleting={deleting === recipe.id}
             />
           )
         }
