@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ShieldCheck } from 'lucide-react'
+import { ShieldCheck, Thermometer, Ruler, Scale } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import {
   DropdownMenu,
@@ -22,7 +22,7 @@ function getInitials(fullName, email) {
 }
 
 export default function UserMenu() {
-  const { session, signOut, isAdmin, adminMode, toggleAdminMode } = useAuth()
+  const { session, signOut, isAdmin, adminMode, toggleAdminMode, unitPrefs, updateUnitPref } = useAuth()
   const [imgError, setImgError] = useState(false)
   const user = session?.user
   const avatarUrl = user?.user_metadata?.avatar_url
@@ -63,6 +63,31 @@ export default function UserMenu() {
           </DropdownMenuItem>
         )}
         {isAdmin && <DropdownMenuSeparator />}
+        <DropdownMenuItem
+          className="cursor-pointer gap-2"
+          onSelect={(e) => e.preventDefault()}
+          onClick={() => updateUnitPref('temperature_unit', unitPrefs.temperature_unit === 'F' ? 'C' : 'F')}
+        >
+          <Thermometer className="h-4 w-4 text-muted-foreground" />
+          <span>Temperature: °{unitPrefs.temperature_unit}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="cursor-pointer gap-2"
+          onSelect={(e) => e.preventDefault()}
+          onClick={() => updateUnitPref('volume_unit', unitPrefs.volume_unit === 'us' ? 'metric' : 'us')}
+        >
+          <Ruler className="h-4 w-4 text-muted-foreground" />
+          <span>Volume: {unitPrefs.volume_unit === 'us' ? 'US' : 'Metric'}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="cursor-pointer gap-2"
+          onSelect={(e) => e.preventDefault()}
+          onClick={() => updateUnitPref('mass_unit', unitPrefs.mass_unit === 'us' ? 'metric' : 'us')}
+        >
+          <Scale className="h-4 w-4 text-muted-foreground" />
+          <span>Mass: {unitPrefs.mass_unit === 'us' ? 'US' : 'Metric'}</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" className="cursor-pointer" onClick={signOut}>
           Sign out
         </DropdownMenuItem>

@@ -150,7 +150,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | Table | Purpose |
 |---|---|
 | `allowed_emails` | Email allowlist — signups rejected at DB level if email not present |
-| `profiles` | Display name and avatar URL per user, synced from Google OAuth on first login |
+| `profiles` | Display name and avatar URL per user, synced from Google OAuth on first login; also stores each user's display-unit preferences (`temperature_unit`, `volume_unit`, `mass_unit`) |
 | `user_roles` | `is_admin` flag per user — grants delete-any-recipe in the UI |
 | `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected` |
 | `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only; CASCADE deleted when recipe is deleted |
@@ -170,6 +170,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 
 ### Key relationships
 
+- `profiles.temperature_unit` / `volume_unit` / `mass_unit` — per-user display preferences only (`F`/`C`, `us`/`metric` each independently); stored ingredient quantities/units and step text are never rewritten, conversion happens client-side at render time — see `src/lib/units.js`. Covered by the existing profile RLS policies (same row, no new policy needed).
 - `recipes.cover_path` — storage path of the recipe's cover thumbnail (`covers/<user-id>/<uuid>.jpg` in the `recipe-pdfs` bucket), or `null` if none was generated. Rendered client-side from PDF page 1 — see `src/lib/pdfCover.js`.
 - `recipe_step_images.recipe_id` → `recipes.id` (CASCADE DELETE) — per-step photos, one row per matched step, stored under `steps/<user-id>/<uuid>/<index>.jpg` in the `recipe-pdfs` bucket. Rendered client-side from the PDF's steps page — see `src/lib/pdfStepImages.js`. Only shown in the UI when the row count exactly matches the recipe's parsed step count (extraction and parsing run independently — see `src/hooks/useRecipeStepImages.js`).
 - `recipes.uploaded_by` → `auth.users.id`
@@ -190,10 +191,10 @@ src/
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload
 │   ├── RecipePreviewPanel   # side panel; Instructions tab (ingredients + steps, with per-step photos when available) and Original PDF tab (signed URL in an iframe)
-│   ├── UserMenu             # avatar dropdown with sign-out and admin toggle
+│   ├── UserMenu             # avatar dropdown with sign-out, admin toggle, and independent display-unit toggles (temperature, volume, mass)
 │   └── IngredientSearch     # chip-based ingredient typeahead; select suggestions, remove with the chip's × button
 ├── context/
-│   └── AuthContext          # session state, allowlist check, signOut, adminMode
+│   └── AuthContext          # session state, allowlist check, signOut, adminMode, unitPrefs (fetched from profiles, updated via updateUnitPref)
 ├── hooks/
 │   ├── useUploadQueue.js      # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
 │   ├── useShoppingList.js     # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists
@@ -211,13 +212,14 @@ src/
     ├── ingredientMerge.js    # mergeIngredients() — scales by servings, merges same-name+unit items across recipes, returns sorted list with per-recipe contribution breakdown
     ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
     ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
+    ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display
     └── utils.js              # cn() helper for combining Tailwind classes
 
 supabase/
 ├── migrations/              # database schema changes (SQL) — deployed automatically via deploy-migrations-preview/prod CI; never run manually after bootstrap
 ├── seed.sql                 # template for seeding initial data (no real emails — swap in locally)
 └── functions/
-    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), writes ingredients + status=ready
+    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), tags oven temperatures inline as {{temp:VALUEU}} for unit conversion at render time, writes ingredients + status=ready
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
     └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
