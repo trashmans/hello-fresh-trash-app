@@ -187,10 +187,10 @@ src/
 │   ├── ui/                  # shadcn/ui base components (Button, Card, Input, Sheet, Tabs, Tooltip, …)
 │   ├── ProtectedRoute       # redirects unauthenticated users to login
 │   ├── RecipeCatalogue      # gallery of all ready recipes; cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own
-│   ├── ShoppingListDrawer   # slide-in drawer: recipe servings steppers, merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
+│   ├── ShoppingListDrawer   # slide-in drawer: recipe servings steppers (or scale by a target amount of one ingredient instead), merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload
-│   ├── RecipePreviewPanel   # side panel; Instructions tab (ingredients + steps, with per-step photos when available) and Original PDF tab (signed URL in an iframe)
+│   ├── RecipePreviewPanel   # side panel; Instructions tab (ingredients + steps, with per-step photos when available, scalable by servings or by a target amount of one ingredient) and Original PDF tab (signed URL in an iframe)
 │   ├── UserMenu             # avatar dropdown with sign-out, admin toggle, and independent display-unit toggles (temperature, volume, mass)
 │   └── IngredientSearch     # chip-based ingredient typeahead; select suggestions, remove with the chip's × button
 ├── context/
@@ -210,6 +210,7 @@ src/
     ├── supabase.js           # Supabase client
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
     ├── ingredientMerge.js    # mergeIngredients() — scales by servings, merges same-name+unit items across recipes, returns sorted list with per-recipe contribution breakdown
+    ├── scaling.js             # computeScaleFactorFromServings() / computeScaleFactorFromIngredient() — work out a scale factor from a target servings count or a target amount of one ingredient (reusing units.js's conversion table); scaleIngredients() applies it to a list for display
     ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
     ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display
