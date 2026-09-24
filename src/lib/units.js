@@ -87,8 +87,10 @@ function resolveUnit(rawUnit) {
 
 // Rounds a converted quantity to a sensible number of decimal places —
 // whole numbers once a value is reasonably large, one decimal place below
-// that, so small quantities (like 2.3 tsp) don't collapse to "2".
-function roundForDisplay(value) {
+// that, so small quantities (like 2.3 tsp) don't collapse to "2". Exported
+// for reuse by src/lib/scaling.js, which applies the same rounding to
+// scaled ingredient quantities.
+export function roundForDisplay(value) {
   if (value >= 10) return Math.round(value)
   return Math.round(value * 10) / 10
 }
@@ -140,4 +142,35 @@ export function convertIngredientUnit(quantity, rawUnit, prefs) {
     quantity: roundForDisplay(baseValue / display.factor),
     unit: DISPLAY_UNIT_LABEL[display.unit] ?? display.unit,
   }
+}
+
+/**
+ * Converts a quantity+unit to its base-unit value (mL for volume, g for
+ * mass) and measurement type, for comparing amounts stated in different
+ * but compatible units — used by src/lib/scaling.js to work out a scale
+ * factor from a target ingredient amount. Returns null when the unit
+ * isn't recognized as a convertible measurement (e.g. "clove", "each"),
+ * so callers should fall back to comparing raw quantities in matching
+ * units for those.
+ */
+export function toBaseUnit(quantity, rawUnit) {
+  const resolved = resolveUnit(rawUnit)
+  if (!resolved || quantity == null) return null
+  return { value: quantity * resolved.toBase, type: resolved.type }
+}
+
+/**
+ * Lists the units a given raw unit can be compared/converted against
+ * (same measurement type, both systems) — e.g. "lb" returns every mass
+ * unit (oz, lb, g, kg), so a UI can offer them as an entering-amount
+ * dropdown. Returns just the unit itself, unchanged, when it isn't a
+ * recognized convertible measurement — the only valid comparison for an
+ * ingredient like "2 cloves" is another amount in "cloves".
+ */
+export function unitOptionsFor(rawUnit) {
+  const resolved = resolveUnit(rawUnit)
+  if (!resolved) return [{ value: rawUnit ?? '', label: rawUnit ?? '' }]
+  return Object.keys(UNIT_INFO)
+    .filter(key => UNIT_INFO[key].type === resolved.type)
+    .map(key => ({ value: key, label: DISPLAY_UNIT_LABEL[key] ?? key }))
 }

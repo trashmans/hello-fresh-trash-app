@@ -31,11 +31,16 @@ function reducer(state, action) {
       }
 
     case 'SET_SERVINGS':
+      // Floor lowered from 1 to 0.1 to support ingredient-based scaling
+      // (src/lib/scaling.js) landing on a fractional serving count below
+      // 1 — e.g. "I only have a third of the chicken this recipe wants."
+      // Still clamped above zero so a scaled-down recipe never disappears
+      // from the merged ingredient list entirely.
       return {
         ...state,
         recipeSelections: state.recipeSelections.map(r =>
           r.recipe_id === action.recipeId
-            ? { ...r, servings: Math.max(1, action.servings) }
+            ? { ...r, servings: Math.max(0.1, action.servings) }
             : r
         ),
       }
