@@ -24,6 +24,7 @@ interface ParsedRecipe {
   servings: number | null
   difficulty: string | null
   cuisine: string | null
+  protein_source: string | null
   tags: string[]
   steps: string[]
   ingredients: Ingredient[]
@@ -160,6 +161,7 @@ Deno.serve(async (req) => {
   "servings": integer or null,
   "difficulty": "Easy" or "Medium" or "Hard" or null (translate the source label into one of these English values),
   "cuisine": "cuisine type in English if identifiable (e.g. Mexican, Italian), null otherwise",
+  "protein_source": "exactly one of: Chicken, Beef, Pork, Turkey, Seafood, Vegetarian, Other — pick the dish's single dominant protein (e.g. a dish with both chicken and shrimp: pick whichever the dish is centered on; a meat substitute or a dish with no meat/fish: Vegetarian; a protein that doesn't fit any listed category, e.g. lamb or duck: Other), or null if the dish genuinely has no identifiable protein (e.g. a plain side salad or a dessert)",
   "tags": ["array", "of", "tags", "in English"],
   "steps": ["Step 1 text, in English — wrap any oven/cooking temperature using {{temp:VALUEU}}, see TEMPERATURES below", "Step 2 text, in English"],
   "ingredients": [
@@ -297,6 +299,7 @@ Return only valid JSON. No markdown fences, no explanation.`,
       servings: parsed.servings ?? null,
       difficulty: parsed.difficulty ?? null,
       cuisine: parsed.cuisine ?? null,
+      protein_source: parsed.protein_source ?? null,
       tags: parsed.tags ?? [],
       steps: parsed.steps ?? [],
       ingredient_fingerprint: fingerprint,
