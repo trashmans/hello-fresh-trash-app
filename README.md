@@ -237,6 +237,8 @@ src/
     ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display
     └── utils.js              # cn() helper for combining Tailwind classes
+└── tests/                    # Vitest unit tests for src/lib/ (run with `npm test`)
+    └── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
 
 supabase/
 ├── migrations/              # database schema changes (SQL) — deployed automatically via deploy-migrations-preview/prod CI; never run manually after bootstrap
