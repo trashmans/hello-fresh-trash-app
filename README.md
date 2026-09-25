@@ -83,10 +83,10 @@ The app itself is split into four layers. Each layer has one job and can be upda
 |---|---|
 | **npm** | Package manager. Installs and manages all third-party libraries. |
 | **Vite** | Build tool and local dev server. Compiles JSX and serves the app locally. `npm run build` compiles everything into `dist/` for deployment. |
-| **GitHub Actions** | CI/CD pipeline. Seven workflows cover frontend, database migration, and edge function deploys (each split into preview/production), plus dependency bump checks — each triggered only when its relevant files change. |
+| **GitHub Actions** | CI/CD pipeline. Eight workflows cover frontend, database migration, and edge function deploys (each split into preview/production), preview migration cleanup, and dependency bump checks — each triggered only when its relevant files change. |
 | **Vercel CLI** | The tool GitHub Actions uses to build and deploy to Vercel. All output is logged in GitHub Actions — no Vercel dashboard needed to debug failures. |
 | **Vercel** | Frontend hosting. Supports private repositories, provides a preview URL for every PR, and serves clean `/home` style URLs. |
-| **Dependabot** | Automated dependency updates. Opens weekly PRs to bump npm packages and GitHub Actions versions. |
+| **Dependabot** | Automated dependency updates. Once a month, opens one grouped PR each for npm and GitHub Actions minor/patch bumps. Every major bump gets its own PR so breaking changes stand out. Security fixes arrive immediately, outside this schedule (requires **Dependabot security updates** enabled in repo settings). |
 
 #### GitHub Actions workflows
 
@@ -97,10 +97,32 @@ The app itself is split into four layers. Each layer has one job and can be upda
 | `dependabot-build.yml` | Dependabot PRs only | Build check with no secrets. Confirms the bump doesn't break the build. |
 | `deploy-migrations-preview.yml` | PRs touching `supabase/migrations/**` | `supabase db push` to the preview Supabase project. |
 | `deploy-migrations-prod.yml` | Pushes to `main` touching `supabase/migrations/**` | `supabase db push` to the production Supabase project. |
+| `cleanup-migrations-preview.yml` | PRs touching `supabase/migrations/**` closed **without** merging | Removes that PR's migrations from the preview project's history table so they don't block later PRs. See [Preview drift](#preview-drift). |
 | `deploy-functions-preview.yml` | PRs touching `supabase/functions/**` | Deploys edge functions to the preview Supabase project. |
 | `deploy-functions-prod.yml` | Pushes to `main` touching `supabase/functions/**` | Deploys edge functions to the production Supabase project. |
 
 > **Migration CI:** `deploy-migrations-preview.yml` / `deploy-migrations-prod.yml` track applied migrations by filename and never re-run the same file twice. Any migrations applied manually before CI was set up must be registered in the tracking table via the Supabase dashboard SQL editor. After that, CI owns migrations — do not apply migration files manually.
+
+> **Supabase CLI version:** the Supabase workflows install the newest **2.x** CLI on every run, so minor and patch releases are picked up automatically. A 3.0 is never picked up until someone changes `supabase@2` in the workflows.
+
+#### Preview drift
+
+There is one shared preview database, and PRs push their migrations to it **before** they merge. So preview can end up holding changes that never reach production.
+
+The failure that matters: `supabase db push` refuses to run if the database has a migration in its history that the branch doesn't have. One abandoned PR's migration therefore blocks the migrations of **every later PR**, with the error *"Remote migration versions not found in local migrations directory."*
+
+`cleanup-migrations-preview.yml` handles the common case. When a PR that added migration files is closed without merging, it marks those versions as reverted on preview (`supabase migration repair --status reverted`), which removes the blocking history rows.
+
+**What it does not do:**
+
+- **Undo schema changes.** Columns, tables and policies the abandoned migration created stay in preview as unused leftovers. They don't block anything. A later migration that creates something with the **same name** will fail on preview until the leftover is dropped by hand.
+- **Catch renamed or deleted migrations inside an open PR.** It only sees the PR's final files. If a migration was pushed to preview and then renamed or removed before the PR closed, the old version stays on preview. **Rule: once a migration has run on preview, never rename or edit it — add a new migration instead.**
+- **Let two PRs with migrations coexist.** While one open PR's migration is on preview, other PRs' `db push` is blocked until it merges or closes.
+- **Clean up edge functions.** PRs also deploy their edge functions to preview, and nothing redeploys `main`'s version when a PR is abandoned.
+
+For manual recovery, see [CONTRIBUTING.md → Recovery: preview migrations blocked](CONTRIBUTING.md#recovery-preview-migrations-blocked).
+
+The standard fix for all of this is a throwaway database per PR (Supabase Branching, Pro plan). This workaround is fine while there's roughly one migration PR open at a time.
 
 ---
 
@@ -231,6 +253,7 @@ supabase/
 ├── dependabot-build.yml          # dependabot PRs → build check only, no secrets, no deploy
 ├── deploy-migrations-preview.yml # PR touching supabase/migrations/ → push to preview
 ├── deploy-migrations-prod.yml    # merge to main touching supabase/migrations/ → push to production
+├── cleanup-migrations-preview.yml # PR with migrations closed unmerged → clear its history rows on preview
 ├── deploy-functions-preview.yml  # PR touching supabase/functions/ → deploy to preview
 └── deploy-functions-prod.yml     # merge to main touching supabase/functions/ → deploy to production
 ```
@@ -239,6 +262,7 @@ supabase/
 
 ## Known Limitations
 
+- **Shared preview database** — PRs apply migrations to one shared preview project before merging, so it can drift from production and one PR's migrations can block another's. Partially automated. See [Preview drift](#preview-drift).
 - **Semantic ingredient search** — current search is chip-based: typing shows a typeahead of real stored ingredient values (`ilike` over `canonical_name`/`name`), and selecting chips filters to recipes containing all of them (AND). Vector/embedding-based search (finding recipes by meaning rather than exact token match) is deferred.
 
 ---
