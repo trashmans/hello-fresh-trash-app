@@ -174,7 +174,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `allowed_emails` | Email allowlist — signups rejected at DB level if email not present |
 | `profiles` | Display name and avatar URL per user, synced from Google OAuth on first login; also stores each user's display-unit preferences (`temperature_unit`, `volume_unit`, `mass_unit`) |
 | `user_roles` | `is_admin` flag per user — grants delete-any-recipe in the UI |
-| `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected` |
+| `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected`; includes parsed fields like `cook_time_minutes`, `difficulty`, `cuisine`, and `protein_source` (Chicken/Beef/Pork/Turkey/Seafood/Vegetarian/Other/null) |
 | `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only; CASCADE deleted when recipe is deleted |
 | `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
 | `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
@@ -244,7 +244,7 @@ supabase/
 ├── migrations/              # database schema changes (SQL) — deployed automatically via deploy-migrations-preview/prod CI; never run manually after bootstrap
 ├── seed.sql                 # template for seeding initial data (no real emails — swap in locally)
 └── functions/
-    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), tags oven temperatures inline as {{temp:VALUEU}} for unit conversion at render time, writes ingredients + status=ready
+    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), tags oven temperatures inline as {{temp:VALUEU}} for unit conversion at render time, classifies protein_source into a fixed category set, writes ingredients + status=ready
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
     └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
