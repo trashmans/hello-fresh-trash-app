@@ -1,7 +1,8 @@
 -- Recipe cover thumbnails, rendered client-side from PDF page 1 (see src/lib/pdfCover.js).
 -- cleanup-recipes already expects this column (added in the original parsing-pipeline
 -- migration but never actually created) — this migration finally adds it for real.
-ALTER TABLE public.recipes ADD COLUMN cover_path text;
+-- IF NOT EXISTS because prod already had the column added by hand before this ran.
+ALTER TABLE public.recipes ADD COLUMN IF NOT EXISTS cover_path text;
 
 -- Covers are stored in the existing recipe-pdfs bucket under covers/<user-id>/<uuid>.jpg,
 -- alongside the PDFs under recipes/<user-id>/<uuid>.pdf. Extend the upload policy to
