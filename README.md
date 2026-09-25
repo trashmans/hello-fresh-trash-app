@@ -83,7 +83,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 |---|---|
 | **npm** | Package manager. Installs and manages all third-party libraries. |
 | **Vite** | Build tool and local dev server. Compiles JSX and serves the app locally. `npm run build` compiles everything into `dist/` for deployment. |
-| **GitHub Actions** | CI/CD pipeline. Eight workflows cover frontend, database migration, and edge function deploys (each split into preview/production), preview migration cleanup, and dependency bump checks — each triggered only when its relevant files change. |
+| **GitHub Actions** | CI/CD pipeline. Nine workflows cover frontend, database migration, and edge function deploys (each split into preview/production), preview migration cleanup, dependency bump checks, and unit tests on every PR. |
 | **Vercel CLI** | The tool GitHub Actions uses to build and deploy to Vercel. All output is logged in GitHub Actions — no Vercel dashboard needed to debug failures. |
 | **Vercel** | Frontend hosting. Supports private repositories, provides a preview URL for every PR, and serves clean `/home` style URLs. |
 | **Dependabot** | Automated dependency updates. Once a month, opens one grouped PR each for npm and GitHub Actions minor/patch bumps. Every major bump gets its own PR so breaking changes stand out. Security fixes arrive immediately, outside this schedule (requires **Dependabot security updates** enabled in repo settings). |
@@ -95,6 +95,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 | `deploy-frontend-preview.yml` | Human PRs to `main` | Vercel preview build and deploy. Preview URL posted as PR comment. |
 | `deploy-frontend-prod.yml` | Pushes to `main` | Vercel production build and deploy. |
 | `dependabot-build.yml` | Dependabot PRs only | Build check with no secrets. Confirms the bump doesn't break the build. |
+| `test.yml` | All PRs to `main`, including Dependabot | Runs `npm test` (Vitest) with no secrets. A required status check on `main`, so a failing test blocks the merge. |
 | `deploy-migrations-preview.yml` | PRs touching `supabase/migrations/**` | `supabase db push` to the preview Supabase project. |
 | `deploy-migrations-prod.yml` | Pushes to `main` touching `supabase/migrations/**` | `supabase db push` to the production Supabase project. |
 | `cleanup-migrations-preview.yml` | PRs touching `supabase/migrations/**` closed **without** merging | Removes that PR's migrations from the preview project's history table so they don't block later PRs. See [Preview drift](#preview-drift). |
@@ -253,6 +254,7 @@ supabase/
 ├── deploy-frontend-preview.yml   # PR → Vercel preview deploy, posts URL as PR comment
 ├── deploy-frontend-prod.yml      # merge to main → Vercel production deploy
 ├── dependabot-build.yml          # dependabot PRs → build check only, no secrets, no deploy
+├── test.yml                      # every PR to main → npm test; required check, blocks merge on failure
 ├── deploy-migrations-preview.yml # PR touching supabase/migrations/ → push to preview
 ├── deploy-migrations-prod.yml    # merge to main touching supabase/migrations/ → push to production
 ├── cleanup-migrations-preview.yml # PR with migrations closed unmerged → clear its history rows on preview

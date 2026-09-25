@@ -1,0 +1,27 @@
+name: Test
+run-name: "Test (PR #${{ github.event.number }})"
+
+# Runs the Vitest suite on every PR to main, including Dependabot PRs —
+# no secrets are used, so it's safe for both. Make this a required status
+# check in main's branch protection so a failing test blocks the merge.
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
