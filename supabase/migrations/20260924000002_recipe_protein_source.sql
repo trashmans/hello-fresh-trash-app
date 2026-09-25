@@ -1,0 +1,21 @@
+-- Adds a structured "protein source" field to recipes, so the catalogue's
+-- list view can show and sort by it alongside cook time, prep time,
+-- difficulty, and cuisine.
+--
+-- Deliberately a plain text column with NO CHECK constraint, matching the
+-- existing difficulty/cuisine columns (see 20260419000002_recipes_parsing_
+-- columns.sql): the fixed category set (Chicken, Beef, Pork, Turkey,
+-- Seafood, Vegetarian, Other) is enforced by the parse-recipe prompt, not
+-- the database, so a slightly-off value from Gemini degrades to an
+-- unusual-but-harmless string instead of failing the whole parse with a
+-- constraint violation.
+--
+-- No RLS policy needed: protein_source is only ever written by parse-recipe
+-- using the service role key (which bypasses RLS), the same as
+-- difficulty/cuisine/tags — there's no client INSERT/UPDATE path for it.
+--
+-- Existing recipes will show a blank protein source until they're
+-- re-parsed (same fail-safe-blank pattern as the {{temp:...}} markers) —
+-- there's no backfill here.
+ALTER TABLE public.recipes
+  ADD COLUMN protein_source text;

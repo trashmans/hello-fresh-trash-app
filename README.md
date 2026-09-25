@@ -152,7 +152,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `allowed_emails` | Email allowlist — signups rejected at DB level if email not present |
 | `profiles` | Display name and avatar URL per user, synced from Google OAuth on first login; also stores each user's display-unit preferences (`temperature_unit`, `volume_unit`, `mass_unit`) |
 | `user_roles` | `is_admin` flag per user — grants delete-any-recipe in the UI |
-| `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected` |
+| `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected`; includes parsed fields like `cook_time_minutes`, `difficulty`, `cuisine`, and `protein_source` (Chicken/Beef/Pork/Turkey/Seafood/Vegetarian/Other/null) |
 | `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only; CASCADE deleted when recipe is deleted |
 | `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
 | `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
@@ -186,7 +186,8 @@ src/
 ├── components/
 │   ├── ui/                  # shadcn/ui base components (Button, Card, Input, Sheet, Tabs, Tooltip, …)
 │   ├── ProtectedRoute       # redirects unauthenticated users to login
-│   ├── RecipeCatalogue      # gallery of all ready recipes; cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own
+│   ├── RecipeCatalogue      # gallery of all ready recipes; cart button toggles recipe into shopping list; clicking a card/row opens the preview panel; uploaders can delete their own; icon/list view toggle persisted per-device (localStorage) — list view renders ready recipes as a sortable table (see RecipeTable) while pending/failed/rejected recipes stay as cards either way
+│   ├── RecipeTable          # sortable table for list view — click a column header to sort by it (cook time, prep time, difficulty, cuisine, protein source, name); nulls always sort last
 │   ├── ShoppingListDrawer   # slide-in drawer: recipe servings steppers, merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload
@@ -219,7 +220,7 @@ supabase/
 ├── migrations/              # database schema changes (SQL) — deployed automatically via deploy-migrations-preview/prod CI; never run manually after bootstrap
 ├── seed.sql                 # template for seeding initial data (no real emails — swap in locally)
 └── functions/
-    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), tags oven temperatures inline as {{temp:VALUEU}} for unit conversion at render time, writes ingredients + status=ready
+    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), tags oven temperatures inline as {{temp:VALUEU}} for unit conversion at render time, classifies protein_source into a fixed category set, writes ingredients + status=ready
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
     └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing

@@ -1,11 +1,22 @@
 import { useEffect, useState, useCallback } from 'react'
-import { FileText, Trash2, RotateCcw, Loader2, ShoppingCart, RefreshCw } from 'lucide-react'
+import { FileText, Trash2, RotateCcw, Loader2, ShoppingCart, RefreshCw, LayoutGrid, List } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { renderPdfCoverBlob } from '@/lib/pdfCover'
+import RecipeTable from '@/components/RecipeTable'
+
+const VIEW_MODE_STORAGE_KEY = 'recipeCatalogueViewMode'
+
+function loadViewMode() {
+  try {
+    return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'icon'
+  } catch {
+    return 'icon'
+  }
+}
 
 function UploaderAvatar({ profile }) {
   const [imgError, setImgError] = useState(false)
@@ -153,6 +164,18 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   const [retrying, setRetrying] = useState(null)
   const [reparsing, setReparsing] = useState(null)
   const [backfilling, setBackfilling] = useState(false)
+  const [viewMode, setViewModeRaw] = useState(loadViewMode)
+
+  function setViewMode(mode) {
+    setViewModeRaw(mode)
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode)
+    } catch {
+      // Per-device persistence is a nicety, not load-bearing — if storage
+      // is unavailable (private browsing, quota, etc.) the toggle still
+      // works for the rest of this session, it just won't be remembered.
+    }
+  }
 
   const fetchRecipes = useCallback(async () => {
     setLoading(true)
@@ -370,6 +393,13 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     ? recipes.filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
     : recipes
 
+  // List view only applies to ready recipes — columns like cook time
+  // don't mean anything for a still-processing upload, so pending/failed/
+  // rejected recipes keep rendering as their existing small cards
+  // regardless of viewMode (handled inline in the map below).
+  const readyRecipes = displayRecipes.filter(r => r.status === 'ready')
+  const nonReadyCount = displayRecipes.length - readyRecipes.length
+
   if (loading) {
     return <p className="text-muted-foreground text-sm">Loading recipes…</p>
   }
@@ -410,8 +440,8 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
   return (
     <>
-      {adminMode && recipesMissingCovers.length > 0 && (
-        <div className="mb-4">
+      <div className="flex items-center justify-between mb-4 gap-4">
+        {adminMode && recipesMissingCovers.length > 0 ? (
           <Button
             variant="outline"
             size="sm"
@@ -424,8 +454,24 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
             }
             Generate {recipesMissingCovers.length} missing cover{recipesMissingCovers.length === 1 ? '' : 's'} (admin)
           </Button>
+        ) : <span />}
+        <div className="flex items-center gap-1 rounded-md border border-border p-0.5 shrink-0">
+          <button
+            className={`rounded p-1.5 transition-colors ${viewMode === 'icon' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={() => setViewMode('icon')}
+            title="Icon view"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+          <button
+            className={`rounded p-1.5 transition-colors ${viewMode === 'list' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={() => setViewMode('list')}
+            title="List view"
+          >
+            <List className="h-4 w-4" />
+          </button>
         </div>
-      )}
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {displayRecipes.map(recipe => {
         const { status } = recipe
@@ -470,6 +516,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
         }
 
         if (status === 'ready') {
+          if (viewMode !== 'icon') return null
           const isSelected = selectedIds.includes(recipe.id)
           return (
             <Card
@@ -541,6 +588,24 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
         return null
       })}
       </div>
+      {viewMode === 'list' && readyRecipes.length > 0 && (
+        <div className={nonReadyCount > 0 ? 'mt-4' : ''}>
+          <RecipeTable
+            recipes={readyRecipes}
+            coverUrls={coverUrls}
+            profiles={profiles}
+            selectedIds={selectedIds}
+            onSelect={onSelect}
+            onToggle={onToggle}
+            canDelete={canDelete}
+            onDelete={(r, e) => handleDelete(r, e)}
+            deleting={deleting}
+            adminMode={adminMode}
+            onReparse={handleReparse}
+            reparsing={reparsing}
+          />
+        </div>
+      )}
     </>
   )
 }
