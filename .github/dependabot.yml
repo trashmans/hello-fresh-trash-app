@@ -1,19 +1,23 @@
 version: 2
 updates:
+  # Minor and patch updates arrive as one grouped PR per month.
+  # Major updates aren't in a group, so each one gets its own PR.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
-      github-actions:
-        patterns:
-          - "*"
+      github-actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
-      npm-dependencies:
-        patterns:
-          - "*"
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"

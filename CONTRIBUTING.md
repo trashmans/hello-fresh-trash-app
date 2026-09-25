@@ -13,6 +13,7 @@ All changes go through pull requests. No one pushes directly to `main`. This doc
 - [Workflow: VS Code](#workflow-vs-code)
 - [What happens when you open a PR](#what-happens-when-you-open-a-pr)
 - [Recovery: accidentally committed to main](#recovery-accidentally-committed-to-main)
+- [Recovery: preview migrations blocked](#recovery-preview-migrations-blocked)
 
 ---
 
@@ -235,3 +236,43 @@ This happens. Here's how to fix it without losing your work.
 4. Switch back to `feature/rescue-my-changes` → **Publish Branch** → open a PR normally
 
 > **Tip:** If you're ever unsure what state your branch is in, GitHub Desktop shows a clear visual history. When in doubt, check there before taking action.
+
+---
+
+## Recovery: preview migrations blocked
+
+**Symptom:** the **Deploy Migrations Preview** check fails with:
+
+```
+Remote migration versions not found in local migrations directory.
+...
+supabase migration repair --status reverted 20260924000002
+```
+
+The preview database has a migration that your branch doesn't. It's usually left over from another PR (see [README → Preview drift](README.md#preview-drift) for why). Nothing is wrong with your migration. All of these steps are in the **preview** project's SQL Editor.
+
+1. **See what the leftover migration is.** Use the version number from the error:
+   ```sql
+   select version, name, statements
+   from supabase_migrations.schema_migrations
+   where version = '20260924000002';
+   ```
+2. **Check whether its PR is still open.**
+   - **Still open:** don't delete it. That PR needs to merge or close first. Two PRs with migrations can't be on preview at once.
+   - **Abandoned:** continue.
+3. **Undo its schema changes and clear the history row** in one transaction. Write the reverse of what the `statements` column shows. For example, if it ran `ALTER TABLE public.recipes ADD COLUMN protein_source text`:
+   ```sql
+   begin;
+
+   alter table public.recipes drop column if exists protein_source;
+
+   delete from supabase_migrations.schema_migrations
+   where version = '20260924000002';
+
+   commit;
+   ```
+   Clearing the history row alone is enough to unblock your PR. Undoing the schema changes keeps preview matching production.
+4. **Re-run the failed check** from the Actions tab.
+5. **If the abandoned PR changed edge functions,** preview may still be running its version. Upload a recipe on preview to confirm parsing works.
+
+Never run any of this against the production project.
