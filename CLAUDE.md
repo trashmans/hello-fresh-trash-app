@@ -25,7 +25,11 @@ The workflow is: Superpowers for thinking → Claude Code for doing.
 - **Never run git commands.** The user handles all git operations — checkout, commit, push, and branch creation. Claude never runs git.
 - **Never push to main.** All changes go through pull requests.
 - **Never run npm commands.** Only the human runs `npm`. After making code changes, prompt the user to run the relevant command and verify the result before proceeding.
-- **No tests.** This project operates in dev mode — do not write test files or use TDD patterns.
+- **Test-driven, gradually.** Tests use Vitest and live in `src/tests/` as `<module>.test.js` (e.g. `src/tests/scaling.test.js`). Scope is deliberately narrow for now:
+  - **Bug fixes** — write a failing test that reproduces the bug first, then fix the code until it passes
+  - **New logic** — pure functions in `src/lib/` get a test written before the implementation; pull logic out of components into `src/lib/` where practical so it can be tested
+  - **Not yet** — no React component tests, edge function tests, or database/RLS tests unless the human asks
+  - After writing or changing tests, prompt the human to run `npm test` and confirm the result — never assume a test passes
 - **No git worktrees.** Work directly on the current branch.
 
 ## Running the app
@@ -35,6 +39,7 @@ The human runs all npm commands. After code changes, prompt them to run the appr
 | Command | When to prompt |
 |---|---|
 | `npm run dev` | After any UI or logic change — verify in browser at `http://localhost:5173` |
+| `npm test` | After writing a test or changing code in `src/lib/` — confirm the new test fails first (TDD), then passes after the change |
 | `npm run build` | Before opening a PR — confirm the production build passes |
 | `npm install <pkg>` | When a new dependency is needed — tell the human exactly what to run |
 
