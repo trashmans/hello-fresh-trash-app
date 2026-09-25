@@ -1,0 +1,64 @@
+name: Clean Up Migrations Preview
+run-name: "Clean Up Migrations: Preview (PR #${{ github.event.number }})"
+
+# When a PR with new migrations is closed WITHOUT merging, remove those
+# migrations from the preview project's history table so they don't block
+# `supabase db push` on every later PR.
+#
+# This only clears the history rows. Schema changes the migrations made
+# (columns, tables, policies) stay in preview — see README > Preview drift.
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/**'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Shares the preview migrations group so it never runs alongside a db push.
+concurrency:
+  group: supabase-migrations-preview
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Clean Up Migrations Preview
+    if: github.event.pull_request.merged == false && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Resolve latest Supabase CLI 2.x
+        id: supabase-cli
+        run: echo "version=$(npm view 'supabase@2' version --json | jq -r 'if type == "array" then last else . end')" >> "$GITHUB_OUTPUT"
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: ${{ steps.supabase-cli.outputs.version }}
+
+      - name: Revert this PR's migrations on preview
+        run: |
+          # Migration files this PR added, e.g. supabase/migrations/20260924000002_x.sql → 20260924000002
+          versions=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.number }}/files" --paginate \
+            --jq '.[] | select(.status == "added" and (.filename | startswith("supabase/migrations/"))) | .filename' \
+            | xargs -r -n1 basename | cut -d_ -f1)
+
+          if [ -z "$versions" ]; then
+            echo "This PR added no migration files. Nothing to clean up."
+            exit 0
+          fi
+
+          echo "Reverting on preview: $versions"
+          supabase link --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase migration repair --status reverted $versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
