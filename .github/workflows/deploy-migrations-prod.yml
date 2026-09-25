@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# One db push at a time per project. Never cancel a push mid-run.
+concurrency:
+  group: supabase-migrations-prod
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy Migrations Production
@@ -19,9 +24,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Resolve latest Supabase CLI 2.x
+        id: supabase-cli
+        run: echo "version=$(npm view 'supabase@2' version --json | jq -r 'if type == "array" then last else . end')" >> "$GITHUB_OUTPUT"
+
       - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: ${{ steps.supabase-cli.outputs.version }}
 
       - name: Deploy to production
         run: |
