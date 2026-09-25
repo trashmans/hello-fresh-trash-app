@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
-import { ShoppingCart, X, RotateCcw, Minus, Plus, Copy, Trash2 } from 'lucide-react'
+import { ShoppingCart, X, RotateCcw, Minus, Plus, Copy, Trash2, Scale } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Tooltip,
   TooltipContent,
@@ -10,11 +11,116 @@ import {
 } from '@/components/ui/tooltip'
 import { supabase } from '@/lib/supabase'
 import { mergeIngredients } from '@/lib/ingredientMerge'
+import { computeScaleFactorFromIngredient } from '@/lib/scaling'
+import { unitOptionsFor } from '@/lib/units'
 import { toast } from 'sonner'
 
 function formatQty(qty) {
   if (qty === null || qty === undefined) return null
   return parseFloat(qty.toFixed(2))
+}
+
+function formatServings(servings) {
+  const rounded = Math.round(servings * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+// Inline "scale by ingredient amount" control for a single recipe row in
+// the shopping list — an alternate way to set that recipe's effective
+// servings, alongside the +/- stepper. Computes a scale factor the same
+// way the recipe preview panel does (src/lib/scaling.js) and converts it
+// to an equivalent servings count via the recipe's own base servings, so
+// it feeds the exact same scaling/merging math the stepper already drives.
+function IngredientScaleControl({ ingredients, baseServings, onApply }) {
+  const [open, setOpen] = useState(false)
+  const [ingredientId, setIngredientId] = useState(null)
+  const [quantity, setQuantity] = useState('')
+  const [unit, setUnit] = useState('')
+
+  const scalable = ingredients.filter(ing => ing.quantity != null)
+  const selected = scalable.find(ing => ing.id === ingredientId) ?? null
+  const unitOptions = selected ? unitOptionsFor(selected.unit) : []
+  const unitIsFixed = unitOptions.length <= 1
+
+  if (scalable.length === 0) return null
+
+  function openForm() {
+    const first = scalable[0]
+    setIngredientId(first.id)
+    setQuantity(first.quantity)
+    setUnit(first.unit ?? '')
+    setOpen(true)
+  }
+
+  function selectIngredient(id) {
+    const ing = scalable.find(i => i.id === id)
+    setIngredientId(id)
+    setQuantity(ing?.quantity ?? '')
+    setUnit(ing?.unit ?? '')
+  }
+
+  function apply() {
+    const factor = computeScaleFactorFromIngredient(selected, quantity, unit)
+    if (factor == null) {
+      toast.error("Can't compare those units — try a compatible one (e.g. lb/kg, cups/mL) or the recipe's own unit.")
+      return
+    }
+    onApply(factor * baseServings)
+    setOpen(false)
+  }
+
+  if (!open) {
+    return (
+      <button
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        onClick={openForm}
+      >
+        <Scale className="h-3 w-3" />
+        Scale by ingredient
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Input
+        type="number"
+        min="0"
+        step="any"
+        className="h-7 w-16 text-xs"
+        value={quantity}
+        onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
+      />
+      {unitIsFixed ? (
+        <span className="text-xs">{unit}</span>
+      ) : (
+        <select
+          className="h-7 rounded-md border border-input bg-input px-1 text-xs text-foreground"
+          value={unit}
+          onChange={(e) => setUnit(e.target.value)}
+        >
+          {unitOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      )}
+      <select
+        className="h-7 max-w-[7rem] rounded-md border border-input bg-input px-1 text-xs text-foreground"
+        value={ingredientId ?? ''}
+        onChange={(e) => selectIngredient(e.target.value)}
+      >
+        {scalable.map(ing => (
+          <option key={ing.id} value={ing.id}>{ing.name}</option>
+        ))}
+      </select>
+      <Button type="button" size="sm" className="h-7 text-xs px-2" onClick={apply}>
+        Apply
+      </Button>
+      <button className="text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  )
 }
 
 export default function ShoppingListDrawer({ open, onClose, shoppingList }) {
@@ -142,55 +248,62 @@ export default function ShoppingListDrawer({ open, onClose, shoppingList }) {
                 const isChanged = dbServings !== null && servings !== dbServings
 
                 return (
-                  <div key={recipe_id} className="flex items-center gap-3">
-                    <span className="flex-1 text-sm font-medium truncate min-w-0">
-                      {recipe?.name ?? '…'}
-                    </span>
-                    <div className="flex flex-col items-center shrink-0">
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => setServings(recipe_id, servings - 1)}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <span className="w-6 text-center text-sm font-medium tabular-nums">
-                          {servings}
-                        </span>
-                        {isChanged && (
-                          <button
-                            className="text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={() => setServings(recipe_id, baseServings)}
-                            title="Reset to default"
+                  <div key={recipe_id} className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-3">
+                      <span className="flex-1 text-sm font-medium truncate min-w-0">
+                        {recipe?.name ?? '…'}
+                      </span>
+                      <div className="flex flex-col items-center shrink-0">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => setServings(recipe_id, servings - 1)}
                           >
-                            <RotateCcw className="h-3 w-3" />
-                          </button>
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-10 text-center text-sm font-medium tabular-nums">
+                            {formatServings(servings)}
+                          </span>
+                          {isChanged && (
+                            <button
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                              onClick={() => setServings(recipe_id, baseServings)}
+                              title="Reset to default"
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                            </button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => setServings(recipe_id, servings + 1)}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        {dbServings !== null && (
+                          <span className="text-xs text-muted-foreground mt-0.5">
+                            default: {dbServings}
+                          </span>
                         )}
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => setServings(recipe_id, servings + 1)}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
                       </div>
-                      {dbServings !== null && (
-                        <span className="text-xs text-muted-foreground mt-0.5">
-                          default: {dbServings}
-                        </span>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => removeRecipe(recipe_id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => removeRecipe(recipe_id)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+                    <IngredientScaleControl
+                      ingredients={ingredientsMap[recipe_id] ?? []}
+                      baseServings={baseServings}
+                      onApply={(newServings) => setServings(recipe_id, newServings)}
+                    />
                   </div>
                 )
               })}
