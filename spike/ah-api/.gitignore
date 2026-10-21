@@ -1,0 +1,3 @@
+# AH login tokens and raw API responses contain personal data — never commit
+.tokens.json
+out/
