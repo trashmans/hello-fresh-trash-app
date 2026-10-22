@@ -196,8 +196,13 @@ async function cmdBonus() {
 }
 
 async function getCart(token) {
-  const r = await ah('GET', '/mobile-services/order/v1/summaries/active?sortBy=DEFAULT', { token })
-  return Array.isArray(r) ? r[0] : r
+  try {
+    const r = await ah('GET', '/mobile-services/order/v1/summaries/active?sortBy=DEFAULT', { token })
+    return Array.isArray(r) ? r[0] : r
+  } catch (e) {
+    if (e.status === 404) return null // no open order yet = empty cart
+    throw e
+  }
 }
 const orderHeaders = (o) => (o?.id ? { 'appie-current-order-id': String(o.id) } : {})
 const qtyInCart = (o, pid) =>
@@ -216,7 +221,7 @@ async function cmdCart() {
   console.log('Cart (active order):')
   const o = await getCart(token)
   await saveOut('cart', o)
-  if (!o) return fail('No active order returned')
+  if (!o) return console.log('  ℹ️  No open order (cart is empty). Run cart-test to see if adding an item creates one.')
   pass(`Order ${o.id} — state ${o.state}, type ${o.shoppingType}`)
   const tp = o.totalPrice ?? {}
   console.log(`  Total: ${eur(tp.priceTotalPayable ?? tp.priceAfterDiscount)} (discount ${eur(tp.priceDiscount)})`)
