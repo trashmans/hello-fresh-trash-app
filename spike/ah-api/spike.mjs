@@ -327,9 +327,153 @@ async function cmdAll() {
   console.log('\nDone. Paste this output to Claude, or fill in FINDINGS.md.')
 }
 
+// ---------- spike part 2: edit / tick / remove list items ----------
+
+const LIST_PATH = '/mobile-services/shoppinglist/v2/items'
+
+async function readList(token) {
+  const r = await ah('GET', LIST_PATH, { token })
+  return r?.items ?? []
+}
+const itemPid = (i) => i.productDetails?.product?.webshopId ?? i.productId
+const linesFor = (items, pid) => items.filter((i) => String(itemPid(i)) === String(pid))
+const describe = (lines) =>
+  lines.length
+    ? lines.map((l) => `qty ${l.quantity}${l.strikedthrough ? ' TICKED' : ''} [listItemId ${l.listItemId}]`).join('  +  ')
+    : 'not on list'
+
+async function pickProductNotOnList(token, items) {
+  for (const term of ['AH Bananen', 'AH Komkommer', 'AH Citroenen']) {
+    const r = await search(term, token, 10)
+    const p = (r.products ?? []).find((x) => x.isOrderable !== false && !linesFor(items, x.webshopId).length)
+    if (p) return p
+  }
+  throw new Error('Could not find a test product that is not already on your list')
+}
+
+async function cmdListEditTest() {
+  const token = await getToken()
+  const p = await pickProductNotOnList(token, await readList(token))
+  const pid = Number(p.webshopId)
+  const item = (quantity, extra = {}) => ({
+    description: p.title, productId: pid, quantity, type: 'SHOPPABLE',
+    originCode: 'PRD', searchTerm: p.title, strikeThrough: false, ...extra,
+  })
+  const results = {}
+  console.log(`List edit test with: ${pid} ${p.title} (not on your list yet)\n`)
+
+  // Runs one API call, then re-reads the list and shows the test product's line(s)
+  async function step(label, call) {
+    console.log(label)
+    let callError = null
+    try { await call() } catch (e) { callError = e.message; fail(`call failed: ${e.message}`) }
+    const lines = linesFor(await readList(token), pid)
+    console.log(`  → list now: ${describe(lines)}`)
+    return { lines, callError }
+  }
+
+  // 0. Add
+  let s = await step('0. Add 1', () => addToList(token, item(1)))
+  if (!s.lines.length) return fail('Add did not work — stopping.')
+
+  // 1. Re-send with a new quantity
+  s = await step('1. Re-send same product with quantity 3', () => addToList(token, item(3)))
+  results.resend =
+    s.lines.length > 1 ? 'creates a DUPLICATE line'
+    : s.lines[0]?.quantity === 3 ? 'SETS the quantity'
+    : s.lines[0]?.quantity === 4 ? 'ADDS to the quantity'
+    : `unexpected (${describe(s.lines)})`
+  console.log(`  = Re-sending ${results.resend}\n`)
+
+  // 2. Same, but include listItemId
+  const id = s.lines[0]?.listItemId
+  s = await step(`2. Re-send with listItemId ${id} and quantity 2`, () => addToList(token, item(2, { listItemId: id })))
+  results.resendWithId =
+    s.lines.length === 1 && s.lines[0].quantity === 2 ? 'SETS the quantity' : `no clean update (${describe(s.lines)})`
+  console.log(`  = With listItemId: ${results.resendWithId}\n`)
+
+  // 3. Tick (two possible field names)
+  const qty = s.lines[0]?.quantity ?? 1
+  s = await step('3a. Tick via strikeThrough: true', () => addToList(token, item(qty, { strikeThrough: true, listItemId: s.lines[0]?.listItemId })))
+  results.tick = s.lines.some((l) => l.strikedthrough) ? 'strikeThrough: true' : null
+  if (!results.tick) {
+    s = await step('3b. Tick via strikedthrough: true', () => addToList(token, item(qty, { strikedthrough: true, listItemId: s.lines[0]?.listItemId })))
+    results.tick = s.lines.some((l) => l.strikedthrough) ? 'strikedthrough: true' : 'NOT WORKING'
+  }
+  console.log(`  = Tick works with: ${results.tick}\n`)
+
+  // 4. Untick
+  if (results.tick !== 'NOT WORKING') {
+    const field = results.tick.split(':')[0]
+    s = await step(`4. Untick via ${field}: false`, () => addToList(token, item(qty, { [field]: false, listItemId: s.lines[0]?.listItemId })))
+    results.untick = s.lines.length && s.lines.every((l) => !l.strikedthrough) ? `${field}: false` : 'NOT WORKING'
+    console.log(`  = Untick: ${results.untick}\n`)
+  }
+
+  // 5. Remove — try methods until the product is gone
+  const removers = [
+    ['PATCH quantity 0', (l) => addToList(token, item(0))],
+    ['PATCH quantity 0 + listItemId', (l) => addToList(token, item(0, { listItemId: l.listItemId }))],
+    ['DELETE body {items:[{listItemId}]}', (l) => ah('DELETE', LIST_PATH, { token, body: { items: [{ listItemId: l.listItemId }] } })],
+    ['DELETE /items/{listItemId}', (l) => ah('DELETE', `${LIST_PATH}/${l.listItemId}`, { token })],
+  ]
+  results.remove = 'NOT WORKING'
+  for (const [name, fn] of removers) {
+    const current = linesFor(await readList(token), pid)
+    if (!current.length) break
+    s = await step(`5. Remove via ${name}`, async () => { for (const l of current) await fn(l) })
+    if (!s.lines.length) { results.remove = name; results.removeFn = fn; break }
+  }
+  console.log(`  = Remove works with: ${results.remove}\n`)
+
+  // 6. Clean up the Part 1 free-text line, if present
+  const leftover = (await readList(token)).filter((i) => i.description === TEST_LABEL)
+  if (leftover.length && results.removeFn) {
+    console.log(`6. Remove leftover "${TEST_LABEL}" line(s) via ${results.remove}`)
+    for (const l of leftover) { try { await results.removeFn(l) } catch (e) { fail(e.message) } }
+    const still = (await readList(token)).filter((i) => i.description === TEST_LABEL)
+    still.length ? fail('Free-text line still there') : pass('Free-text line removed')
+  }
+
+  await saveOut('list-after-edit-test', await readList(token))
+  delete results.removeFn
+  console.log('\n=== Summary ===')
+  console.log(JSON.stringify(results, null, 2))
+  if (linesFor(await readList(token), pid).length) console.log(`⚠️  Delete ${p.title} from your AH list by hand.`)
+}
+
+async function cmdTextRemoveTest() {
+  const token = await getToken()
+  const find = async () => (await readList(token)).filter((i) => i.description === TEST_LABEL)
+  let lines = await find()
+  if (!lines.length) {
+    await addToList(token, { description: TEST_LABEL, quantity: 1, type: 'SHOPPABLE', originCode: 'PRD', strikeThrough: false })
+    lines = await find()
+    console.log(`Added a fresh "${TEST_LABEL}" line to test with.`)
+  }
+  console.log(`Free-text line: ${describe(lines)}  originCode ${lines[0]?.originCode}`)
+  const base = { description: TEST_LABEL, type: 'SHOPPABLE', strikeThrough: false }
+  const tries = [
+    ['PATCH description + quantity 0', (l) => addToList(token, { ...base, originCode: 'PRD', quantity: 0 })],
+    ['PATCH description + quantity 0 + originCode TXT', (l) => addToList(token, { ...base, originCode: 'TXT', quantity: 0 })],
+    ['PATCH listItemId + quantity 0', (l) => addToList(token, { ...base, originCode: l.originCode, quantity: 0, listItemId: l.listItemId })],
+    ['DELETE /items/{listItemId}', (l) => ah('DELETE', `${LIST_PATH}/${l.listItemId}`, { token })],
+  ]
+  for (const [name, fn] of tries) {
+    lines = await find()
+    if (!lines.length) break
+    console.log(`\nRemove via ${name}`)
+    for (const l of lines) { try { await fn(l) } catch (e) { fail(e.message) } }
+    const after = await find()
+    console.log(`  → ${after.length ? describe(after) : 'gone'}`)
+    if (!after.length) { pass(`Free-text removal works with: ${name}`); return }
+  }
+  fail('No method removed the free-text line — delete it by hand in the AH app.')
+}
+
 const commands = {
   login: cmdLogin, refresh: cmdRefresh, search: cmdSearch, bonus: cmdBonus,
-  cart: cmdCart, 'cart-test': cmdCartTest, list: cmdList, 'list-test': cmdListTest, all: cmdAll,
+  cart: cmdCart, 'cart-test': cmdCartTest, list: cmdList, 'list-test': cmdListTest, 'list-edit-test': cmdListEditTest, 'text-remove-test': cmdTextRemoveTest, all: cmdAll,
 }
 
 const [cmd, ...args] = argv.slice(2)
