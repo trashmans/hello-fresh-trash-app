@@ -25,6 +25,7 @@ Individual commands:
 | `cart-test [productId]` | Adds 1 of a product, verifies, restores original quantity | Yes (restored) |
 | `list` | Reads the shopping list | No |
 | `list-test [productId]` | Adds a free-text line + a product line | Yes (delete manually) |
+| `list-edit-test` | Adds a test product, then tries changing quantity, ticking, unticking and removing it | Yes (cleans up after itself) |
 
 Raw API responses go to `spike/ah-api/out/` and tokens to `spike/ah-api/.tokens.json`. Both are gitignored; they contain personal data.
 
