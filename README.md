@@ -250,6 +250,15 @@ supabase/
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
     └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
 
+docs/
+├── adr/                     # architecture decision records — one file per decision that is expensive to reverse (see adr/README.md)
+└── privacy/
+    ├── record-of-processing.md # what personal data the app processes, why, where it goes, how long it is kept
+    └── data-requests.md        # procedure for GDPR access, export and erasure requests
+
+spike/
+└── ah-api/                  # Albert Heijn API spike — standalone Node script, not part of the app or CI; FINDINGS.md has the results
+
 .github/workflows/
 ├── deploy-frontend-preview.yml   # PR → Vercel preview deploy, posts URL as PR comment
 ├── deploy-frontend-prod.yml      # merge to main → Vercel production deploy
