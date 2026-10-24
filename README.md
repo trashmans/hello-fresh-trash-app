@@ -237,10 +237,12 @@ src/
     ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
     ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
     ├── packs.js               # parsePackSize() reads AH pack strings ("1,5 l", "2 x 125 g", "6 stuks"); ingredientToBase() converts recipe amounts to g / mL / pieces; packsNeeded() rounds up to whole packs with a 5% tolerance
+    ├── staples.js             # weekStartOf(), checkStaple(), planDueStaples() — which staples are due this week (cadence in whole Mon–Sun weeks, skip_next, bonus stock cover via covered_until); dates are plain YYYY-MM-DD strings
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display
     └── utils.js              # cn() helper for combining Tailwind classes
 └── tests/                    # Vitest unit tests for src/lib/ (run with `npm test`)
     ├── packs.test.js          # AH pack-size parsing, recipe amounts to base units, whole-pack rounding
+    ├── staples.test.js        # due-staple rules: cadence, skip next, stock cover, re-run safety, week boundaries
     └── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
 
 supabase/
