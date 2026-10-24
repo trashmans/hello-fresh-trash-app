@@ -14,7 +14,10 @@ Keying the new tables by `user_id` would work for one person, but moving to shar
 
 - A new `households` table owns all shopping data: staples, equivalence groups, ingredient mappings, recipe picks, retailer account and weekly runs.
 - Users join a household through `household_members` (`household_id`, `user_id`, `role` = `owner` | `member`).
+- A user belongs to at most one household (`UNIQUE (user_id)` on `household_members`). Dropping this later is cheap; adding it to live data is not.
 - One retailer account per household.
+- Households are created only through `public.create_household()`, which adds the caller as owner and writes an audit event in one transaction.
+- When the last member is removed (they leave or their account is deleted), a trigger deletes the household and everything it owns.
 - Recipe picks move from per-user `shopping_lists` to a household-owned table.
 - Every household-owned table uses the same RLS check: one `SECURITY DEFINER` function, `private.is_household_member(household_id)`, called from each policy.
 - Foreign keys to `households` use `ON DELETE CASCADE`.
@@ -23,7 +26,7 @@ Keying the new tables by `user_id` would work for one person, but moving to shar
 
 - Sharing works from day one; a single person is a household of one.
 - RLS policies are uniform and reviewable in one place.
-- Erasing a household is one delete. Erasing one member leaves shared household data in place (see `docs/privacy/data-requests.md`).
+- Erasing a household is one delete. Erasing one member leaves shared household data in place; erasing the last member removes the household automatically (see `docs/privacy/data-requests.md`).
 - `shopping_lists` needs a migration path for existing recipe picks. The current shopping list drawer keeps working until it is moved over.
 - The app needs a small "create or join household" step after sign-in.
 
