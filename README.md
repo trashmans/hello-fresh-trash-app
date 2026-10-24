@@ -233,6 +233,7 @@ src/
     ├── supabase.js           # Supabase client
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
     ├── ingredientMerge.js    # mergeIngredients() — scales by servings, merges same-name+unit items across recipes, returns sorted list with per-recipe contribution breakdown
+    ├── planWeek.js            # planWeek() chains the planner: staples (stock-up, else due rules) + recipe ingredients (mapped, summed in base units, whole packs; unmapped → free text) → merged target lines, staple updates, decisions and review flags. Pure, no I/O
     ├── scaling.js             # computeScaleFactorFromServings() / computeScaleFactorFromIngredient() — work out a scale factor from a target servings count or a target amount of one ingredient (reusing units.js's conversion table); scaleIngredients() applies it to a list for display
     ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
     ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
@@ -247,6 +248,7 @@ src/
     ├── packs.test.js          # AH pack-size parsing, recipe amounts to base units, whole-pack rounding
     ├── staples.test.js        # due-staple rules: cadence, skip next, stock cover, re-run safety, week boundaries
     ├── stockup.test.js        # deal-label parsing, stock-up pack counts, existing stock, covered_until dates
+    ├── planWeek.test.js       # one realistic week end to end: staples, stock-up, skipped, recipe merging, pantry, unmatched, review flags
     └── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
 
 supabase/
