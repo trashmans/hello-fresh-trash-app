@@ -76,13 +76,31 @@ const UNIT_ALIASES = {
   kg: 'kg', kilogram: 'kg', kilograms: 'kg',
 }
 
+// US recipe shorthand where case carries the meaning: capital T is a
+// tablespoon, lowercase t a teaspoon. Checked before the case-insensitive
+// aliases above, which would otherwise read both as "t".
+const CASE_SENSITIVE_UNITS = { T: 'tbsp', t: 'tsp' }
+
 function resolveUnit(rawUnit) {
   if (!rawUnit) return null
-  const key = rawUnit.trim().toLowerCase().replace(/\.$/, '')
-  const canonical = UNIT_ALIASES[key]
+  const trimmed = rawUnit.trim().replace(/\.$/, '')
+  const canonical = CASE_SENSITIVE_UNITS[trimmed] ?? UNIT_ALIASES[trimmed.toLowerCase()]
   if (!canonical) return null
   const info = UNIT_INFO[canonical]
   return info ? { canonical, ...info } : null
+}
+
+/**
+ * Reads a recipe unit as a measurement: { unit, type, toBase } where unit is
+ * the canonical key ('tbsp', 'g', 'ml'…), type is 'volume' or 'mass', and
+ * toBase converts to mL or g. Returns null for anything that isn't a
+ * convertible measurement ("cloves", "unit", blank) — callers treat those
+ * as counts. Used by src/lib/ingredientMerge.js to add up amounts given in
+ * different but compatible units.
+ */
+export function normalizeUnit(rawUnit) {
+  const resolved = resolveUnit(rawUnit)
+  return resolved ? { unit: resolved.canonical, type: resolved.type, toBase: resolved.toBase } : null
 }
 
 // Rounds a converted quantity to a sensible number of decimal places —
