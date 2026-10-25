@@ -248,6 +248,7 @@ src/
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
     ├── ingredientMerge.js    # mergeIngredients() — scales by servings and merges the same ingredient across recipes even when written differently (case, spaces, plural last word, veggie/vegetable, TBSP/tsp/T); adds compatible units in the first recipe's unit, never combines volume with weight, and does not use canonical_name (too broad for shopping)
     ├── planWeek.js            # planWeek() chains the planner: staples (stock-up, else due rules) + recipe ingredients (mapped, summed in base units, whole packs; unmapped → free text) → merged target lines, staple updates, decisions and review flags. Pure, no I/O
+    ├── recipeStatus.js        # ownInProgressIds() / mergeStatusUpdates() — the catalogue's safety net for missed Realtime events: re-checks your pending/processing recipes every 10 s and on returning to the tab, merging only what changed
     ├── scaling.js             # computeScaleFactorFromServings() / computeScaleFactorFromIngredient() — work out a scale factor from a target servings count or a target amount of one ingredient (reusing units.js's conversion table); scaleIngredients() applies it to a list for display
     ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
     ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
@@ -265,6 +266,7 @@ src/
     ├── stockup.test.js        # deal-label parsing, stock-up pack counts, existing stock, covered_until dates
     ├── planWeek.test.js       # one realistic week end to end: staples, stock-up, skipped, recipe merging, pantry, unmatched, review flags
     ├── units.test.js          # unit reading, including T vs t
+    ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     └── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
 
 supabase/

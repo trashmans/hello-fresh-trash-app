@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { FileText, Trash2, RotateCcw, Loader2, ShoppingCart, RefreshCw, LayoutGrid, List } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { renderPdfCoverBlob } from '@/lib/pdfCover'
 import RecipeTable from '@/components/RecipeTable'
+import { STATUS_POLL_MS, isInProgress, ownInProgressIds, mergeStatusUpdates } from '@/lib/recipeStatus'
 
 const VIEW_MODE_STORAGE_KEY = 'recipeCatalogueViewMode'
 
@@ -232,10 +233,13 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     fetchRecipes()
   }, [fetchRecipes, refreshKey])
 
-  // Realtime subscription for the current user's recipe status changes
+  // Realtime subscription for the current user's recipe status changes.
+  // The channel name is unique per mount: React StrictMode (development) mounts,
+  // unmounts and remounts immediately, and re-using a fixed name could attach the
+  // second mount to the channel that is still being removed, so no updates arrive.
   useEffect(() => {
     const channel = supabase
-      .channel('own-recipe-updates')
+      .channel(`own-recipe-updates-${crypto.randomUUID()}`)
       .on(
         'postgres_changes',
         {
@@ -263,6 +267,54 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
     return () => { supabase.removeChannel(channel) }
   }, [session.user.id])
+
+  // Safety net for missed Realtime events: while any of my recipes is still
+  // pending or processing, re-check their status every STATUS_POLL_MS and when
+  // the tab becomes visible again. Stops as soon as nothing is in progress.
+  const inProgressKey = useMemo(
+    () => ownInProgressIds(recipes, session.user.id).join(','),
+    [recipes, session.user.id]
+  )
+
+  useEffect(() => {
+    if (!inProgressKey) return undefined
+    const ids = inProgressKey.split(',')
+    let cancelled = false
+
+    async function checkStatuses() {
+      const { data: statusRows } = await supabase
+        .from('recipes')
+        .select('id, status')
+        .in('id', ids)
+      if (cancelled || !statusRows) return
+
+      // Recipes that finished need their full row (name, times, tags…) for the card.
+      const finishedIds = statusRows.filter(r => !isInProgress(r.status)).map(r => r.id)
+      let fullRows = []
+      if (finishedIds.length > 0) {
+        const { data } = await supabase.from('recipes').select('*').in('id', finishedIds)
+        if (cancelled) return
+        fullRows = data ?? []
+      }
+
+      const stillRunning = statusRows.filter(r => isInProgress(r.status))
+      setRecipes(prev => mergeStatusUpdates(prev, [...stillRunning, ...fullRows]))
+    }
+
+    function checkWhenVisible() {
+      if (document.visibilityState === 'visible') checkStatuses()
+    }
+
+    const timer = setInterval(checkStatuses, STATUS_POLL_MS)
+    document.addEventListener('visibilitychange', checkWhenVisible)
+    window.addEventListener('focus', checkWhenVisible)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', checkWhenVisible)
+      window.removeEventListener('focus', checkWhenVisible)
+    }
+  }, [inProgressKey])
 
   async function handleDelete(recipe, e) {
     e?.stopPropagation()
