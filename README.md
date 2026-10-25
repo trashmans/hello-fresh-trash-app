@@ -180,6 +180,18 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
 | `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
 | `app_config` | Key/value config for environment-specific settings; service role only |
+| `households` | A shared home that owns shopping data (staples, mappings, AH link, weekly runs). Settings: `time_zone`, `run_weekday`, `run_hour`, `automation_enabled`, and `ah_enabled` (admin-only feature switch that hides all AH features when off). Created via `create_household()`; every existing user got one from `private.ensure_households()`, which can be re-run safely. See [ADR 0001](docs/adr/0001-household-ownership.md) |
+| `household_members` | Links users to a household with `role` = `owner` / `member`; a user belongs to at most one household |
+
+### Private schema
+
+The `private` schema is not exposed through the Supabase API, so the browser cannot query it even with a valid session. Edge Functions reach it through a direct Postgres connection. RLS is enabled on every table with no policies. See [ADR 0002](docs/adr/0002-private-schema.md).
+
+| Table / function | Purpose |
+|---|---|
+| `private.audit_events` | Append-only log of security-relevant actions (e.g. `household.created`). No shopping contents, no tokens. Identifiers are cleared, not the event, when a user or household is deleted |
+| `private.data_requests` | Log of GDPR requests: type, dates, outcome, handled by. No request contents. See [data-requests.md](docs/privacy/data-requests.md) |
+| `private.is_household_member()` / `is_household_owner()` | Membership checks called by every household-owned table's RLS policies |
 
 ### recipes status machine
 
@@ -199,6 +211,8 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 - `recipes.uploaded_by` → `auth.users.id`
 - `ingredients.recipe_id` → `recipes.id` (CASCADE DELETE)
 - `shopping_lists.user_id` → `auth.users.id` (UNIQUE — one list per user)
+- `household_members.household_id` → `households.id` (CASCADE DELETE); `household_members.user_id` → `auth.users.id` (CASCADE DELETE, UNIQUE — one household per user). When the last member is removed, a trigger deletes the household.
+- `private.audit_events.household_id` / `actor_id` → SET NULL on delete, so the event survives erasure without identifying anyone.
 
 ---
 
