@@ -180,6 +180,18 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
 | `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
 | `app_config` | Key/value config for environment-specific settings; service role only |
+| `households` | A shared home that owns shopping data (staples, mappings, AH link, weekly runs). Settings: `time_zone`, `run_weekday`, `run_hour`, `automation_enabled`, and `ah_enabled` (admin-only feature switch that hides all AH features when off). Created via `create_household()`; every existing user got one from `private.ensure_households()`, which can be re-run safely. See [ADR 0001](docs/adr/0001-household-ownership.md) |
+| `household_members` | Links users to a household with `role` = `owner` / `member`; a user belongs to at most one household |
+
+### Private schema
+
+The `private` schema is not exposed through the Supabase API, so the browser cannot query it even with a valid session. Edge Functions reach it through a direct Postgres connection. RLS is enabled on every table with no policies. See [ADR 0002](docs/adr/0002-private-schema.md).
+
+| Table / function | Purpose |
+|---|---|
+| `private.audit_events` | Append-only log of security-relevant actions (e.g. `household.created`). No shopping contents, no tokens. Identifiers are cleared, not the event, when a user or household is deleted. Rows cannot be edited, and can only be deleted once older than 12 months (retention purge) |
+| `private.data_requests` | Log of GDPR requests: type, dates, outcome, handled by. No request contents. See [data-requests.md](docs/privacy/data-requests.md) |
+| `private.is_household_member()` / `is_household_owner()` | Membership checks called by every household-owned table's RLS policies |
 
 ### recipes status machine
 
@@ -199,6 +211,8 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 - `recipes.uploaded_by` → `auth.users.id`
 - `ingredients.recipe_id` → `recipes.id` (CASCADE DELETE)
 - `shopping_lists.user_id` → `auth.users.id` (UNIQUE — one list per user)
+- `household_members.household_id` → `households.id` (CASCADE DELETE); `household_members.user_id` → `auth.users.id` (CASCADE DELETE, UNIQUE — one household per user). When the last member is removed, a trigger deletes the household.
+- `private.audit_events.household_id` / `actor_id` → SET NULL on delete, so the event survives erasure without identifying anyone.
 
 ---
 
@@ -232,13 +246,25 @@ src/
 └── lib/
     ├── supabase.js           # Supabase client
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
-    ├── ingredientMerge.js    # mergeIngredients() — scales by servings, merges same-name+unit items across recipes, returns sorted list with per-recipe contribution breakdown
+    ├── ingredientMerge.js    # mergeIngredients() — scales by servings and merges the same ingredient across recipes even when written differently (case, spaces, plural last word, veggie/vegetable, TBSP/tsp/T); adds compatible units in the first recipe's unit, never combines volume with weight, and does not use canonical_name (too broad for shopping)
+    ├── planWeek.js            # planWeek() chains the planner: staples (stock-up, else due rules) + recipe ingredients (mapped, summed in base units, whole packs; unmapped → free text) → merged target lines, staple updates, decisions and review flags. Pure, no I/O
     ├── scaling.js             # computeScaleFactorFromServings() / computeScaleFactorFromIngredient() — work out a scale factor from a target servings count or a target amount of one ingredient (reusing units.js's conversion table); scaleIngredients() applies it to a list for display
     ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
     ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
-    ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display
+    ├── listDiff.js            # mergeTargetLines() combines planner lines for the same product / free text; diffList() compares the target with the current retailer list and returns add / increase / untick changes — never removes, safe to re-run
+    ├── packs.js               # parsePackSize() reads AH pack strings ("1,5 l", "2 x 125 g", "6 stuks"); ingredientToBase() converts recipe amounts to g / mL / pieces; packsNeeded() rounds up to whole packs with a 5% tolerance
+    ├── staples.js             # weekStartOf(), checkStaple(), planDueStaples() — which staples are due this week (cadence in whole Mon–Sun weeks, skip_next, bonus stock cover via covered_until); dates are plain YYYY-MM-DD strings
+    ├── stockup.js             # parseBonusMechanism() reads AH deal labels ("2e GRATIS", "2+1 GRATIS", "3 VOOR 5,00") into a pack group size; planStockUp() buys non-perishable staples on bonus up to max_weeks_stock, rounded to whole deals, and returns the new covered_until
+    ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp)
     └── utils.js              # cn() helper for combining Tailwind classes
 └── tests/                    # Vitest unit tests for src/lib/ (run with `npm test`)
+    ├── ingredientMerge.test.js # shopping-list merging: real duplicate examples, plural/synonym names, mixed units, what must stay separate
+    ├── listDiff.test.js       # merging target lines, add / increase / untick rules, hand-added items left alone, re-run gives no changes
+    ├── packs.test.js          # AH pack-size parsing, recipe amounts to base units, whole-pack rounding
+    ├── staples.test.js        # due-staple rules: cadence, skip next, stock cover, re-run safety, week boundaries
+    ├── stockup.test.js        # deal-label parsing, stock-up pack counts, existing stock, covered_until dates
+    ├── planWeek.test.js       # one realistic week end to end: staples, stock-up, skipped, recipe merging, pantry, unmatched, review flags
+    ├── units.test.js          # unit reading, including T vs t
     └── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
 
 supabase/
