@@ -4,6 +4,8 @@
 --
 -- Access rules:
 --   households         SELECT for members. Created only through public.create_household().
+--                      No UPDATE policy: ah_enabled and the schedule fields are set by an admin
+--                      (dashboard / service role) until the settings screen exists.
 --   household_members  SELECT for members of the same household. No direct writes yet;
 --                      invites and leaving get their own functions when the UI needs them.
 
@@ -14,6 +16,7 @@ CREATE TABLE public.households (
   run_weekday        smallint    NOT NULL DEFAULT 1 CHECK (run_weekday BETWEEN 0 AND 6),  -- Postgres DOW: 0 = Sunday, 1 = Monday
   run_hour           smallint    NOT NULL DEFAULT 5 CHECK (run_hour BETWEEN 0 AND 23),   -- local hour in time_zone
   automation_enabled boolean     NOT NULL DEFAULT false,               -- off until AH is linked and the user opts in
+  ah_enabled         boolean     NOT NULL DEFAULT false,               -- feature switch (docs/adr/0005): admin-only, hides all AH screens and calls when off
   created_by         uuid        REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at         timestamptz NOT NULL DEFAULT now()
 );

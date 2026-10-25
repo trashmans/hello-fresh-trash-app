@@ -180,7 +180,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
 | `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
 | `app_config` | Key/value config for environment-specific settings; service role only |
-| `households` | A shared home that owns shopping data (staples, mappings, AH link, weekly runs). Settings: `time_zone`, `run_weekday`, `run_hour`, `automation_enabled`. Created only via `create_household()`. See [ADR 0001](docs/adr/0001-household-ownership.md) |
+| `households` | A shared home that owns shopping data (staples, mappings, AH link, weekly runs). Settings: `time_zone`, `run_weekday`, `run_hour`, `automation_enabled`, and `ah_enabled` (admin-only feature switch that hides all AH features when off). Created via `create_household()`; every existing user got one from `private.ensure_households()`, which can be re-run safely. See [ADR 0001](docs/adr/0001-household-ownership.md) |
 | `household_members` | Links users to a household with `role` = `owner` / `member`; a user belongs to at most one household |
 
 ### Private schema
