@@ -8,6 +8,7 @@ Short records of decisions that are expensive to reverse. One file per decision,
 | [0002](0002-private-schema.md) | Integration data lives in a `private` schema the API does not expose | Accepted |
 | [0003](0003-retailer-token-handling.md) | Retailer tokens: single-flight refresh and envelope encryption | Accepted |
 | [0004](0004-retailer-adapter.md) | All retailer calls go through one adapter | Accepted |
+| [0005](0005-incremental-rollout.md) | Roll out the AH weekly shop in small, reversible steps | Accepted |
 
 Design context: the AH Weekly Shop high-level design and the API spike findings in `spike/ah-api/FINDINGS.md`.
 
