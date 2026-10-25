@@ -189,7 +189,7 @@ The `private` schema is not exposed through the Supabase API, so the browser can
 
 | Table / function | Purpose |
 |---|---|
-| `private.audit_events` | Append-only log of security-relevant actions (e.g. `household.created`). No shopping contents, no tokens. Identifiers are cleared, not the event, when a user or household is deleted |
+| `private.audit_events` | Append-only log of security-relevant actions (e.g. `household.created`). No shopping contents, no tokens. Identifiers are cleared, not the event, when a user or household is deleted. Rows cannot be edited, and can only be deleted once older than 12 months (retention purge) |
 | `private.data_requests` | Log of GDPR requests: type, dates, outcome, handled by. No request contents. See [data-requests.md](docs/privacy/data-requests.md) |
 | `private.is_household_member()` / `is_household_owner()` | Membership checks called by every household-owned table's RLS policies |
 
