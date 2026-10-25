@@ -29,8 +29,14 @@ BEGIN
      AND NEW.action = OLD.action
      AND NEW.detail = OLD.detail
      AND NEW.occurred_at = OLD.occurred_at
-     AND (NEW.actor_id     IS NOT DISTINCT FROM OLD.actor_id     OR NEW.actor_id IS NULL)
-     AND (NEW.household_id IS NOT DISTINCT FROM OLD.household_id OR NEW.household_id IS NULL)
+     AND (
+       NEW.actor_id IS NOT DISTINCT FROM OLD.actor_id
+       OR (NEW.actor_id IS NULL AND OLD.actor_id IS NOT NULL)          -- cleared on erasure
+     )
+     AND (
+       NEW.household_id IS NOT DISTINCT FROM OLD.household_id
+       OR (NEW.household_id IS NULL AND OLD.household_id IS NOT NULL)  -- cleared on erasure
+     )
   THEN
     RETURN NEW;
   END IF;
@@ -38,11 +44,32 @@ BEGIN
 END;
 $$;
 
+-- Rows can only be deleted once past the 12-month retention period
+-- (docs/privacy/record-of-processing.md), so the retention purge works but nothing newer
+-- can be removed. Erasure requests clear identifiers through the FKs instead of deleting.
+CREATE FUNCTION private.audit_events_no_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF OLD.occurred_at < now() - interval '12 months' THEN
+    RETURN OLD;
+  END IF;
+  RAISE EXCEPTION 'private.audit_events rows can only be deleted after 12 months' USING ERRCODE = '42501';
+END;
+$$;
+
 REVOKE EXECUTE ON FUNCTION private.audit_events_append_only() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION private.audit_events_no_delete()   FROM PUBLIC, anon, authenticated;
 
 CREATE TRIGGER audit_events_append_only
   BEFORE UPDATE ON private.audit_events
   FOR EACH ROW EXECUTE FUNCTION private.audit_events_append_only();
+
+CREATE TRIGGER audit_events_no_delete
+  BEFORE DELETE ON private.audit_events
+  FOR EACH ROW EXECUTE FUNCTION private.audit_events_no_delete();
 
 -- Log of GDPR data requests. Deliberately holds no request contents and no link to the
 -- requester: only enough to show each request was handled on time. Kept 3 years.
@@ -65,6 +92,8 @@ ALTER TABLE private.data_requests ENABLE ROW LEVEL SECURITY;
 
 -- Rollback (run manually, then `supabase migration repair --status reverted 20261024000003`):
 -- DROP TABLE private.data_requests;
+-- DROP TRIGGER audit_events_no_delete ON private.audit_events;
 -- DROP TRIGGER audit_events_append_only ON private.audit_events;
+-- DROP FUNCTION private.audit_events_no_delete();
 -- DROP FUNCTION private.audit_events_append_only();
 -- DROP TABLE private.audit_events;
