@@ -7,6 +7,56 @@ const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!
 const GEMINI_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
 
+// Gemini timing. A recipe extraction usually takes 15–25 s; the old fixed 25 s timeout
+// aborted slower ones (e.g. "unexpected: The signal has been aborted"). The whole Edge
+// Function must finish within its wall-clock limit (150 s on the free plan), so all Gemini
+// attempts share one budget that leaves time for the database work before and after.
+const GEMINI_ATTEMPT_TIMEOUT_MS = 75_000
+const GEMINI_TOTAL_BUDGET_MS = 120_000
+const GEMINI_MIN_RETRY_BUDGET_MS = 20_000
+// Rate limited, server error, overloaded: worth one more try after a short wait.
+const GEMINI_RETRYABLE_STATUS = new Set([429, 500, 503])
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+// Calls Gemini at most twice. Retries once after a timeout or a retryable status, if
+// enough of the time budget is left. Returns the last response, or throws the last error.
+async function callGemini(payload: unknown, log: (msg: string) => void): Promise<Response> {
+  const started = Date.now()
+  const remaining = () => GEMINI_TOTAL_BUDGET_MS - (Date.now() - started)
+
+  for (let attempt = 1; ; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, remaining()))
+    try {
+      const res = await fetch(GEMINI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      })
+      if (attempt === 1 && GEMINI_RETRYABLE_STATUS.has(res.status) && remaining() > GEMINI_MIN_RETRY_BUDGET_MS) {
+        await res.body?.cancel()
+        // Honour a short Retry-After from Gemini, otherwise wait 3 s.
+        const retryAfterSeconds = Number(res.headers.get('retry-after'))
+        const waitMs = retryAfterSeconds > 0 && retryAfterSeconds <= 10 ? retryAfterSeconds * 1000 : 3000
+        log(`Gemini status=${res.status} on attempt 1, retrying in ${waitMs} ms`)
+        await sleep(waitMs)
+        continue
+      }
+      return res
+    } catch (err) {
+      if (attempt === 1 && controller.signal.aborted && remaining() > GEMINI_MIN_RETRY_BUDGET_MS) {
+        log(`Gemini timed out on attempt 1 after ${Date.now() - started} ms, retrying`)
+        continue
+      }
+      throw err
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+}
+
 interface Ingredient {
   name: string
   canonical_name: string | null
@@ -192,23 +242,15 @@ Return only valid JSON. No markdown fences, no explanation.`,
       }],
       generationConfig: {
         response_mime_type: 'application/json',
+        // Extraction needs no reasoning step; turning Gemini 2.5 Flash's "thinking" off
+        // makes responses much faster.
+        thinkingConfig: { thinkingBudget: 0 },
       },
     }
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 25000)
-
-    let geminiRes: Response
-    try {
-      geminiRes = await fetch(GEMINI_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(geminiPayload),
-        signal: controller.signal,
-      })
-    } finally {
-      clearTimeout(timeout)
-    }
+    const geminiStarted = Date.now()
+    const geminiRes = await callGemini(geminiPayload, (msg) => console.log(`[${executionId}] ${msg}`))
+    console.log(`[${executionId}] Gemini took ${Date.now() - geminiStarted} ms`)
 
     console.log(`[${executionId}] Gemini response status=${geminiRes.status}`)
     if (!geminiRes.ok) {
