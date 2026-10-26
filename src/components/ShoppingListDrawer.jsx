@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 import { mergeIngredients } from '@/lib/ingredientMerge'
 import { computeScaleFactorFromIngredient } from '@/lib/scaling'
 import { unitOptionsFor } from '@/lib/units'
@@ -124,6 +125,8 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
 }
 
 export default function ShoppingListDrawer({ open, onClose, shoppingList }) {
+  // Shopping list lines follow the same volume / mass preference as the recipe view.
+  const { unitPrefs } = useAuth()
   const {
     recipeSelections,
     adjustedItems,
@@ -165,8 +168,8 @@ export default function ShoppingListDrawer({ open, onClose, shoppingList }) {
   )
 
   const mergedItems = useMemo(
-    () => mergeIngredients(recipeSelections, ingredientsMap, recipesMap),
-    [recipeSelections, ingredientsMap, recipesMap]
+    () => mergeIngredients(recipeSelections, ingredientsMap, recipesMap, unitPrefs),
+    [recipeSelections, ingredientsMap, recipesMap, unitPrefs]
   )
 
   const adjustedMap = useMemo(

@@ -12,11 +12,13 @@
 // and "chicken thighs" both become "chicken"), and those must stay separate.
 //
 // Units: measurements (tbsp, tsp, cup, g, kg, oz…) of the same kind are added
-// in base units and shown in the first recipe's unit. Volume and weight are
-// never combined. Anything else is a count; "unit", "piece", "whole" and a
+// in base units and shown in the first recipe's unit. When the viewer's unit
+// preferences are passed and that unit is in the other system (e.g. tbsp for a
+// metric user), the line is converted the same way the recipe view converts
+// (90 mL, not 6 tbsp). Volume and weight are never combined. Anything else is a count; "unit", "piece", "whole" and a
 // blank unit are the same count, and plural count units read as singular.
 
-import { normalizeUnit } from './units'
+import { normalizeUnit, bestUnitInSystem } from './units'
 
 // Words that mean the same thing in ingredient names. Extend as new pairs show up.
 const WORD_SYNONYMS = { veggie: 'vegetable', veggies: 'vegetables' }
@@ -26,6 +28,9 @@ const PLAIN_COUNT_UNITS = new Set(['', 'unit', 'units', 'piece', 'pieces', 'pc',
 
 // Display labels for canonical units that are not written in lowercase.
 const UNIT_LABELS = { ml: 'mL', l: 'L' }
+
+// Units that belong to the metric system; everything else measured is US.
+const METRIC_UNITS = new Set(['ml', 'l', 'g', 'kg'])
 
 // Simple English plural → singular, for matching only (display keeps the recipe's wording).
 function singular(word) {
@@ -45,10 +50,48 @@ function nameKey(name) {
   return words.join(' ')
 }
 
+function preferredSystem(type, prefs) {
+  if (!prefs) return null
+  return (type === 'volume' ? prefs.volume_unit : prefs.mass_unit) ?? null
+}
+
+// Re-expresses a measured line in the viewer's preferred system when its unit is
+// from the other one. Mutates the group built in mergeIngredients().
+function convertToPreferred(group, prefs) {
+  const preferred = preferredSystem(group.type, prefs)
+  if (!preferred || preferred === group.system) return
+
+  const known = group.contributions.map(c => c.scaledQty).filter(q => q != null)
+  const total = group.computedQty ?? (known.length ? Math.max(...known) : 1)
+  const target = bestUnitInSystem(total * group.toBase, group.type, preferred)
+  if (!target) return
+
+  const factor = group.toBase / target.toBase
+  const convert = (qty) => (qty == null ? null : qty * factor)
+  group.unit = target.label
+  group.computedQty = convert(group.computedQty)
+  for (const c of group.contributions) {
+    c.scaledQty = convert(c.scaledQty)
+    c.baseQty = convert(c.baseQty)
+  }
+}
+
 // How an ingredient's unit groups: a measurement type, or a named count.
-function readUnit(rawUnit) {
+function readUnit(rawUnit, prefs) {
   const measured = normalizeUnit(rawUnit)
-  if (measured) return { key: measured.type, label: UNIT_LABELS[measured.unit] ?? measured.unit, toBase: measured.toBase }
+  if (measured) {
+    // With preferences, the key includes the preferred system: saved ticks and
+    // adjusted quantities are stored in the line's unit, so switching systems
+    // must not let an old "3 tbsp" adjustment be read as 3 mL.
+    const preferred = preferredSystem(measured.type, prefs)
+    return {
+      key: preferred ? `${measured.type}:${preferred}` : measured.type,
+      label: UNIT_LABELS[measured.unit] ?? measured.unit,
+      toBase: measured.toBase,
+      type: measured.type,
+      system: METRIC_UNITS.has(measured.unit) ? 'metric' : 'us',
+    }
+  }
 
   const word = (rawUnit ?? '').trim().toLowerCase().replace(/\.$/, '')
   if (PLAIN_COUNT_UNITS.has(word)) return { key: 'count:', label: null, toBase: 1 }
@@ -62,10 +105,11 @@ function readUnit(rawUnit) {
  * @param {Array<{recipe_id: string, servings: number}>} recipeSelections
  * @param {Object<string, Array>} ingredientsMap  — { recipe_id: [ingredient rows] }
  * @param {Object<string, Object>} recipesMap     — { recipe_id: { id, name, servings } }
+ * @param {Object} [prefs]                        — viewer's unit preferences ({ volume_unit, mass_unit }: 'us' | 'metric')
  * @returns {Array} merged line items sorted alphabetically by name. Each item's
  *   computedQty and every contribution's scaledQty / baseQty are in item.unit.
  */
-export function mergeIngredients(recipeSelections, ingredientsMap, recipesMap) {
+export function mergeIngredients(recipeSelections, ingredientsMap, recipesMap, prefs = null) {
   const groups = new Map()
 
   for (const { recipe_id, servings: selectedServings } of recipeSelections) {
@@ -75,7 +119,7 @@ export function mergeIngredients(recipeSelections, ingredientsMap, recipesMap) {
     const scaleFactor = baseServings > 0 ? selectedServings / baseServings : 1
 
     for (const ing of ingredients) {
-      const unit = readUnit(ing.unit)
+      const unit = readUnit(ing.unit, prefs)
       const key = `${nameKey(ing.name)}|${unit.key}`
 
       if (!groups.has(key)) {
@@ -87,6 +131,8 @@ export function mergeIngredients(recipeSelections, ingredientsMap, recipesMap) {
           computedQty: 0,
           contributions: [],
           toBase: unit.toBase,   // the group's unit, for converting later contributions
+          type: unit.type ?? null,
+          system: unit.system ?? null,
         })
       }
       const group = groups.get(key)
@@ -110,6 +156,10 @@ export function mergeIngredients(recipeSelections, ingredientsMap, recipesMap) {
   }
 
   return Array.from(groups.values())
-    .map(({ toBase, ...item }) => item)
+    .map(group => {
+      if (group.type) convertToPreferred(group, prefs)
+      const { toBase, type, system, ...item } = group
+      return item
+    })
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 }
