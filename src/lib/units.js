@@ -136,6 +136,19 @@ function pickDisplayUnit(baseValue, type, system) {
 }
 
 /**
+ * The unit to show a base-unit amount (mL or g) in, within one system: the
+ * largest unit whose value is still >= 1, exactly as the recipe view picks
+ * it. Returns { unit, label, toBase } or null for an unknown type or system.
+ * Used by src/lib/ingredientMerge.js so the shopping list matches the
+ * recipe view's units.
+ */
+export function bestUnitInSystem(baseValue, type, system) {
+  const picked = pickDisplayUnit(baseValue, type, system)
+  if (!picked) return null
+  return { unit: picked.unit, label: DISPLAY_UNIT_LABEL[picked.unit] ?? picked.unit, toBase: picked.factor }
+}
+
+/**
  * Converts an ingredient's quantity/unit for display, given the viewer's
  * preferred system for that measurement type (prefs.volume_unit /
  * prefs.mass_unit, each 'us' or 'metric'). Returns { quantity, unit } —

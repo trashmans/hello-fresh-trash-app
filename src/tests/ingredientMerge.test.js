@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { mergeIngredients } from '@/lib/ingredientMerge'
 
 // Each recipe serves 2 and is selected at 2 servings unless a test says otherwise.
-function merge(recipes) {
+function merge(recipes, prefs) {
   const selections = recipes.map(r => ({ recipe_id: r.id, servings: r.selected ?? 2 }))
   const ingredientsMap = Object.fromEntries(recipes.map(r => [r.id, r.ingredients]))
   const recipesMap = Object.fromEntries(recipes.map(r => [r.id, { id: r.id, name: r.name ?? r.id, servings: r.servings ?? 2 }]))
-  return mergeIngredients(selections, ingredientsMap, recipesMap)
+  return mergeIngredients(selections, ingredientsMap, recipesMap, prefs)
 }
+
+const METRIC = { volume_unit: 'metric', mass_unit: 'metric' }
+const US = { volume_unit: 'us', mass_unit: 'us' }
 
 const ing = (name, quantity, unit = null) => ({ name, quantity, unit, preparation: null })
 
@@ -147,5 +150,56 @@ describe('mergeIngredients: existing behaviour kept', () => {
     const one = merge([{ id: 'a', ingredients: [ing('Sweet Potatoes', 1)] }])[0].key
     const two = merge([{ id: 'a', ingredients: [ing('sweet potato', 1, 'unit')] }])[0].key
     expect(one).toBe(two)
+  })
+})
+
+describe("mergeIngredients: shown in the user's unit preference", () => {
+  const oliveOil = [
+    { id: 'a', name: 'Recipe A', ingredients: [ing('Olive Oil', 1, 'TBSP')] },
+    { id: 'b', name: 'Recipe B', ingredients: [ing('Olive oil', 6, 'tsp')] },
+    { id: 'c', name: 'Recipe C', ingredients: [ing('Olive Oil', 3, 'T')] },
+  ]
+  const butter = [
+    { id: 'a', ingredients: [ing('Butter', 100, 'g')] },
+    { id: 'b', ingredients: [ing('Butter', 0.2, 'kg')] },
+  ]
+
+  it('converts US volumes to metric for a metric user, line and breakdown alike', () => {
+    const [item] = merge(oliveOil, METRIC)
+    expect(item).toMatchObject({ name: 'Olive Oil', unit: 'mL', computedQty: 90 })
+    expect(item.contributions.map(c => c.scaledQty)).toEqual([15, 30, 45])
+  })
+
+  it('leaves amounts already in the preferred system in the first recipe\'s unit', () => {
+    expect(merge(oliveOil, US)[0]).toMatchObject({ unit: 'tbsp', computedQty: 6 })
+    expect(merge(butter, METRIC)[0]).toMatchObject({ unit: 'g', computedQty: 300 })
+  })
+
+  it('converts metric weights to US units for a US user', () => {
+    const [item] = merge(butter, US)
+    expect(item.unit).toBe('oz')
+    expect(item.computedQty).toBeCloseTo(300 / 28.35)
+  })
+
+  it('moves up to a larger unit when the total is big enough', () => {
+    const [item] = merge([{ id: 'a', ingredients: [ing('Stock', 6, 'cups')] }], METRIC)
+    expect(item.unit).toBe('L')
+    expect(item.computedQty).toBeCloseTo(1.44)
+  })
+
+  it('converts the recipe amount and the scaled amount in the breakdown', () => {
+    const [item] = merge([{ id: 'a', selected: 4, ingredients: [ing('Olive Oil', 1, 'tbsp')] }], METRIC)
+    expect(item.contributions[0]).toMatchObject({ baseQty: 15, scaledQty: 30, scaleFactor: 2 })
+  })
+
+  it('does not touch counts', () => {
+    const [item] = merge([{ id: 'a', ingredients: [ing('Garlic', 2, 'cloves')] }], METRIC)
+    expect(item).toMatchObject({ unit: 'clove', computedQty: 2 })
+  })
+
+  it('gives measured lines a different key per unit system, so saved ticks are not misread', () => {
+    expect(merge(butter, METRIC)[0].key).not.toBe(merge(butter, US)[0].key)
+    const garlic = [{ id: 'a', ingredients: [ing('Garlic', 2, 'cloves')] }]
+    expect(merge(garlic, METRIC)[0].key).toBe(merge(garlic, US)[0].key)
   })
 })
