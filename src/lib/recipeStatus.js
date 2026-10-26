@@ -21,6 +21,19 @@ export function ownInProgressIds(recipes, userId) {
 }
 
 /**
+ * Ids of recipes the catalogue should keep re-checking: my own pending or
+ * processing recipes, plus any recipe I re-parsed this session (watchedIds),
+ * whoever uploaded it. The page only receives live updates for my own uploads,
+ * so without the watch list an admin re-parse of someone else's recipe is
+ * never seen to finish.
+ */
+export function inProgressIdsToCheck(recipes, userId, watchedIds = new Set()) {
+  return recipes
+    .filter(r => isInProgress(r.status) && (r.uploaded_by === userId || watchedIds.has(r.id)))
+    .map(r => r.id)
+}
+
+/**
  * Applies freshly fetched rows to the recipe list. Rows for recipes not in the
  * list are ignored. Returns the same array (and the same recipe objects) when
  * nothing actually changed, so a poll that finds nothing new does not re-render.
