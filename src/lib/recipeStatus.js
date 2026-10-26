@@ -55,3 +55,45 @@ export function mergeStatusUpdates(recipes, rows) {
 
   return changed ? next : recipes
 }
+
+// retry-parse refuses a recipe that has already been retried this many times.
+const RETRY_PARSE_LIMIT = 3
+
+/**
+ * Which card a recipe gets in the catalogue, and what it can do.
+ *   null                                    hidden
+ *   { kind: 'ready' }
+ *   { kind: 'pending', canCancel }          Cancel deletes the recipe: uploader only
+ *   { kind: 'failed', retryVia }            'retry-parse' (uploader), 'admin-reparse' (admin), or null
+ *   { kind: 'rejected' }                    duplicate; uploader only
+ * Someone else's in-progress recipe shows only if I re-parsed it (watchedIds) or am in
+ * admin mode; their failed recipes only in admin mode, so an admin can rescue them.
+ */
+export function recipeCardState(recipe, { userId, adminMode = false, watchedIds = new Set() } = {}) {
+  const own = recipe.uploaded_by === userId
+
+  switch (recipe.status) {
+    case 'ready':
+      return { kind: 'ready' }
+
+    case 'pending':
+    case 'processing':
+      if (own) return { kind: 'pending', canCancel: true }
+      if (adminMode || watchedIds.has(recipe.id)) return { kind: 'pending', canCancel: false }
+      return null
+
+    case 'failed': {
+      const retriesUsedUp = (recipe.retry_count ?? 0) >= RETRY_PARSE_LIMIT
+      if (own && !retriesUsedUp) return { kind: 'failed', retryVia: 'retry-parse' }
+      if (adminMode) return { kind: 'failed', retryVia: 'admin-reparse' }
+      if (own) return { kind: 'failed', retryVia: null }
+      return null
+    }
+
+    case 'rejected':
+      return own ? { kind: 'rejected' } : null
+
+    default:
+      return null
+  }
+}

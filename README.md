@@ -248,7 +248,7 @@ src/
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
     ├── ingredientMerge.js    # mergeIngredients() — scales by servings and merges the same ingredient across recipes even when written differently (case, spaces, plural last word, veggie/vegetable, TBSP/tsp/T); adds compatible units and shows them in the viewer's volume / mass preference like the recipe view does, never combines volume with weight, and does not use canonical_name (too broad for shopping)
     ├── planWeek.js            # planWeek() chains the planner: staples (stock-up, else due rules) + recipe ingredients (mapped, summed in base units, whole packs; unmapped → free text) → merged target lines, staple updates, decisions and review flags. Pure, no I/O
-    ├── recipeStatus.js        # ownInProgressIds() / mergeStatusUpdates() — the catalogue's safety net for missed Realtime events: re-checks your pending/processing recipes (plus any recipe you re-parsed as admin, whoever uploaded it) every 10 s and on returning to the tab, merging only what changed
+    ├── recipeStatus.js        # ownInProgressIds() / mergeStatusUpdates() — the catalogue's safety net for missed Realtime events: re-checks your pending/processing recipes (plus any recipe you re-parsed as admin, whoever uploaded it) every 10 s and on returning to the tab, merging only what changed; recipeCardState() decides which card each recipe gets (admins also see other users' in-progress and failed recipes, retried via admin-reparse)
     ├── scaling.js             # computeScaleFactorFromServings() / computeScaleFactorFromIngredient() — work out a scale factor from a target servings count or a target amount of one ingredient (reusing units.js's conversion table); scaleIngredients() applies it to a list for display
     ├── pdfCover.js            # renderPdfCoverBlob() — renders PDF page 1 to a cropped JPEG via pdf.js (its built-in JPEG 2000 decoder handles HelloFresh's cover photos)
     ├── pdfStepImages.js       # extractStepImageBlobs() — locates each step photo on the PDF's steps page by walking pdf.js's operator list (tracking the CTM through image-paint ops), crops them from one page render
@@ -275,6 +275,7 @@ supabase/
 └── functions/
     ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), tags oven temperatures inline as {{temp:VALUEU}} for unit conversion at render time, classifies protein_source into a fixed category set, writes ingredients + status=ready; Gemini call runs with thinking off, up to 75 s per attempt and one retry on timeout / 429 / 5xx, all within a 120 s budget that keeps the function under its wall-clock limit
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
+    ├── admin-reparse/       # admin-only; clears a ready or failed recipe (any uploader) and sets it back to pending so parse-recipe runs again
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
     └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
 
