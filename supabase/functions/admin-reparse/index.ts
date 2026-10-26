@@ -50,7 +50,12 @@ Deno.serve(async (req) => {
     .single()
 
   if (!recipe) return new Response('Not found', { status: 404, headers: corsHeaders })
-  if (recipe.status !== 'ready') return new Response('Recipe is not ready', { status: 400, headers: corsHeaders })
+  // Ready (re-parse) or failed (admin rescue, including other users' recipes and recipes past
+  // retry-parse's 3-retry limit). Not pending/processing (already running) or rejected (a
+  // duplicate would just be rejected again).
+  if (recipe.status !== 'ready' && recipe.status !== 'failed') {
+    return new Response('Recipe must be ready or failed to re-parse', { status: 400, headers: corsHeaders })
+  }
 
   // Delete existing ingredients so parse-recipe can re-insert them cleanly
   const { error: deleteError } = await supabase

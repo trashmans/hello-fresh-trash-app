@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { renderPdfCoverBlob } from '@/lib/pdfCover'
 import RecipeTable from '@/components/RecipeTable'
-import { STATUS_POLL_MS, isInProgress, inProgressIdsToCheck, mergeStatusUpdates } from '@/lib/recipeStatus'
+import { STATUS_POLL_MS, isInProgress, inProgressIdsToCheck, mergeStatusUpdates, recipeCardState } from '@/lib/recipeStatus'
 
 const VIEW_MODE_STORAGE_KEY = 'recipeCatalogueViewMode'
 
@@ -117,7 +117,8 @@ function RejectedCard({ recipe, existingRecipe, onSelect, onDelete, deleting }) 
 }
 
 function FailedCard({ recipe, onRetry, onDelete, deleting, retrying }) {
-  const maxRetries = (recipe.retry_count ?? 0) >= 3
+  // No onRetry when retrying isn't possible (e.g. retry limit reached outside admin mode).
+  const maxRetries = !onRetry
 
   return (
     <Card className="border-destructive/40 opacity-70">
@@ -189,11 +190,11 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     setLoading(true)
 
     // Own recipes at any status + all ready recipes from others
-    const { data, error } = await supabase
-      .from('recipes')
-      .select('*')
-      .or(`status.eq.ready,uploaded_by.eq.${session.user.id}`)
-      .order('created_at', { ascending: false })
+    // Admin mode loads every recipe so admins can see and rescue other people's
+    // failed ones; recipeCardState() decides which of them get a card.
+    let query = supabase.from('recipes').select('*')
+    if (!adminMode) query = query.or(`status.eq.ready,uploaded_by.eq.${session.user.id}`)
+    const { data, error } = await query.order('created_at', { ascending: false })
 
     if (error || !data) {
       setLoading(false)
@@ -234,7 +235,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     }
 
     setLoading(false)
-  }, [session.user.id])
+  }, [session.user.id, adminMode])
 
   useEffect(() => {
     fetchRecipes()
@@ -461,7 +462,11 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   // rejected recipes keep rendering as their existing small cards
   // regardless of viewMode (handled inline in the map below).
   const readyRecipes = displayRecipes.filter(r => r.status === 'ready')
-  const nonReadyCount = displayRecipes.length - readyRecipes.length
+  // Non-ready recipes that actually get a card (spacing above the list view).
+  const nonReadyCount = displayRecipes.filter(r => {
+    const card = recipeCardState(r, { userId: session.user.id, adminMode, watchedIds: reparseWatch })
+    return card && card.kind !== 'ready'
+  }).length
 
   if (loading) {
     return <p className="text-muted-foreground text-sm">Loading recipes…</p>
@@ -493,8 +498,6 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
   const canDelete = (recipe) =>
     recipe.uploaded_by === session?.user?.id || adminMode
-
-  const isOwn = (recipe) => recipe.uploaded_by === session?.user?.id
 
   function getDuplicateId(recipe) {
     const match = (recipe.rejection_reason ?? '').match(/^duplicate:(.+)$/)
@@ -537,20 +540,20 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {displayRecipes.map(recipe => {
-        const { status } = recipe
+        const card = recipeCardState(recipe, { userId: session.user.id, adminMode, watchedIds: reparseWatch })
 
-        if ((status === 'pending' || status === 'processing') && (isOwn(recipe) || reparseWatch.has(recipe.id))) {
+        if (card?.kind === 'pending') {
           return (
             <PendingCard
               key={recipe.id}
               recipe={recipe}
-              onDelete={isOwn(recipe) ? (r) => handleDelete(r) : undefined}
+              onDelete={card.canCancel ? (r) => handleDelete(r) : undefined}
               deleting={deleting === recipe.id}
             />
           )
         }
 
-        if (status === 'rejected' && isOwn(recipe)) {
+        if (card?.kind === 'rejected') {
           const dupeId = getDuplicateId(recipe)
           const existingRecipe = dupeId ? recipes.find(r => r.id === dupeId) : null
           return (
@@ -565,20 +568,24 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
           )
         }
 
-        if (status === 'failed' && isOwn(recipe)) {
+        if (card?.kind === 'failed') {
+          const onRetry =
+            card.retryVia === 'retry-parse' ? handleRetry
+            : card.retryVia === 'admin-reparse' ? (id) => handleReparse(id)
+            : undefined
           return (
             <FailedCard
               key={recipe.id}
               recipe={recipe}
-              onRetry={handleRetry}
+              onRetry={onRetry}
               onDelete={(r) => handleDelete(r)}
               deleting={deleting === recipe.id}
-              retrying={retrying === recipe.id}
+              retrying={retrying === recipe.id || reparsing === recipe.id}
             />
           )
         }
 
-        if (status === 'ready') {
+        if (card?.kind === 'ready') {
           if (viewMode !== 'icon') return null
           const isSelected = selectedIds.includes(recipe.id)
           return (

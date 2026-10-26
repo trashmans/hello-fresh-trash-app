@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ownInProgressIds, inProgressIdsToCheck, mergeStatusUpdates } from '@/lib/recipeStatus'
+import { ownInProgressIds, inProgressIdsToCheck, mergeStatusUpdates, recipeCardState } from '@/lib/recipeStatus'
 
 const ME = 'user-me'
 const recipe = (id, status, uploaded_by = ME, extra = {}) => ({ id, status, uploaded_by, name: null, ...extra })
@@ -85,5 +85,57 @@ describe('mergeStatusUpdates', () => {
     const recipes = [recipe('a', 'processing')]
     mergeStatusUpdates(recipes, [{ id: 'a', status: 'ready' }])
     expect(recipes[0].status).toBe('processing')
+  })
+})
+
+describe('recipeCardState', () => {
+  const OTHER = 'someone-else'
+  const normal = { userId: ME }
+  const admin = { userId: ME, adminMode: true }
+
+  it('shows ready recipes to everyone', () => {
+    expect(recipeCardState(recipe('a', 'ready'), normal)).toEqual({ kind: 'ready' })
+    expect(recipeCardState(recipe('b', 'ready', OTHER), normal)).toEqual({ kind: 'ready' })
+  })
+
+  it('shows my own pending or processing recipe with Cancel', () => {
+    expect(recipeCardState(recipe('a', 'pending'), normal)).toEqual({ kind: 'pending', canCancel: true })
+    expect(recipeCardState(recipe('a', 'processing'), admin)).toEqual({ kind: 'pending', canCancel: true })
+  })
+
+  it("hides someone else's in-progress recipe in normal mode", () => {
+    expect(recipeCardState(recipe('b', 'processing', OTHER), normal)).toBeNull()
+  })
+
+  it("shows someone else's in-progress recipe without Cancel when I re-parsed it or am in admin mode", () => {
+    const watched = { userId: ME, watchedIds: new Set(['b']) }
+    expect(recipeCardState(recipe('b', 'pending', OTHER), watched)).toEqual({ kind: 'pending', canCancel: false })
+    expect(recipeCardState(recipe('b', 'pending', OTHER), admin)).toEqual({ kind: 'pending', canCancel: false })
+  })
+
+  it('lets me retry my own failed recipe through retry-parse', () => {
+    expect(recipeCardState(recipe('a', 'failed', ME, { retry_count: 1 }), normal))
+      .toEqual({ kind: 'failed', retryVia: 'retry-parse' })
+  })
+
+  it('switches to admin-reparse for my own recipe once retry-parse has hit its limit of 3', () => {
+    const usedUp = recipe('a', 'failed', ME, { retry_count: 3 })
+    expect(recipeCardState(usedUp, normal)).toEqual({ kind: 'failed', retryVia: null })
+    expect(recipeCardState(usedUp, admin)).toEqual({ kind: 'failed', retryVia: 'admin-reparse' })
+  })
+
+  it("shows someone else's failed recipe only in admin mode, retried through admin-reparse", () => {
+    const theirs = recipe('b', 'failed', OTHER, { retry_count: 1 })
+    expect(recipeCardState(theirs, normal)).toBeNull()
+    expect(recipeCardState(theirs, admin)).toEqual({ kind: 'failed', retryVia: 'admin-reparse' })
+  })
+
+  it('shows rejected duplicates only to their uploader', () => {
+    expect(recipeCardState(recipe('a', 'rejected'), normal)).toEqual({ kind: 'rejected' })
+    expect(recipeCardState(recipe('b', 'rejected', OTHER), admin)).toBeNull()
+  })
+
+  it('hides recipes with an unknown status', () => {
+    expect(recipeCardState(recipe('a', 'archived'), admin)).toBeNull()
   })
 })
