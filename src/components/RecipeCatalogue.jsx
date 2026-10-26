@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { renderPdfCoverBlob } from '@/lib/pdfCover'
 import RecipeTable from '@/components/RecipeTable'
-import { STATUS_POLL_MS, isInProgress, ownInProgressIds, mergeStatusUpdates } from '@/lib/recipeStatus'
+import { STATUS_POLL_MS, isInProgress, inProgressIdsToCheck, mergeStatusUpdates } from '@/lib/recipeStatus'
 
 const VIEW_MODE_STORAGE_KEY = 'recipeCatalogueViewMode'
 
@@ -63,16 +63,20 @@ function PendingCard({ recipe, onDelete, deleting }) {
         </div>
         <p className="text-sm font-medium truncate">{recipe.filename}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full text-xs text-destructive hover:text-destructive mt-1"
-          disabled={deleting}
-          onClick={() => onDelete(recipe)}
-        >
-          <Trash2 className="h-3 w-3 mr-1" />
-          Cancel
-        </Button>
+        {/* No Cancel for a recipe being re-parsed on someone else's behalf:
+            cancelling deletes the recipe. */}
+        {onDelete && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs text-destructive hover:text-destructive mt-1"
+            disabled={deleting}
+            onClick={() => onDelete(recipe)}
+          >
+            <Trash2 className="h-3 w-3 mr-1" />
+            Cancel
+          </Button>
+        )}
       </CardContent>
     </Card>
   )
@@ -164,6 +168,9 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   const [deleting, setDeleting] = useState(null)
   const [retrying, setRetrying] = useState(null)
   const [reparsing, setReparsing] = useState(null)
+  // Recipes re-parsed this session (admin), so their progress is followed even
+  // when someone else uploaded them. See inProgressIdsToCheck().
+  const [reparseWatch, setReparseWatch] = useState(() => new Set())
   const [backfilling, setBackfilling] = useState(false)
   const [viewMode, setViewModeRaw] = useState(loadViewMode)
 
@@ -272,8 +279,8 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   // pending or processing, re-check their status every STATUS_POLL_MS and when
   // the tab becomes visible again. Stops as soon as nothing is in progress.
   const inProgressKey = useMemo(
-    () => ownInProgressIds(recipes, session.user.id).join(','),
-    [recipes, session.user.id]
+    () => inProgressIdsToCheck(recipes, session.user.id, reparseWatch).join(','),
+    [recipes, session.user.id, reparseWatch]
   )
 
   useEffect(() => {
@@ -381,6 +388,10 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
         body: { recipeId },
       })
       if (error) throw error
+      // Show it as queued straight away and keep checking it until it is ready,
+      // even if someone else uploaded it.
+      setReparseWatch(prev => new Set(prev).add(recipeId))
+      setRecipes(prev => mergeStatusUpdates(prev, [{ id: recipeId, status: 'pending' }]))
       toast.success('Recipe queued for re-parsing.', { id: toastId })
     } catch (err) {
       toast.error(`Re-parse failed: ${err.message ?? 'unknown error'}`, { id: toastId })
@@ -528,12 +539,12 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
         {displayRecipes.map(recipe => {
         const { status } = recipe
 
-        if ((status === 'pending' || status === 'processing') && isOwn(recipe)) {
+        if ((status === 'pending' || status === 'processing') && (isOwn(recipe) || reparseWatch.has(recipe.id))) {
           return (
             <PendingCard
               key={recipe.id}
               recipe={recipe}
-              onDelete={(r) => handleDelete(r)}
+              onDelete={isOwn(recipe) ? (r) => handleDelete(r) : undefined}
               deleting={deleting === recipe.id}
             />
           )
