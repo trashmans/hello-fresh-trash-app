@@ -175,7 +175,7 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `allowed_emails` | Email allowlist — signups rejected at DB level if email not present |
 | `profiles` | Display name and avatar URL per user, synced from Google OAuth on first login; also stores each user's display-unit preferences (`temperature_unit`, `volume_unit`, `mass_unit`) |
 | `user_roles` | `is_admin` flag per user — grants delete-any-recipe in the UI |
-| `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected`; includes parsed fields like `cook_time_minutes`, `difficulty`, `cuisine`, and `protein_source` (Chicken/Beef/Pork/Turkey/Seafood/Vegetarian/Other/null) |
+| `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected`; includes parsed fields like `cook_time_minutes`, `difficulty`, `cuisine`, `protein_source` (Chicken/Beef/Pork/Turkey/Seafood/Vegetarian/Other/null), and per-serving nutrition (`calories_kcal`, `fat_g`, `saturated_fat_g`, `carbs_g`, `sugar_g`, `fibre_g`, `protein_g`, `salt_g` — all nullable; copied from the card when printed, otherwise estimated by Gemini from the ingredient list, with the estimated field names listed in `nutrition_estimated`) |
 | `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only; CASCADE deleted when recipe is deleted |
 | `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
 | `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
@@ -224,6 +224,7 @@ src/
 │   ├── ui/                  # shadcn/ui base components (Button, Card, Input, Sheet, Tabs, Tooltip, …)
 │   ├── ProtectedRoute       # redirects unauthenticated users to login
 │   ├── RecipeCatalogue      # gallery of all ready recipes; cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own
+│   ├── RecipeTable          # sortable list-view alternative to the gallery (name, cook/prep time, difficulty, cuisine, protein, and nutrition columns); AI-estimated nutrition values show as ~value with a sparkle icon, tooltip, and a legend under the table; sort config and comparison logic live in src/lib/recipeSort.js
 │   ├── ShoppingListDrawer   # slide-in drawer: recipe servings steppers (or scale by a target amount of one ingredient instead), merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload
@@ -257,6 +258,7 @@ src/
     ├── staples.js             # weekStartOf(), checkStaple(), planDueStaples() — which staples are due this week (cadence in whole Mon–Sun weeks, skip_next, bonus stock cover via covered_until); dates are plain YYYY-MM-DD strings
     ├── stockup.js             # parseBonusMechanism() reads AH deal labels ("2e GRATIS", "2+1 GRATIS", "3 VOOR 5,00") into a pack group size; planStockUp() buys non-perishable staples on bonus up to max_weeks_stock, rounded to whole deals, and returns the new covered_until
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp); bestUnitInSystem() picks the display unit for an amount within one system
+    ├── recipeSort.js          # RECIPE_TABLE_COLUMNS config (name, times, difficulty, cuisine, protein, and four nutrition columns) + sortRecipes() / compareRecipesByColumn() for RecipeTable.jsx's list view — nulls always sort last in both directions; isEstimated() / formatRecipeCell() mark AI-estimated nutrition values with ~
     └── utils.js              # cn() helper for combining Tailwind classes
 └── tests/                    # Vitest unit tests for src/lib/ (run with `npm test`)
     ├── ingredientMerge.test.js # shopping-list merging: real duplicate examples, plural/synonym names, mixed units, what must stay separate
@@ -267,13 +269,14 @@ src/
     ├── planWeek.test.js       # one realistic week end to end: staples, stock-up, skipped, recipe merging, pantry, unmatched, review flags
     ├── units.test.js          # unit reading, including T vs t
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
-    └── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
+    ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
+    └── recipeSort.test.js     # sortRecipes() / compareRecipesByColumn() — ascending/descending, nulls last, 0 treated as a real value; estimate marking per field
 
 supabase/
 ├── migrations/              # database schema changes (SQL) — deployed automatically via deploy-migrations-preview/prod CI; never run manually after bootstrap
 ├── seed.sql                 # template for seeding initial data (no real emails — swap in locally)
 └── functions/
-    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), tags oven temperatures inline as {{temp:VALUEU}} for unit conversion at render time, classifies protein_source into a fixed category set, writes ingredients + status=ready; Gemini call runs with thinking off, up to 75 s per attempt and one retry on timeout / 429 / 5xx, all within a 120 s budget that keeps the function under its wall-clock limit
+    ├── parse-recipe/        # claims pending recipe, sends PDF to Gemini 2.5 Flash, extracts structured data (handles dual-quantity HelloFresh format), tags oven temperatures inline as {{temp:VALUEU}} for unit conversion at render time, classifies protein_source into a fixed category set, reads per-serving nutrition off the card where printed and estimates the rest from the ingredient list (recording which fields were estimated in nutrition_estimated; values are coerced to numbers and rounded before saving), writes ingredients + status=ready; Gemini call runs with thinking off, up to 75 s per attempt and one retry on timeout / 429 / 5xx, all within a 120 s budget that keeps the function under its wall-clock limit
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     ├── admin-reparse/       # admin-only; clears a ready or failed recipe (any uploader) and sets it back to pending so parse-recipe runs again
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)

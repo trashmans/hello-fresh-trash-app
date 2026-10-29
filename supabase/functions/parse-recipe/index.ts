@@ -75,9 +75,45 @@ interface ParsedRecipe {
   difficulty: string | null
   cuisine: string | null
   protein_source: string | null
+  calories_kcal: number | null
+  fat_g: number | null
+  saturated_fat_g: number | null
+  carbs_g: number | null
+  sugar_g: number | null
+  fibre_g: number | null
+  protein_g: number | null
+  salt_g: number | null
+  nutrition_estimated: string[]
   tags: string[]
   steps: string[]
   ingredients: Ingredient[]
+}
+
+const NUTRITION_KEYS = [
+  'calories_kcal', 'fat_g', 'saturated_fat_g', 'carbs_g',
+  'sugar_g', 'fibre_g', 'protein_g', 'salt_g',
+] as const
+
+// Gemini sometimes returns numbers as strings ("12 g"). A non-number in a
+// numeric column would fail the whole recipe update, so coerce here and
+// drop anything unusable. Calories round to whole numbers, grams to 0.1.
+function cleanNutrition(parsed: ParsedRecipe) {
+  const values: Record<string, number | null> = {}
+  for (const key of NUTRITION_KEYS) {
+    const raw = parsed[key] as unknown
+    const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? parseFloat(raw) : NaN
+    values[key] = Number.isFinite(n) && n >= 0
+      ? (key === 'calories_kcal' ? Math.round(n) : Math.round(n * 10) / 10)
+      : null
+  }
+  // Only keep known field names that actually have a value.
+  const estimated = Array.isArray(parsed.nutrition_estimated)
+    ? [...new Set(parsed.nutrition_estimated)].filter(
+        (k): k is typeof NUTRITION_KEYS[number] =>
+          (NUTRITION_KEYS as readonly string[]).includes(k) && values[k] != null,
+      )
+    : []
+  return { values, estimated }
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -212,6 +248,8 @@ Deno.serve(async (req) => {
   "difficulty": "Easy" or "Medium" or "Hard" or null (translate the source label into one of these English values),
   "cuisine": "cuisine type in English if identifiable (e.g. Mexican, Italian), null otherwise",
   "protein_source": "exactly one of: Chicken, Beef, Pork, Turkey, Seafood, Vegetarian, Other — pick the dish's single dominant protein (e.g. a dish with both chicken and shrimp: pick whichever the dish is centered on; a meat substitute or a dish with no meat/fish: Vegetarian; a protein that doesn't fit any listed category, e.g. lamb or duck: Other), or null if the dish genuinely has no identifiable protein (e.g. a plain side salad or a dessert)",
+  "calories_kcal": numeric or null, "fat_g": numeric or null, "saturated_fat_g": numeric or null, "carbs_g": numeric or null, "sugar_g": numeric or null, "fibre_g": numeric or null, "protein_g": numeric or null, "salt_g": numeric or null — per-serving nutrition, see NUTRITION below,
+  "nutrition_estimated": ["names of the nutrition fields above that you estimated rather than read from the PDF, e.g. \"protein_g\"; empty array if none"],
   "tags": ["array", "of", "tags", "in English"],
   "steps": ["Step 1 text, in English — wrap any oven/cooking temperature using {{temp:VALUEU}}, see TEMPERATURES below", "Step 2 text, in English"],
   "ingredients": [
@@ -230,6 +268,13 @@ DUAL-QUANTITY INGREDIENTS: Some recipes list quantities for multiple serving siz
 - Always extract the FIRST value as "quantity" and the FIRST unit as "unit" (e.g. "4 oz | 8 oz" → quantity: 4, unit: "oz"; "¾ Cup | 1½ Cups" → quantity: 0.75, unit: "Cup").
 - Set "servings" to the serving count that corresponds to the first column (e.g. if the header reads "2-person | 4-person", set servings: 2).
 - Never average the two values or return null just because two quantities are shown.
+
+NUTRITION: Give all eight nutrition fields (calories_kcal, fat_g, saturated_fat_g, carbs_g, sugar_g, fibre_g, protein_g, salt_g) per serving.
+- PRINTED VALUES: if the PDF prints a value (in a nutrition / nutritional values section, or e.g. calories shown next to the cook time), copy it exactly. If it is printed per 100 g or per package, convert it to per serving using the servings count. Fibre may be labelled fiber or dietary fiber. If the PDF gives sodium instead of salt, convert: salt_g = sodium in mg × 2.5 ÷ 1000. These all count as printed, not estimated.
+- ESTIMATED VALUES: for every field the PDF does not print, estimate it per serving from the ingredient list (the first-column quantities and the servings count above), and add that field's name to "nutrition_estimated".
+- Never list a printed value in "nutrition_estimated", and never change a printed value to make it agree with your estimates.
+- Round calories to a whole number and grams to one decimal place. Use plain numbers (e.g. 420, 12.5) with no units in the value itself.
+- Use null only when the PDF doesn't print the value and the ingredient list gives you nothing to estimate from.
 
 TEMPERATURES: Whenever a step mentions an oven or cooking temperature, wrap the numeric value in the step text using this exact marker syntax: {{temp:VALUEU}}, where VALUE is the number as written (digits only, no unit symbol, no comma) and U is F for Fahrenheit or C for Celsius, matching whichever the source PDF states. This lets the app convert and display it in the reader's preferred unit. Examples:
 - "Preheat oven to 425 degrees." → "Preheat oven to {{temp:425F}} degrees."
@@ -332,6 +377,9 @@ Return only valid JSON. No markdown fences, no explanation.`,
       return new Response('OK', { status: 200 })
     }
 
+    const nutrition = cleanNutrition(parsed)
+    console.log(`[${executionId}] nutrition estimated=${nutrition.estimated.join(',') || 'none'}`)
+
     console.log(`[${executionId}] updating recipe to ready`)
     const { error: updateError } = await supabase.from('recipes').update({
       name: parsed.name,
@@ -342,6 +390,8 @@ Return only valid JSON. No markdown fences, no explanation.`,
       difficulty: parsed.difficulty ?? null,
       cuisine: parsed.cuisine ?? null,
       protein_source: parsed.protein_source ?? null,
+      ...nutrition.values,
+      nutrition_estimated: nutrition.estimated,
       tags: parsed.tags ?? [],
       steps: parsed.steps ?? [],
       ingredient_fingerprint: fingerprint,
