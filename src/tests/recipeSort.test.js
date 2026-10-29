@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RECIPE_TABLE_COLUMNS, compareRecipesByColumn, sortRecipes } from '@/lib/recipeSort'
+import { RECIPE_TABLE_COLUMNS, compareRecipesByColumn, sortRecipes, isEstimated, formatRecipeCell } from '@/lib/recipeSort'
 
 const col = (key) => RECIPE_TABLE_COLUMNS.find(c => c.key === key)
 
@@ -54,5 +54,45 @@ describe('sortRecipes', () => {
     const copy = [...recipes]
     sortRecipes(recipes, 'calories_kcal', 'asc')
     expect(recipes).toEqual(copy)
+  })
+})
+
+describe('isEstimated', () => {
+  it('is true only for fields listed in nutrition_estimated that have a value', () => {
+    const r = { protein_g: 32, fat_g: 20, nutrition_estimated: ['protein_g'] }
+    expect(isEstimated(r, 'protein_g')).toBe(true)
+    expect(isEstimated(r, 'fat_g')).toBe(false)
+  })
+
+  it('is false for a missing value even if the field is listed', () => {
+    expect(isEstimated({ fibre_g: null, nutrition_estimated: ['fibre_g'] }, 'fibre_g')).toBe(false)
+  })
+
+  it('is false for rows with no nutrition_estimated list', () => {
+    expect(isEstimated({ protein_g: 32 }, 'protein_g')).toBe(false)
+    expect(isEstimated({ protein_g: 32, nutrition_estimated: null }, 'protein_g')).toBe(false)
+  })
+})
+
+describe('formatRecipeCell', () => {
+  const recipe = {
+    calories_kcal: 650, protein_g: 32.5, fat_g: null, cuisine: 'Mexican',
+    nutrition_estimated: ['protein_g', 'fat_g', 'cuisine'],
+  }
+
+  it('shows a printed value as-is', () => {
+    expect(formatRecipeCell(recipe, col('calories_kcal'))).toEqual({ text: '650 kcal', estimated: false, empty: false })
+  })
+
+  it('prefixes an estimated value with ~', () => {
+    expect(formatRecipeCell(recipe, col('protein_g'))).toEqual({ text: '~32.5 g', estimated: true, empty: false })
+  })
+
+  it('shows a dash, unmarked, for a missing value', () => {
+    expect(formatRecipeCell(recipe, col('fat_g'))).toEqual({ text: '—', estimated: false, empty: true })
+  })
+
+  it('never marks non-nutrition columns as estimated', () => {
+    expect(formatRecipeCell(recipe, col('cuisine'))).toEqual({ text: 'Mexican', estimated: false, empty: false })
   })
 })

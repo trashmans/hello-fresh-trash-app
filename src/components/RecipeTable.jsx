@@ -1,13 +1,9 @@
 import { useState } from 'react'
-import { FileText, ShoppingCart, Trash2, RefreshCw, Loader2, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { FileText, ShoppingCart, Trash2, RefreshCw, Loader2, ArrowUp, ArrowDown, ArrowUpDown, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { RECIPE_TABLE_COLUMNS as COLUMNS, sortRecipes } from '@/lib/recipeSort'
+import { RECIPE_TABLE_COLUMNS as COLUMNS, sortRecipes, formatRecipeCell, isEstimated } from '@/lib/recipeSort'
 
-function formatCell(recipe, column) {
-  const value = recipe[column.key]
-  if (column.format) return column.format(value)
-  return value ?? '—'
-}
+const ESTIMATE_TOOLTIP = 'AI estimate from the ingredient list — not printed on the recipe card'
 
 export default function RecipeTable({
   recipes,
@@ -34,8 +30,12 @@ export default function RecipeTable({
   }
 
   const sortedRecipes = sortRecipes(recipes, sort.column, sort.direction)
+  const anyEstimated = recipes.some(recipe =>
+    COLUMNS.some(column => column.nutrition && isEstimated(recipe, column.key))
+  )
 
   return (
+    <div className="space-y-2">
     <div className="overflow-x-auto rounded-md border border-border">
       <table className="w-full text-sm">
         <thead>
@@ -86,17 +86,28 @@ export default function RecipeTable({
                     )}
                   </div>
                 </td>
-                {COLUMNS.map(column => (
-                  <td key={column.key} className="px-3 py-2 whitespace-nowrap">
-                    {column.key === 'name' ? (
-                      <span className="font-medium">{recipe.name ?? recipe.filename}</span>
-                    ) : (
-                      <span className={formatCell(recipe, column) === '—' ? 'text-muted-foreground' : ''}>
-                        {formatCell(recipe, column)}
-                      </span>
-                    )}
-                  </td>
-                ))}
+                {COLUMNS.map(column => {
+                  if (column.key === 'name') {
+                    return (
+                      <td key={column.key} className="px-3 py-2 whitespace-nowrap">
+                        <span className="font-medium">{recipe.name ?? recipe.filename}</span>
+                      </td>
+                    )
+                  }
+                  const cell = formatRecipeCell(recipe, column)
+                  return (
+                    <td key={column.key} className="px-3 py-2 whitespace-nowrap">
+                      {cell.estimated ? (
+                        <span className="inline-flex items-center gap-1 italic text-muted-foreground" title={ESTIMATE_TOOLTIP}>
+                          {cell.text}
+                          <Sparkles className="h-3 w-3" aria-label="AI estimate" />
+                        </span>
+                      ) : (
+                        <span className={cell.empty ? 'text-muted-foreground' : ''}>{cell.text}</span>
+                      )}
+                    </td>
+                  )
+                })}
                 <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                   {profiles[recipe.uploaded_by]?.display_name ?? 'Unknown'}
                 </td>
@@ -145,6 +156,13 @@ export default function RecipeTable({
           })}
         </tbody>
       </table>
+    </div>
+    {anyEstimated && (
+      <p className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
+        <Sparkles className="h-3 w-3" />
+        <span><span className="italic">~ values</span> are AI estimates from the ingredient list, where the recipe card doesn't print them.</span>
+      </p>
+    )}
     </div>
   )
 }

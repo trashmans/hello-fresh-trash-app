@@ -12,11 +12,30 @@ export const RECIPE_TABLE_COLUMNS = [
   { key: 'difficulty', label: 'Difficulty', type: 'string' },
   { key: 'cuisine', label: 'Cuisine', type: 'string' },
   { key: 'protein_source', label: 'Protein', type: 'string' },
-  { key: 'calories_kcal', label: 'Calories', type: 'number', format: (v) => v != null ? `${v} kcal` : '—' },
-  { key: 'protein_g', label: 'Protein (g)', type: 'number', format: (v) => v != null ? `${v} g` : '—' },
-  { key: 'fat_g', label: 'Fat', type: 'number', format: (v) => v != null ? `${v} g` : '—' },
-  { key: 'fibre_g', label: 'Fibre', type: 'number', format: (v) => v != null ? `${v} g` : '—' },
+  { key: 'calories_kcal', label: 'Calories', type: 'number', nutrition: true, format: (v) => v != null ? `${v} kcal` : '—' },
+  { key: 'protein_g', label: 'Protein (g)', type: 'number', nutrition: true, format: (v) => v != null ? `${v} g` : '—' },
+  { key: 'fat_g', label: 'Fat', type: 'number', nutrition: true, format: (v) => v != null ? `${v} g` : '—' },
+  { key: 'fibre_g', label: 'Fibre', type: 'number', nutrition: true, format: (v) => v != null ? `${v} g` : '—' },
 ]
+
+// True when parse-recipe estimated this nutrition value from the ingredient
+// list instead of reading it off the recipe card (it records those field
+// names in recipes.nutrition_estimated). A missing value is never
+// "estimated", and rows parsed before the column existed have no list.
+export function isEstimated(recipe, key) {
+  return recipe[key] != null &&
+    Array.isArray(recipe.nutrition_estimated) &&
+    recipe.nutrition_estimated.includes(key)
+}
+
+// What a table cell shows: the formatted value, prefixed with "~" when it
+// is an AI estimate. `empty` lets the table mute the "—" placeholder.
+export function formatRecipeCell(recipe, column) {
+  const value = recipe[column.key]
+  const text = column.format ? column.format(value) : (value ?? '—')
+  const estimated = Boolean(column.nutrition) && isEstimated(recipe, column.key)
+  return { text: estimated ? `~${text}` : text, estimated, empty: value == null }
+}
 
 function compareNonNull(av, bv, type) {
   return type === 'number' ? av - bv : String(av).localeCompare(String(bv))
