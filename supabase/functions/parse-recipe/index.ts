@@ -75,6 +75,14 @@ interface ParsedRecipe {
   difficulty: string | null
   cuisine: string | null
   protein_source: string | null
+  calories_kcal: number | null
+  fat_g: number | null
+  saturated_fat_g: number | null
+  carbs_g: number | null
+  sugar_g: number | null
+  fibre_g: number | null
+  protein_g: number | null
+  salt_g: number | null
   tags: string[]
   steps: string[]
   ingredients: Ingredient[]
@@ -212,6 +220,7 @@ Deno.serve(async (req) => {
   "difficulty": "Easy" or "Medium" or "Hard" or null (translate the source label into one of these English values),
   "cuisine": "cuisine type in English if identifiable (e.g. Mexican, Italian), null otherwise",
   "protein_source": "exactly one of: Chicken, Beef, Pork, Turkey, Seafood, Vegetarian, Other — pick the dish's single dominant protein (e.g. a dish with both chicken and shrimp: pick whichever the dish is centered on; a meat substitute or a dish with no meat/fish: Vegetarian; a protein that doesn't fit any listed category, e.g. lamb or duck: Other), or null if the dish genuinely has no identifiable protein (e.g. a plain side salad or a dessert)",
+  "calories_kcal": numeric or null, "fat_g": numeric or null, "saturated_fat_g": numeric or null, "carbs_g": numeric or null, "sugar_g": numeric or null, "fibre_g": numeric or null, "protein_g": numeric or null, "salt_g": numeric or null — per-serving nutrition facts, see NUTRITION below,
   "tags": ["array", "of", "tags", "in English"],
   "steps": ["Step 1 text, in English — wrap any oven/cooking temperature using {{temp:VALUEU}}, see TEMPERATURES below", "Step 2 text, in English"],
   "ingredients": [
@@ -230,6 +239,8 @@ DUAL-QUANTITY INGREDIENTS: Some recipes list quantities for multiple serving siz
 - Always extract the FIRST value as "quantity" and the FIRST unit as "unit" (e.g. "4 oz | 8 oz" → quantity: 4, unit: "oz"; "¾ Cup | 1½ Cups" → quantity: 0.75, unit: "Cup").
 - Set "servings" to the serving count that corresponds to the first column (e.g. if the header reads "2-person | 4-person", set servings: 2).
 - Never average the two values or return null just because two quantities are shown.
+
+NUTRITION: Only fill the nutrition fields (calories_kcal, fat_g, saturated_fat_g, carbs_g, sugar_g, fibre_g, protein_g, salt_g) when the PDF has an explicit nutrition / nutritional values section — never estimate or calculate them from the ingredient list. These are almost always already stated per serving on a HelloFresh-style card; if the section instead states values per 100 g or per package, convert to per serving using the servings count. If you can't tell what basis the numbers are on, leave all eight fields null rather than guessing. Use plain numbers (e.g. 420, 12.5) with no units in the value itself.
 
 TEMPERATURES: Whenever a step mentions an oven or cooking temperature, wrap the numeric value in the step text using this exact marker syntax: {{temp:VALUEU}}, where VALUE is the number as written (digits only, no unit symbol, no comma) and U is F for Fahrenheit or C for Celsius, matching whichever the source PDF states. This lets the app convert and display it in the reader's preferred unit. Examples:
 - "Preheat oven to 425 degrees." → "Preheat oven to {{temp:425F}} degrees."
@@ -342,6 +353,14 @@ Return only valid JSON. No markdown fences, no explanation.`,
       difficulty: parsed.difficulty ?? null,
       cuisine: parsed.cuisine ?? null,
       protein_source: parsed.protein_source ?? null,
+      calories_kcal: parsed.calories_kcal ?? null,
+      fat_g: parsed.fat_g ?? null,
+      saturated_fat_g: parsed.saturated_fat_g ?? null,
+      carbs_g: parsed.carbs_g ?? null,
+      sugar_g: parsed.sugar_g ?? null,
+      fibre_g: parsed.fibre_g ?? null,
+      protein_g: parsed.protein_g ?? null,
+      salt_g: parsed.salt_g ?? null,
       tags: parsed.tags ?? [],
       steps: parsed.steps ?? [],
       ingredient_fingerprint: fingerprint,
