@@ -8,9 +8,15 @@ const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!
 // a newly created Gemini API project gets a 404 for it. Gemini 3.5 Flash-Lite
 // is one of the models Google recommends for new projects: fast, cheap, and
 // able to run with minimal thinking, which suits structured extraction.
-const GEMINI_MODEL = 'gemini-3.5-flash-lite'
-const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
+// When Google reports it overloaded (500 / 503 "high demand"), retrying the
+// same model a few seconds later usually fails again, so the retry goes to
+// Gemini 3.8 Flash instead. Gemini 3 models set thinking with a level, and
+// each model has its own lowest level ('low' is 3.8 Flash's minimum).
+interface GeminiModel { id: string; thinkingLevel: string }
+const GEMINI_PRIMARY: GeminiModel = { id: 'gemini-3.5-flash-lite', thinkingLevel: 'minimal' }
+const GEMINI_FALLBACK: GeminiModel = { id: 'gemini-3.8-flash', thinkingLevel: 'low' }
+const geminiUrl = (model: GeminiModel) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${model.id}:generateContent?key=${GEMINI_API_KEY}`
 
 // Gemini timing. A recipe extraction usually takes 15–25 s; the old fixed 25 s timeout
 // aborted slower ones (e.g. "unexpected: The signal has been aborted"). The whole Edge
@@ -19,45 +25,87 @@ const GEMINI_URL =
 const GEMINI_ATTEMPT_TIMEOUT_MS = 75_000
 const GEMINI_TOTAL_BUDGET_MS = 120_000
 const GEMINI_MIN_RETRY_BUDGET_MS = 20_000
-// Rate limited, server error, overloaded: worth one more try after a short wait.
-const GEMINI_RETRYABLE_STATUS = new Set([429, 500, 503])
+// Rate limited (429) or timed out: one retry on the same model. Overloaded
+// (500 / 503): Google usually refuses within seconds, so keep trying while the
+// budget lasts, alternating models with growing waits (up to 4 attempts).
+const GEMINI_RATE_LIMITED_STATUS = new Set([429])
+const GEMINI_OVERLOADED_STATUS = new Set([500, 503])
+const GEMINI_OVERLOADED_WAITS_MS = [1000, 5000, 15000] // before attempts 2, 3, 4
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-// Calls Gemini at most twice. Retries once after a timeout or a retryable status, if
-// enough of the time budget is left. Returns the last response, or throws the last error.
-async function callGemini(payload: unknown, log: (msg: string) => void): Promise<Response> {
+// Decides the retry after failed attempt number `attempt`: which model, and
+// how long to wait first. null means don't retry (the response is final).
+// outcome is the HTTP status, or 'timeout' when the attempt was aborted.
+function planGeminiRetry(outcome: number | 'timeout', retryAfterHeader: string | null, attempt = 1):
+  { model: GeminiModel; waitMs: number } | null {
+  if (GEMINI_OVERLOADED_STATUS.has(outcome as number)) {
+    const waitMs = GEMINI_OVERLOADED_WAITS_MS[attempt - 1]
+    if (waitMs == null) return null
+    // Attempt 1 used the primary, so even-numbered attempts use the fallback.
+    return { model: (attempt + 1) % 2 === 0 ? GEMINI_FALLBACK : GEMINI_PRIMARY, waitMs }
+  }
+  if (attempt !== 1) return null
+  if (outcome === 'timeout') return { model: GEMINI_PRIMARY, waitMs: 0 }
+  if (GEMINI_RATE_LIMITED_STATUS.has(outcome)) {
+    // Honour a short Retry-After from Gemini, otherwise wait 3 s.
+    const seconds = Number(retryAfterHeader)
+    return { model: GEMINI_PRIMARY, waitMs: seconds > 0 && seconds <= 10 ? seconds * 1000 : 3000 }
+  }
+  return null
+}
+
+// Calls Gemini: the primary model, then retries chosen by planGeminiRetry()
+// while enough of the time budget is left. The payload's
+// thinking setting is filled in per model. Returns the last response, or
+// throws the last error.
+async function callGemini(
+  payload: { generationConfig: Record<string, unknown> } & Record<string, unknown>,
+  log: (msg: string) => void,
+): Promise<Response> {
   const started = Date.now()
   const remaining = () => GEMINI_TOTAL_BUDGET_MS - (Date.now() - started)
+  let model = GEMINI_PRIMARY
 
   for (let attempt = 1; ; attempt++) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, remaining()))
+    const body = {
+      ...payload,
+      generationConfig: { ...payload.generationConfig, thinkingConfig: { thinkingLevel: model.thinkingLevel } },
+    }
+    let retry: { model: GeminiModel; waitMs: number } | null = null
     try {
-      const res = await fetch(GEMINI_URL, {
+      const res = await fetch(geminiUrl(model), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
         signal: controller.signal,
       })
-      if (attempt === 1 && GEMINI_RETRYABLE_STATUS.has(res.status) && remaining() > GEMINI_MIN_RETRY_BUDGET_MS) {
-        await res.body?.cancel()
-        // Honour a short Retry-After from Gemini, otherwise wait 3 s.
-        const retryAfterSeconds = Number(res.headers.get('retry-after'))
-        const waitMs = retryAfterSeconds > 0 && retryAfterSeconds <= 10 ? retryAfterSeconds * 1000 : 3000
-        log(`Gemini status=${res.status} on attempt 1, retrying in ${waitMs} ms`)
-        await sleep(waitMs)
-        continue
+      if (!res.ok) {
+        const planned = planGeminiRetry(res.status, res.headers.get('retry-after'), attempt)
+        // Only retry if, after the wait, there's still time for a real attempt.
+        if (planned && remaining() - planned.waitMs > GEMINI_MIN_RETRY_BUDGET_MS) retry = planned
       }
-      return res
+      if (!retry) {
+        log(`Gemini model=${model.id} attempt=${attempt} status=${res.status}`)
+        return res
+      }
+      await res.body?.cancel()
+      log(`Gemini status=${res.status} from ${model.id} on attempt ${attempt}, retrying with ${retry.model.id} in ${retry.waitMs} ms`)
     } catch (err) {
       if (attempt === 1 && controller.signal.aborted && remaining() > GEMINI_MIN_RETRY_BUDGET_MS) {
-        log(`Gemini timed out on attempt 1 after ${Date.now() - started} ms, retrying`)
-        continue
+        retry = planGeminiRetry('timeout', null)
+        log(`Gemini ${model.id} timed out on attempt 1 after ${Date.now() - started} ms, retrying`)
+      } else {
+        throw err
       }
-      throw err
     } finally {
       clearTimeout(timer)
+    }
+    if (retry) {
+      await sleep(retry.waitMs)
+      model = retry.model
     }
   }
 }
@@ -289,10 +337,8 @@ Return only valid JSON. No markdown fences, no explanation.`,
       }],
       generationConfig: {
         response_mime_type: 'application/json',
-        // Extraction needs little reasoning; Gemini 3 models set thinking with a
-        // level instead of a token budget, and 'minimal' (Flash-Lite's lowest)
-        // keeps responses fast.
-        thinkingConfig: { thinkingLevel: 'minimal' },
+        // thinkingConfig is added per model by callGemini() (lowest level each
+        // model allows — extraction needs little reasoning).
       },
     }
 
@@ -309,12 +355,21 @@ Return only valid JSON. No markdown fences, no explanation.`,
     }
 
     const geminiResult = await geminiRes.json()
-    const rawText: string | undefined =
-      geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text
+    const candidate = geminiResult?.candidates?.[0]
+    // Gemini 3 models can split a reply into several parts (and mark thinking
+    // parts with thought: true), so join every non-thought text part instead
+    // of reading only the first one.
+    const rawText: string = (candidate?.content?.parts ?? [])
+      .filter((part: { text?: unknown; thought?: boolean }) => typeof part?.text === 'string' && !part.thought)
+      .map((part: { text: string }) => part.text)
+      .join('')
 
-    if (!rawText) {
-      console.log(`[${executionId}] Gemini returned empty response`)
-      await setFailed('gemini_empty_response')
+    if (!rawText.trim()) {
+      // finishReason (e.g. MAX_TOKENS, SAFETY) or promptFeedback.blockReason
+      // says why there was no text; keep it in the failure reason.
+      const why = candidate?.finishReason ?? geminiResult?.promptFeedback?.blockReason ?? 'unknown'
+      console.log(`[${executionId}] Gemini returned empty response finishReason=${why} parts=${candidate?.content?.parts?.length ?? 0}`)
+      await setFailed(`gemini_empty_response:${why}`)
       return new Response('OK', { status: 200 })
     }
 
