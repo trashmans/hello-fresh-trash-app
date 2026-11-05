@@ -4,8 +4,13 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!
 
+// gemini-2.5-flash is only served to Google accounts that used it before, so
+// a newly created Gemini API project gets a 404 for it. Gemini 3.5 Flash-Lite
+// is one of the models Google recommends for new projects: fast, cheap, and
+// able to run with minimal thinking, which suits structured extraction.
+const GEMINI_MODEL = 'gemini-3.5-flash-lite'
 const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
 
 // Gemini timing. A recipe extraction usually takes 15–25 s; the old fixed 25 s timeout
 // aborted slower ones (e.g. "unexpected: The signal has been aborted"). The whole Edge
@@ -66,6 +71,12 @@ interface Ingredient {
   display_order: number
 }
 
+const NUTRITION_KEYS = [
+  'calories_kcal', 'fat_g', 'saturated_fat_g', 'carbs_g',
+  'sugar_g', 'fibre_g', 'protein_g', 'salt_g',
+] as const
+type NutritionKey = typeof NUTRITION_KEYS[number]
+
 interface ParsedRecipe {
   name: string
   source_name: string | null
@@ -75,9 +86,38 @@ interface ParsedRecipe {
   difficulty: string | null
   cuisine: string | null
   protein_source: string | null
+  nutrition_printed?: Partial<Record<NutritionKey, unknown>> | null
+  nutrition_estimate?: Partial<Record<NutritionKey, unknown>> | null
   tags: string[]
   steps: string[]
   ingredients: Ingredient[]
+}
+
+// Gemini sometimes returns numbers as strings ("12 g"). A non-number in a
+// numeric column would fail the whole recipe update, so coerce here and
+// drop anything unusable. Calories round to whole numbers, grams to 0.1.
+function toNutritionNumber(raw: unknown, key: NutritionKey): number | null {
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? parseFloat(raw) : NaN
+  if (!Number.isFinite(n) || n < 0) return null
+  return key === 'calories_kcal' ? Math.round(n) : Math.round(n * 10) / 10
+}
+
+// Gemini returns two separate objects: values read off the card
+// (nutrition_printed) and its own estimate of every value
+// (nutrition_estimate). We use the printed value where there is one and the
+// estimate otherwise. Which values count as estimates is decided HERE, not
+// by Gemini: asking it to list the fields it guessed proved unreliable (it
+// sometimes estimated values and left the list empty).
+function mergeNutrition(parsed: ParsedRecipe) {
+  const values = {} as Record<NutritionKey, number | null>
+  const estimated: NutritionKey[] = []
+  for (const key of NUTRITION_KEYS) {
+    const printed = toNutritionNumber(parsed.nutrition_printed?.[key], key)
+    const estimate = toNutritionNumber(parsed.nutrition_estimate?.[key], key)
+    values[key] = printed ?? estimate
+    if (printed == null && estimate != null) estimated.push(key)
+  }
+  return { values, estimated }
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -212,6 +252,8 @@ Deno.serve(async (req) => {
   "difficulty": "Easy" or "Medium" or "Hard" or null (translate the source label into one of these English values),
   "cuisine": "cuisine type in English if identifiable (e.g. Mexican, Italian), null otherwise",
   "protein_source": "exactly one of: Chicken, Beef, Pork, Turkey, Seafood, Vegetarian, Other — pick the dish's single dominant protein (e.g. a dish with both chicken and shrimp: pick whichever the dish is centered on; a meat substitute or a dish with no meat/fish: Vegetarian; a protein that doesn't fit any listed category, e.g. lamb or duck: Other), or null if the dish genuinely has no identifiable protein (e.g. a plain side salad or a dessert)",
+  "nutrition_printed": { "calories_kcal": numeric or null, "fat_g": numeric or null, "saturated_fat_g": numeric or null, "carbs_g": numeric or null, "sugar_g": numeric or null, "fibre_g": numeric or null, "protein_g": numeric or null, "salt_g": numeric or null } — only values printed on the PDF, see NUTRITION below,
+  "nutrition_estimate": { the same eight keys, numeric or null } — your own estimate from the ingredients, see NUTRITION below,
   "tags": ["array", "of", "tags", "in English"],
   "steps": ["Step 1 text, in English — wrap any oven/cooking temperature using {{temp:VALUEU}}, see TEMPERATURES below", "Step 2 text, in English"],
   "ingredients": [
@@ -231,6 +273,11 @@ DUAL-QUANTITY INGREDIENTS: Some recipes list quantities for multiple serving siz
 - Set "servings" to the serving count that corresponds to the first column (e.g. if the header reads "2-person | 4-person", set servings: 2).
 - Never average the two values or return null just because two quantities are shown.
 
+NUTRITION: Fill two separate objects, both per serving, each with the same eight keys (calories_kcal, fat_g, saturated_fat_g, carbs_g, sugar_g, fibre_g, protein_g, salt_g).
+- "nutrition_printed": ONLY values actually printed on the PDF (in a nutrition / nutritional values section, or e.g. calories shown next to the cook time). If a value is printed per 100 g or per package, convert it to per serving using the servings count. Fibre may be labelled fiber or dietary fiber. If the PDF gives sodium instead of salt, convert: salt_g = sodium in mg × 2.5 ÷ 1000. Every key that is not printed on the PDF must be null in this object — never put an estimate here. Most recipe cards print only calories, so most keys here will be null.
+- "nutrition_estimate": your own estimate of ALL eight values per serving, worked out from the ingredient list (the first-column quantities and the servings count above), whether or not the PDF prints them. Use null only if the ingredient list gives you nothing to estimate from.
+- Round calories to a whole number and grams to one decimal place. Use plain numbers (e.g. 420, 12.5) with no units in the value itself.
+
 TEMPERATURES: Whenever a step mentions an oven or cooking temperature, wrap the numeric value in the step text using this exact marker syntax: {{temp:VALUEU}}, where VALUE is the number as written (digits only, no unit symbol, no comma) and U is F for Fahrenheit or C for Celsius, matching whichever the source PDF states. This lets the app convert and display it in the reader's preferred unit. Examples:
 - "Preheat oven to 425 degrees." → "Preheat oven to {{temp:425F}} degrees."
 - A step originally in Celsius, after translating to English: "Preheat the oven to 220°C." → "Preheat the oven to {{temp:220C}}."
@@ -242,9 +289,10 @@ Return only valid JSON. No markdown fences, no explanation.`,
       }],
       generationConfig: {
         response_mime_type: 'application/json',
-        // Extraction needs no reasoning step; turning Gemini 2.5 Flash's "thinking" off
-        // makes responses much faster.
-        thinkingConfig: { thinkingBudget: 0 },
+        // Extraction needs little reasoning; Gemini 3 models set thinking with a
+        // level instead of a token budget, and 'minimal' (Flash-Lite's lowest)
+        // keeps responses fast.
+        thinkingConfig: { thinkingLevel: 'minimal' },
       },
     }
 
@@ -332,6 +380,9 @@ Return only valid JSON. No markdown fences, no explanation.`,
       return new Response('OK', { status: 200 })
     }
 
+    const nutrition = mergeNutrition(parsed)
+    console.log(`[${executionId}] nutrition estimated=${nutrition.estimated.join(',') || 'none'}`)
+
     console.log(`[${executionId}] updating recipe to ready`)
     const { error: updateError } = await supabase.from('recipes').update({
       name: parsed.name,
@@ -342,6 +393,8 @@ Return only valid JSON. No markdown fences, no explanation.`,
       difficulty: parsed.difficulty ?? null,
       cuisine: parsed.cuisine ?? null,
       protein_source: parsed.protein_source ?? null,
+      ...nutrition.values,
+      nutrition_estimated: nutrition.estimated,
       tags: parsed.tags ?? [],
       steps: parsed.steps ?? [],
       ingredient_fingerprint: fingerprint,
