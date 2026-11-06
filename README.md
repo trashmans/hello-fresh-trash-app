@@ -287,6 +287,7 @@ src/
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
+    ├── accountTokens.test.js  # single-flight refresh: rotated token saved before use and kept if the action fails, two runs at once, relink_needed on auth, other failures change nothing, no tokens in audit events
     ├── ahAdapter.test.js      # AH response checks, list lines (never removes), kill switch, retries/backoff/timeouts, request spacing, per-line outcomes, fake adapter, adapter choice per environment
     ├── tokenCrypto.test.js    # AH token envelope encryption: round trip, wrong key / account / swapped key / tampering all fail, fresh IVs, reseal after rotation, V1 → V2 key rotation
     └── recipeSort.test.js     # sortRecipes() / compareRecipesByColumn() — ascending/descending, nulls last, 0 treated as a real value; estimate marking per field
@@ -302,7 +303,8 @@ supabase/
     ├── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
     └── _shared/             # code shared by functions (not deployed as a function itself)
         ├── retailer/        # retailer adapter (ADR 0004): one interface (getAccessToken, searchProducts, getPromotions, readList, writeListLines) for every retailer
-        │   ├── types.ts       # retailer-neutral types + RetailerError codes (disabled, auth, http, timeout, schema, invalid, unsupported)
+        │   ├── accountTokens.ts # withAccessToken(): single-flight refresh (ADR 0003/0007) — lock the row, refresh, re-encrypt the rotated token, audit and commit before the access token is used; AH refusing the token marks the account relink_needed
+        │   ├── types.ts       # retailer-neutral types + RetailerError codes (disabled, auth, http, timeout, schema, invalid, unsupported, not_linked)
         │   ├── ahSchema.ts    # checks AH responses and maps them to our types (schema error instead of wrong data); builds list PATCH items, refusing quantity < 1 (never removes)
         │   ├── ahAdapter.ts   # real AH mobile API: timeouts, retry with backoff on 429/5xx, spaced requests, one PATCH per line, kill switch
         │   ├── fakeAdapter.ts # made-up products and an in-memory list for preview/local — never touches AH

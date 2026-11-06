@@ -9,6 +9,7 @@ export type RetailerErrorCode =
   | 'schema'      // the response no longer has the shape we expect — stop, don't guess
   | 'invalid'     // we were asked to send something unsafe (e.g. quantity 0 = remove)
   | 'unsupported' // no adapter for this retailer
+  | 'not_linked'  // the household has not linked this retailer
 
 export class RetailerError extends Error {
   code: RetailerErrorCode
