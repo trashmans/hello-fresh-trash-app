@@ -54,7 +54,7 @@ The human runs all npm commands. After code changes, prompt them to run the appr
 
 ## CI/CD
 
-Nine GitHub Actions workflows, each frontend/migrations/functions area split into its own preview and production file:
+Ten GitHub Actions workflows, each frontend/migrations/functions area split into its own preview and production file:
 
 - `deploy-frontend-preview.yml` — human PRs to `main`. Runs `vercel build` and deploys to preview. Posts preview URL as a PR comment.
 - `deploy-frontend-prod.yml` — pushes to `main`. Runs `vercel build --prod` and deploys to production.
@@ -63,6 +63,7 @@ Nine GitHub Actions workflows, each frontend/migrations/functions area split int
 - `cleanup-migrations-preview.yml` — PRs touching `supabase/migrations/**` closed without merging. Clears that PR's migration history rows on preview so they don't block later PRs. Doesn't undo schema changes — see README > Preview drift.
 - `dependabot-build.yml` — Dependabot PRs only. Build check with no secrets.
 - `test.yml` — all PRs to `main`, including Dependabot. Runs `npm test` with no secrets. Required status check on `main`, so a failing test blocks the merge.
+- `secret-scan.yml` — all PRs to `main`, pushes to `main`, and manual runs. Scans commits for keys and tokens with gitleaks (read-only, no secrets). Never commit keys; if gitleaks flags one, rotate it at the provider before anything else.
 
 Secrets (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`) are stored in GitHub repo settings. Never hardcode them.
 

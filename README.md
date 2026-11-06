@@ -35,8 +35,8 @@ The app uses three platforms, each with a different job:
 |---|---|---|
 | **GitHub** | Source control and CI/CD | The code, git history, pull requests, and GitHub Actions workflows that trigger deploys |
 | **Vercel** | Frontend hosting | The compiled app that users visit. Every PR gets a preview URL. Merging to `main` updates the live site. |
-| **Supabase (prod)** | Production backend | Real user accounts, real data. Connected only to production Vercel deploys. |
-| **Supabase (preview)** | Preview backend | Isolated environment for PR previews and local dev. No real data — safe to wipe. |
+| **Supabase (prod)** | Production backend | Real user accounts, real data. Connected only to production Vercel deploys. Region: West EU (Ireland). |
+| **Supabase (preview)** | Preview backend | Isolated environment for PR previews and local dev. No real data — safe to wipe. Region: West EU (Ireland). |
 
 GitHub is where you *build* the app, Vercel is where users *visit* the app, and Supabase is where the app *stores its data*.
 
@@ -83,7 +83,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 |---|---|
 | **npm** | Package manager. Installs and manages all third-party libraries. |
 | **Vite** | Build tool and local dev server. Compiles JSX and serves the app locally. `npm run build` compiles everything into `dist/` for deployment. |
-| **GitHub Actions** | CI/CD pipeline. Nine workflows cover frontend, database migration, and edge function deploys (each split into preview/production), preview migration cleanup, dependency bump checks, and unit tests on every PR. |
+| **GitHub Actions** | CI/CD pipeline. Ten workflows cover frontend, database migration, and edge function deploys (each split into preview/production), preview migration cleanup, dependency bump checks, unit tests on every PR, and secret scanning. |
 | **Vercel CLI** | The tool GitHub Actions uses to build and deploy to Vercel. All output is logged in GitHub Actions — no Vercel dashboard needed to debug failures. |
 | **Vercel** | Frontend hosting. Supports private repositories, provides a preview URL for every PR, and serves clean `/home` style URLs. |
 | **Dependabot** | Automated dependency updates. Once a month, opens one grouped PR each for npm and GitHub Actions minor/patch bumps. Every major bump gets its own PR so breaking changes stand out. Security fixes arrive immediately, outside this schedule (requires **Dependabot security updates** enabled in repo settings). |
@@ -96,6 +96,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 | `deploy-frontend-prod.yml` | Pushes to `main` | Vercel production build and deploy. |
 | `dependabot-build.yml` | Dependabot PRs only | Build check with no secrets. Confirms the bump doesn't break the build. |
 | `test.yml` | All PRs to `main`, including Dependabot | Runs `npm test` (Vitest) with no secrets. A required status check on `main`, so a failing test blocks the merge. |
+| `secret-scan.yml` | All PRs to `main`, pushes to `main`, and manual runs | Scans commits for API keys and tokens with gitleaks (read-only, no secrets). A manual run (Actions → Secret Scan → Run workflow) scans the whole history. |
 | `deploy-migrations-preview.yml` | PRs touching `supabase/migrations/**` | `supabase db push` to the preview Supabase project. |
 | `deploy-migrations-prod.yml` | Pushes to `main` touching `supabase/migrations/**` | `supabase db push` to the production Supabase project. |
 | `cleanup-migrations-preview.yml` | PRs touching `supabase/migrations/**` closed **without** merging | Removes that PR's migrations from the preview project's history table so they don't block later PRs. See [Preview drift](#preview-drift). |
@@ -163,6 +164,16 @@ The email allowlist is enforced at two layers:
 2. **Client-side check** — `AuthContext` signs out any authenticated session where the email is not on the list.
 
 The Supabase anon key is the only credential the browser ever sees. The service role key (which bypasses RLS) exists only as a Supabase-managed secret inside Edge Functions and never touches the frontend.
+
+#### Keeping secrets out of the repo
+
+- **Push protection** (GitHub repo Settings → Code security) blocks a push that contains a recognised API key or token, before it reaches GitHub.
+- **`secret-scan.yml`** runs gitleaks on every PR and on `main` as a second line of defence, including generic-looking keys GitHub's list may miss.
+- If a key is ever pushed, **rotate it at the provider first** (create a new key, delete the old one); removing the commit is not enough, because a public repo may already have been copied.
+
+#### Data location
+
+Both Supabase projects (production and preview) run in **West EU (Ireland)**, so the database, storage and Edge Functions stay in the EU. Vercel and Gemini are processors outside Supabase — see `docs/privacy/record-of-processing.md`.
 
 ---
 

@@ -29,7 +29,7 @@ Shopping data can reveal sensitive traits by inference (diet, religion, health, 
 
 | Party | Role | Data | Location |
 |---|---|---|---|
-| Supabase | Processor: database, auth, storage, Edge Functions | All app data | EU region |
+| Supabase | Processor: database, auth, storage, Edge Functions | All app data | EU: West EU (Ireland), both production and preview |
 | Vercel | Processor: frontend hosting | Request metadata (IP, user agent) | Global edge network |
 | Google | Sign-in provider | Name, email, picture at sign-in | Global |
 | Google (Gemini API) | Processor: recipe PDF parsing | Uploaded recipe PDFs | Global |
