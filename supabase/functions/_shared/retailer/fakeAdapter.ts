@@ -5,6 +5,7 @@
 // public repo holds no recorded personal data.
 
 import { buildListPatchItems } from './ahSchema.ts'
+import { RetailerError } from './types.ts'
 import type { ListLine, RetailerAdapter, RetailerListItem, RetailerProduct } from './types.ts'
 
 export const FAKE_PRODUCTS: RetailerProduct[] = [
@@ -38,6 +39,12 @@ export function createFakeAdapter(opts: FakeAdapterOptions = {}): RetailerAdapte
     kind: 'fake',
     retailer: 'ah',
     enabled: true,
+
+    async exchangeLoginCode(code) {
+      if (typeof code !== 'string' || !code) throw new RetailerError('invalid', 'No login code')
+      tokenCounter++
+      return { accessToken: `fake-access-${tokenCounter}`, refreshToken: `fake-refresh-${tokenCounter}`, expiresInSeconds: 7 * 24 * 3600 }
+    },
 
     async getAccessToken() {
       tokenCounter++

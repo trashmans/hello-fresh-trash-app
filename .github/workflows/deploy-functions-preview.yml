@@ -38,5 +38,6 @@ jobs:
           supabase functions deploy cleanup-recipes --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
           supabase functions deploy admin-reparse --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
           supabase functions deploy admin-set-cover --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy link-account --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

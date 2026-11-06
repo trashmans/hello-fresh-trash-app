@@ -98,22 +98,31 @@ export function createAhAdapter(opts: AhAdapterOptions): RetailerAdapter {
     throw lastError!
   }
 
+  // AH answers an expired login code or a dead refresh token with 400 ("Incorrect request"), not 401.
+  async function tokenCall(path: string, body: Record<string, string>) {
+    try {
+      return parseTokenResponse(await request('POST', path, { body }))
+    } catch (err) {
+      if (err instanceof RetailerError && err.code === 'http' && err.status === 400) {
+        throw new RetailerError('auth', err.message, 400)
+      }
+      throw err
+    }
+  }
+
   return {
     kind: 'ah',
     retailer: 'ah',
     enabled,
 
+    async exchangeLoginCode(code) {
+      if (typeof code !== 'string' || !code) throw new RetailerError('invalid', 'No login code')
+      return tokenCall('/mobile-auth/v1/auth/token', { clientId: CLIENT_ID, code })
+    },
+
     async getAccessToken(refreshToken) {
       if (typeof refreshToken !== 'string' || !refreshToken) throw new RetailerError('invalid', 'No refresh token')
-      try {
-        return parseTokenResponse(await request('POST', '/mobile-auth/v1/auth/token/refresh', { body: { clientId: CLIENT_ID, refreshToken } }))
-      } catch (err) {
-        // AH answers a dead refresh token with 400 ("Incorrect request"), not 401.
-        if (err instanceof RetailerError && err.code === 'http' && err.status === 400) {
-          throw new RetailerError('auth', err.message, 400)
-        }
-        throw err
-      }
+      return tokenCall('/mobile-auth/v1/auth/token/refresh', { clientId: CLIENT_ID, refreshToken })
     },
 
     async searchProducts(accessToken, query, size = 10) {
