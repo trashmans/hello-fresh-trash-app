@@ -37,20 +37,23 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 // Decides the retry after failed attempt number `attempt`: which model, and
 // how long to wait first. null means don't retry (the response is final).
 // outcome is the HTTP status, or 'timeout' when the attempt was aborted.
-function planGeminiRetry(outcome: number | 'timeout', retryAfterHeader: string | null, attempt = 1):
-  { model: GeminiModel; waitMs: number } | null {
+const otherModel = (model: GeminiModel) => model.id === GEMINI_PRIMARY.id ? GEMINI_FALLBACK : GEMINI_PRIMARY
+
+function planGeminiRetry(
+  outcome: number | 'timeout', retryAfterHeader: string | null, attempt = 1, current: GeminiModel = GEMINI_PRIMARY,
+): { model: GeminiModel; waitMs: number } | null {
   if (GEMINI_OVERLOADED_STATUS.has(outcome as number)) {
     const waitMs = GEMINI_OVERLOADED_WAITS_MS[attempt - 1]
     if (waitMs == null) return null
-    // Attempt 1 used the primary, so even-numbered attempts use the fallback.
-    return { model: (attempt + 1) % 2 === 0 ? GEMINI_FALLBACK : GEMINI_PRIMARY, waitMs }
+    // Each retry switches to the other model.
+    return { model: otherModel(current), waitMs }
   }
   if (attempt !== 1) return null
-  if (outcome === 'timeout') return { model: GEMINI_PRIMARY, waitMs: 0 }
+  if (outcome === 'timeout') return { model: current, waitMs: 0 }
   if (GEMINI_RATE_LIMITED_STATUS.has(outcome)) {
     // Honour a short Retry-After from Gemini, otherwise wait 3 s.
     const seconds = Number(retryAfterHeader)
-    return { model: GEMINI_PRIMARY, waitMs: seconds > 0 && seconds <= 10 ? seconds * 1000 : 3000 }
+    return { model: current, waitMs: seconds > 0 && seconds <= 10 ? seconds * 1000 : 3000 }
   }
   return null
 }
@@ -62,10 +65,13 @@ function planGeminiRetry(outcome: number | 'timeout', retryAfterHeader: string |
 async function callGemini(
   payload: { generationConfig: Record<string, unknown> } & Record<string, unknown>,
   log: (msg: string) => void,
+  // `used` is filled in with the model that gave the returned response.
+  opts: { model?: GeminiModel; budgetMs?: number; used?: { model?: GeminiModel } } = {},
 ): Promise<Response> {
   const started = Date.now()
-  const remaining = () => GEMINI_TOTAL_BUDGET_MS - (Date.now() - started)
-  let model = GEMINI_PRIMARY
+  const budgetMs = opts.budgetMs ?? GEMINI_TOTAL_BUDGET_MS
+  const remaining = () => budgetMs - (Date.now() - started)
+  let model = opts.model ?? GEMINI_PRIMARY
 
   for (let attempt = 1; ; attempt++) {
     const controller = new AbortController()
@@ -83,19 +89,20 @@ async function callGemini(
         signal: controller.signal,
       })
       if (!res.ok) {
-        const planned = planGeminiRetry(res.status, res.headers.get('retry-after'), attempt)
+        const planned = planGeminiRetry(res.status, res.headers.get('retry-after'), attempt, model)
         // Only retry if, after the wait, there's still time for a real attempt.
         if (planned && remaining() - planned.waitMs > GEMINI_MIN_RETRY_BUDGET_MS) retry = planned
       }
       if (!retry) {
         log(`Gemini model=${model.id} attempt=${attempt} status=${res.status}`)
+        if (opts.used) opts.used.model = model
         return res
       }
       await res.body?.cancel()
       log(`Gemini status=${res.status} from ${model.id} on attempt ${attempt}, retrying with ${retry.model.id} in ${retry.waitMs} ms`)
     } catch (err) {
       if (attempt === 1 && controller.signal.aborted && remaining() > GEMINI_MIN_RETRY_BUDGET_MS) {
-        retry = planGeminiRetry('timeout', null)
+        retry = planGeminiRetry('timeout', null, attempt, model)
         log(`Gemini ${model.id} timed out on attempt 1 after ${Date.now() - started} ms, retrying`)
       } else {
         throw err
@@ -166,6 +173,23 @@ function mergeNutrition(parsed: ParsedRecipe) {
     if (printed == null && estimate != null) estimated.push(key)
   }
   return { values, estimated }
+}
+
+// Gemini 3 models can split a reply into several parts (and mark thinking
+// parts with thought: true), so join every non-thought text part instead of
+// reading only the first one. When there's no text, `why` is Gemini's
+// finishReason (e.g. RECITATION, MAX_TOKENS, SAFETY) or the prompt's
+// blockReason, kept for the failure reason.
+function readGeminiReply(result: any): { text: string; why: string; parts: number } {
+  const candidate = result?.candidates?.[0]
+  const parts = candidate?.content?.parts ?? []
+  const text: string = parts
+    .filter((part: { text?: unknown; thought?: boolean }) => typeof part?.text === 'string' && !part.thought)
+    .map((part: { text: string }) => part.text)
+    .join('')
+    .trim()
+  const why = candidate?.finishReason ?? result?.promptFeedback?.blockReason ?? 'unknown'
+  return { text, why, parts: parts.length }
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -303,7 +327,7 @@ Deno.serve(async (req) => {
   "nutrition_printed": { "calories_kcal": numeric or null, "fat_g": numeric or null, "saturated_fat_g": numeric or null, "carbs_g": numeric or null, "sugar_g": numeric or null, "fibre_g": numeric or null, "protein_g": numeric or null, "salt_g": numeric or null } — only values printed on the PDF, see NUTRITION below,
   "nutrition_estimate": { the same eight keys, numeric or null } — your own estimate from the ingredients, see NUTRITION below,
   "tags": ["array", "of", "tags", "in English"],
-  "steps": ["Step 1 text, in English — wrap any oven/cooking temperature using {{temp:VALUEU}}, see TEMPERATURES below", "Step 2 text, in English"],
+  "steps": ["Step 1, in English and in your own words — see STEPS below; wrap any oven/cooking temperature using {{temp:VALUEU}}, see TEMPERATURES below", "Step 2, in English and in your own words"],
   "ingredients": [
     {
       "name": "ingredient name only, in English (e.g. chicken breast, garlic clove)",
@@ -326,6 +350,8 @@ NUTRITION: Fill two separate objects, both per serving, each with the same eight
 - "nutrition_estimate": your own estimate of ALL eight values per serving, worked out from the ingredient list (the first-column quantities and the servings count above), whether or not the PDF prints them. Use null only if the ingredient list gives you nothing to estimate from.
 - Round calories to a whole number and grams to one decimal place. Use plain numbers (e.g. 420, 12.5) with no units in the value itself.
 
+STEPS: Write each step in your own words rather than copying the card's sentences. Keep every quantity, time, temperature, ingredient and the order of steps exactly as on the card, and keep each step about as detailed as the original; only the wording should change. Don't merge, split or skip steps.
+
 TEMPERATURES: Whenever a step mentions an oven or cooking temperature, wrap the numeric value in the step text using this exact marker syntax: {{temp:VALUEU}}, where VALUE is the number as written (digits only, no unit symbol, no comma) and U is F for Fahrenheit or C for Celsius, matching whichever the source PDF states. This lets the app convert and display it in the reader's preferred unit. Examples:
 - "Preheat oven to 425 degrees." → "Preheat oven to {{temp:425F}} degrees."
 - A step originally in Celsius, after translating to English: "Preheat the oven to 220°C." → "Preheat the oven to {{temp:220C}}."
@@ -342,34 +368,37 @@ Return only valid JSON. No markdown fences, no explanation.`,
       },
     }
 
+    const log = (msg: string) => console.log(`[${executionId}] ${msg}`)
     const geminiStarted = Date.now()
-    const geminiRes = await callGemini(geminiPayload, (msg) => console.log(`[${executionId}] ${msg}`))
-    console.log(`[${executionId}] Gemini took ${Date.now() - geminiStarted} ms`)
+    const used: { model?: GeminiModel } = {}
+    let geminiRes = await callGemini(geminiPayload, log, { used })
+    let reply = geminiRes.ok ? readGeminiReply(await geminiRes.json()) : null
 
-    console.log(`[${executionId}] Gemini response status=${geminiRes.status}`)
-    if (!geminiRes.ok) {
+    // RECITATION: Gemini withheld its answer because the output was too close
+    // to published text (recipe steps copied from the card). Its filter isn't
+    // deterministic, so retry once on the model that didn't give that reply,
+    // if there's time left.
+    const timeLeft = GEMINI_TOTAL_BUDGET_MS - (Date.now() - geminiStarted)
+    if (reply && !reply.text && reply.why === 'RECITATION' && timeLeft > GEMINI_MIN_RETRY_BUDGET_MS) {
+      const retryModel = otherModel(used.model ?? GEMINI_PRIMARY)
+      log(`Gemini withheld reply (RECITATION) from ${used.model?.id}, retrying once on ${retryModel.id}`)
+      geminiRes = await callGemini(geminiPayload, log, { model: retryModel, budgetMs: timeLeft })
+      reply = geminiRes.ok ? readGeminiReply(await geminiRes.json()) : null
+    }
+    log(`Gemini took ${Date.now() - geminiStarted} ms`)
+
+    log(`Gemini response status=${geminiRes.status}`)
+    if (!geminiRes.ok || !reply) {
       const errBody = await geminiRes.text()
-      console.log(`[${executionId}] Gemini error body=${errBody}`)
+      log(`Gemini error body=${errBody}`)
       await setFailed(`gemini_error_${geminiRes.status}`)
       return new Response('OK', { status: 200 })
     }
 
-    const geminiResult = await geminiRes.json()
-    const candidate = geminiResult?.candidates?.[0]
-    // Gemini 3 models can split a reply into several parts (and mark thinking
-    // parts with thought: true), so join every non-thought text part instead
-    // of reading only the first one.
-    const rawText: string = (candidate?.content?.parts ?? [])
-      .filter((part: { text?: unknown; thought?: boolean }) => typeof part?.text === 'string' && !part.thought)
-      .map((part: { text: string }) => part.text)
-      .join('')
-
-    if (!rawText.trim()) {
-      // finishReason (e.g. MAX_TOKENS, SAFETY) or promptFeedback.blockReason
-      // says why there was no text; keep it in the failure reason.
-      const why = candidate?.finishReason ?? geminiResult?.promptFeedback?.blockReason ?? 'unknown'
-      console.log(`[${executionId}] Gemini returned empty response finishReason=${why} parts=${candidate?.content?.parts?.length ?? 0}`)
-      await setFailed(`gemini_empty_response:${why}`)
+    const rawText = reply.text
+    if (!rawText) {
+      log(`Gemini returned empty response finishReason=${reply.why} parts=${reply.parts}`)
+      await setFailed(`gemini_empty_response:${reply.why}`)
       return new Response('OK', { status: 200 })
     }
 
