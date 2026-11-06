@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ShieldCheck, Thermometer, Ruler, Scale } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ShieldCheck, Thermometer, Ruler, Scale, Settings as SettingsIcon } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import {
   DropdownMenu,
@@ -24,6 +25,7 @@ function getInitials(fullName, email) {
 export default function UserMenu() {
   const { session, signOut, isAdmin, adminMode, toggleAdminMode, unitPrefs, updateUnitPref } = useAuth()
   const [imgError, setImgError] = useState(false)
+  const navigate = useNavigate()
   const user = session?.user
   const avatarUrl = user?.user_metadata?.avatar_url
   const fullName = user?.user_metadata?.full_name
@@ -86,6 +88,11 @@ export default function UserMenu() {
         >
           <Scale className="h-4 w-4 text-muted-foreground" />
           <span>Mass: {unitPrefs.mass_unit === 'us' ? 'US' : 'Metric'}</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="cursor-pointer gap-2" onClick={() => navigate('/settings')}>
+          <SettingsIcon className="h-4 w-4 text-muted-foreground" />
+          <span>Settings</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" className="cursor-pointer" onClick={signOut}>

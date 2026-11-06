@@ -7,6 +7,7 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 const Login = lazy(() => import('./pages/Login'))
 const Home = lazy(() => import('./pages/Home'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 export default function App() {
   return (
@@ -21,6 +22,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <Home />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
                 </ProtectedRoute>
               }
             />
