@@ -131,8 +131,12 @@ async function cmdLogin() {
   const rl = createInterface({ input: stdin, output: stdout })
   const answer = (await rl.question('Paste here: ')).trim()
   rl.close()
-  const code = answer.match(/code=([^&\s'"]+)/)?.[1] ?? answer
-  if (!code) throw new Error('No code found in input')
+  const code = answer.match(/code=([^&\s'"]+)/)?.[1]
+  if (!code) {
+    throw new Error(answer.includes('login.ah.nl/login')
+      ? 'That is the login page link from step 2. Open it in Chrome, log in, then paste the appie://login-exit?code=... link that appears after login.'
+      : 'No code found. Paste the whole appie://login-exit?code=... link that appears after you log in.')
+  }
 
   const r = await ah('POST', '/mobile-auth/v1/auth/token', { body: { clientId: CLIENT_ID, code } })
   const t = tokensFrom(r)

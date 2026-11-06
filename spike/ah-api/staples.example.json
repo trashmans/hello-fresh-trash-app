@@ -1,0 +1,8 @@
+{
+  "_help": "Copy to staples.json (gitignored) and edit. search = what you'd type in the AH app. After the first 'plan', paste the [id ...] it shows into productId to pin the exact product. everyWeeks: 1 = weekly, 2 = every other week, 4 = monthly. perishable: false lets it stock up when on bonus, up to maxWeeksStock weeks' worth. skipThisWeek: true skips it once. extras: free-text lines added every run.",
+  "staples": [
+    { "id": "milk", "name": "Milk", "search": "AH halfvolle melk", "productId": null, "quantity": 2, "everyWeeks": 1, "perishable": true },
+    { "id": "rice", "name": "Rice", "search": "AH basmati rijst", "productId": null, "quantity": 1, "everyWeeks": 3, "perishable": false, "maxWeeksStock": 9 }
+  ],
+  "extras": []
+}

@@ -35,8 +35,8 @@ The app uses three platforms, each with a different job:
 |---|---|---|
 | **GitHub** | Source control and CI/CD | The code, git history, pull requests, and GitHub Actions workflows that trigger deploys |
 | **Vercel** | Frontend hosting | The compiled app that users visit. Every PR gets a preview URL. Merging to `main` updates the live site. |
-| **Supabase (prod)** | Production backend | Real user accounts, real data. Connected only to production Vercel deploys. |
-| **Supabase (preview)** | Preview backend | Isolated environment for PR previews and local dev. No real data — safe to wipe. |
+| **Supabase (prod)** | Production backend | Real user accounts, real data. Connected only to production Vercel deploys. Region: West EU (Ireland). |
+| **Supabase (preview)** | Preview backend | Isolated environment for PR previews and local dev. No real data — safe to wipe. Region: West EU (Ireland). |
 
 GitHub is where you *build* the app, Vercel is where users *visit* the app, and Supabase is where the app *stores its data*.
 
@@ -83,7 +83,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 |---|---|
 | **npm** | Package manager. Installs and manages all third-party libraries. |
 | **Vite** | Build tool and local dev server. Compiles JSX and serves the app locally. `npm run build` compiles everything into `dist/` for deployment. |
-| **GitHub Actions** | CI/CD pipeline. Nine workflows cover frontend, database migration, and edge function deploys (each split into preview/production), preview migration cleanup, dependency bump checks, and unit tests on every PR. |
+| **GitHub Actions** | CI/CD pipeline. Ten workflows cover frontend, database migration, and edge function deploys (each split into preview/production), preview migration cleanup, dependency bump checks, unit tests on every PR, and secret scanning. |
 | **Vercel CLI** | The tool GitHub Actions uses to build and deploy to Vercel. All output is logged in GitHub Actions — no Vercel dashboard needed to debug failures. |
 | **Vercel** | Frontend hosting. Supports private repositories, provides a preview URL for every PR, and serves clean `/home` style URLs. |
 | **Dependabot** | Automated dependency updates. Once a month, opens one grouped PR each for npm and GitHub Actions minor/patch bumps. Every major bump gets its own PR so breaking changes stand out. Security fixes arrive immediately, outside this schedule (requires **Dependabot security updates** enabled in repo settings). |
@@ -96,6 +96,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 | `deploy-frontend-prod.yml` | Pushes to `main` | Vercel production build and deploy. |
 | `dependabot-build.yml` | Dependabot PRs only | Build check with no secrets. Confirms the bump doesn't break the build. |
 | `test.yml` | All PRs to `main`, including Dependabot | Runs `npm test` (Vitest) with no secrets. A required status check on `main`, so a failing test blocks the merge. |
+| `secret-scan.yml` | All PRs to `main`, pushes to `main`, and manual runs | Scans commits for API keys and tokens with gitleaks (read-only, no secrets). A manual run (Actions → Secret Scan → Run workflow) scans the whole history. |
 | `deploy-migrations-preview.yml` | PRs touching `supabase/migrations/**` | `supabase db push` to the preview Supabase project. |
 | `deploy-migrations-prod.yml` | Pushes to `main` touching `supabase/migrations/**` | `supabase db push` to the production Supabase project. |
 | `cleanup-migrations-preview.yml` | PRs touching `supabase/migrations/**` closed **without** merging | Removes that PR's migrations from the preview project's history table so they don't block later PRs. See [Preview drift](#preview-drift). |
@@ -164,6 +165,16 @@ The email allowlist is enforced at two layers:
 
 The Supabase anon key is the only credential the browser ever sees. The service role key (which bypasses RLS) exists only as a Supabase-managed secret inside Edge Functions and never touches the frontend.
 
+#### Keeping secrets out of the repo
+
+- **Push protection** (GitHub repo Settings → Code security) blocks a push that contains a recognised API key or token, before it reaches GitHub.
+- **`secret-scan.yml`** runs gitleaks on every PR and on `main` as a second line of defence, including generic-looking keys GitHub's list may miss.
+- If a key is ever pushed, **rotate it at the provider first** (create a new key, delete the old one); removing the commit is not enough, because a public repo may already have been copied.
+
+#### Data location
+
+Both Supabase projects (production and preview) run in **West EU (Ireland)**, so the database, storage and Edge Functions stay in the EU. Vercel and Gemini are processors outside Supabase — see `docs/privacy/record-of-processing.md`.
+
 ---
 
 ## Database Schema
@@ -178,7 +189,9 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected`; includes parsed fields like `cook_time_minutes`, `difficulty`, `cuisine`, `protein_source` (Chicken/Beef/Pork/Turkey/Seafood/Vegetarian/Other/null), and per-serving nutrition (`calories_kcal`, `fat_g`, `saturated_fat_g`, `carbs_g`, `sugar_g`, `fibre_g`, `protein_g`, `salt_g` — all nullable; copied from the card when printed, otherwise estimated by Gemini from the ingredient list, with the estimated field names listed in `nutrition_estimated`) |
 | `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only; CASCADE deleted when recipe is deleted |
 | `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
-| `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
+| `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change. Still what the app reads; being replaced by the household tables below (rollout phase 2) |
+| `household_recipe_picks` | One row per recipe a household has picked (`servings`, `added_by`). Members read and write through `private.is_household_member()`. Mirrored from `shopping_lists` on every save during rollout phase 2; reads switch over in the next step. See [ADR 0001](docs/adr/0001-household-ownership.md) |
+| `household_list_adjustments` | One row per quantity tweak or checked-off item on a household's merged list (`item_key` from `ingredientMerge.js`, `buy_qty`; 0 = checked off). Same access rules as `household_recipe_picks` |
 | `app_config` | Key/value config for environment-specific settings; service role only |
 | `households` | A shared home that owns shopping data (staples, mappings, AH link, weekly runs). Settings: `time_zone`, `run_weekday`, `run_hour`, `automation_enabled`, and `ah_enabled` (admin-only feature switch that hides all AH features when off). Created via `create_household()`; every existing user got one from `private.ensure_households()`, which can be re-run safely. See [ADR 0001](docs/adr/0001-household-ownership.md) |
 | `household_members` | Links users to a household with `role` = `owner` / `member`; a user belongs to at most one household |
@@ -211,6 +224,7 @@ The `private` schema is not exposed through the Supabase API, so the browser can
 - `recipes.uploaded_by` → `auth.users.id`
 - `ingredients.recipe_id` → `recipes.id` (CASCADE DELETE)
 - `shopping_lists.user_id` → `auth.users.id` (UNIQUE — one list per user)
+- `household_recipe_picks.household_id` / `household_list_adjustments.household_id` → `households.id` (CASCADE DELETE); `household_recipe_picks.recipe_id` → `recipes.id` (CASCADE DELETE). Written through `public.sync_household_shopping_list(picks, adjustments)`, which runs as the caller (RLS applies), replaces the household's rows with the given list in one transaction, and creates a household for users who don't have one yet.
 - `household_members.household_id` → `households.id` (CASCADE DELETE); `household_members.user_id` → `auth.users.id` (CASCADE DELETE, UNIQUE — one household per user). When the last member is removed, a trigger deletes the household.
 - `private.audit_events.household_id` / `actor_id` → SET NULL on delete, so the event survives erasure without identifying anyone.
 
@@ -235,7 +249,7 @@ src/
 │   └── AuthContext          # session state, allowlist check, signOut, adminMode, unitPrefs (fetched from profiles, updated via updateUnitPref)
 ├── hooks/
 │   ├── useUploadQueue.js      # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
-│   ├── useShoppingList.js     # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists
+│   ├── useShoppingList.js     # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists, then mirrors the list into the household tables via sync_household_shopping_list() (rollout phase 2; failures only logged)
 │   ├── useIngredientSearch.js # useIngredientSuggestions() — debounced typeahead over stored canonical_name/name values;
 │   │                           # useIngredientFilter() — given selected chips, returns recipes matching ALL of them (AND)
 │   ├── useRecipeIngredients.js # ingredient list for a single recipe, in display order
@@ -258,6 +272,7 @@ src/
     ├── staples.js             # weekStartOf(), checkStaple(), planDueStaples() — which staples are due this week (cadence in whole Mon–Sun weeks, skip_next, bonus stock cover via covered_until); dates are plain YYYY-MM-DD strings
     ├── stockup.js             # parseBonusMechanism() reads AH deal labels ("2e GRATIS", "2+1 GRATIS", "3 VOOR 5,00") into a pack group size; planStockUp() buys non-perishable staples on bonus up to max_weeks_stock, rounded to whole deals, and returns the new covered_until
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp); bestUnitInSystem() picks the display unit for an amount within one system
+    ├── householdSync.js       # toHouseholdSyncPayload() — reshapes the shopping list state into the picks / adjustments payload for sync_household_shopping_list(), dropping entries the database would reject (last duplicate wins)
     ├── recipeSort.js          # RECIPE_TABLE_COLUMNS config (name, times, difficulty, cuisine, protein, and four nutrition columns) + sortRecipes() / compareRecipesByColumn() for RecipeTable.jsx's list view — nulls always sort last in both directions; isEstimated() / formatRecipeCell() mark AI-estimated nutrition values with ~
     └── utils.js              # cn() helper for combining Tailwind classes
 └── tests/                    # Vitest unit tests for src/lib/ (run with `npm test`)
@@ -270,6 +285,7 @@ src/
     ├── units.test.js          # unit reading, including T vs t
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
+    ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
     └── recipeSort.test.js     # sortRecipes() / compareRecipesByColumn() — ascending/descending, nulls last, 0 treated as a real value; estimate marking per field
 
 supabase/
