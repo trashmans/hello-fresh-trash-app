@@ -10,6 +10,7 @@ export type RetailerErrorCode =
   | 'invalid'     // we were asked to send something unsafe (e.g. quantity 0 = remove)
   | 'unsupported' // no adapter for this retailer
   | 'not_linked'  // the household has not linked this retailer
+  | 'forbidden'   // not allowed: no household, or the household's AH switch (ah_enabled) is off
 
 export class RetailerError extends Error {
   code: RetailerErrorCode
@@ -68,6 +69,8 @@ export interface RetailerAdapter {
   kind: 'ah' | 'fake'
   retailer: string
   enabled: boolean
+  /** Linking: trades the one-time login code for tokens. */
+  exchangeLoginCode(code: string): Promise<TokenRefresh>
   getAccessToken(refreshToken: string): Promise<TokenRefresh>
   searchProducts(accessToken: string, query: string, size?: number): Promise<RetailerProduct[]>
   getPromotions(accessToken: string): Promise<RetailerPromotionPeriod[]>

@@ -19,6 +19,24 @@ function listOf(data: unknown, key: string): unknown[] {
   return data[key]
 }
 
+const LOGIN_CODE = /^[A-Za-z0-9._~-]{10,}$/
+
+/**
+ * Reads AH's one-time login code from whatever was pasted: the appie://login-exit?code=…
+ * link, the whole Chrome console error around it, or the bare code.
+ */
+export function extractLoginCode(pasted: unknown): string {
+  const input = typeof pasted === 'string' ? pasted.trim() : ''
+  if (!input) throw new RetailerError('invalid', 'Paste the appie://login-exit?code=… link that appears after you log in to AH')
+  const fromLink = input.match(/code=([^&\s'"]+)/)?.[1]
+  if (fromLink) return fromLink
+  if (input.includes('login.ah.nl/login')) {
+    throw new RetailerError('invalid', 'That is the AH login page link. Open it, log in, then paste the appie://login-exit?code=… link that appears after login')
+  }
+  if (LOGIN_CODE.test(input)) return input
+  throw new RetailerError('invalid', 'No login code found. Paste the whole appie://login-exit?code=… link that appears after you log in to AH')
+}
+
 /** /mobile-services/product/search/v2 → products. */
 export function parseSearchResponse(data: unknown): RetailerProduct[] {
   const products: RetailerProduct[] = []

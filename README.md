@@ -171,6 +171,18 @@ The Supabase anon key is the only credential the browser ever sees. The service 
 - **`secret-scan.yml`** runs gitleaks on every PR and on `main` as a second line of defence, including generic-looking keys GitHub's list may miss.
 - If a key is ever pushed, **rotate it at the provider first** (create a new key, delete the old one); removing the commit is not enough, because a public repo may already have been copied.
 
+#### Edge Function secrets for the AH link
+
+Set per Supabase project with `npx supabase secrets set NAME=value --project-ref <ref>` (never in GitHub secrets, `.env` or code):
+
+| Secret | Preview | Production |
+|---|---|---|
+| `RETAILER_TOKEN_KEY_V1` | Its own random key (`openssl rand -base64 32`) | A **different** random key. Backup copy in the shared password manager — losing it means every household re-links AH |
+| `APP_ENVIRONMENT` | Not set (preview always uses the fake AH adapter) | `production` |
+| `RETAILER_AH_ENABLED` | Not needed | `true` lets the app call AH; anything else is the kill switch |
+
+Rotation: add `RETAILER_TOKEN_KEY_V2`, re-wrap the data keys, then remove V1 ([ADR 0003](docs/adr/0003-retailer-token-handling.md)).
+
 #### Data location
 
 Both Supabase projects (production and preview) run in **West EU (Ireland)**, so the database, storage and Edge Functions stay in the EU. Vercel and Gemini are processors outside Supabase — see `docs/privacy/record-of-processing.md`.
@@ -287,6 +299,7 @@ src/
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
+    ├── accountLinking.test.js # login-code reading, code exchange, link (newest key, re-link replaces), refusals before the code is used, unlink always allowed, status without token data
     ├── accountTokens.test.js  # single-flight refresh: rotated token saved before use and kept if the action fails, two runs at once, relink_needed on auth, other failures change nothing, no tokens in audit events
     ├── ahAdapter.test.js      # AH response checks, list lines (never removes), kill switch, retries/backoff/timeouts, request spacing, per-line outcomes, fake adapter, adapter choice per environment
     ├── tokenCrypto.test.js    # AH token envelope encryption: round trip, wrong key / account / swapped key / tampering all fail, fresh IVs, reseal after rotation, V1 → V2 key rotation
@@ -300,9 +313,12 @@ supabase/
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     ├── admin-reparse/       # admin-only; clears a ready or failed recipe (any uploader) and sets it back to pending so parse-recipe runs again
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
+    ├── link-account/        # signed-in user links / unlinks / checks their household's AH account (POST { action: 'status' | 'link' | 'unlink', pasted }); linking needs households.ah_enabled; never returns tokens
     ├── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
     └── _shared/             # code shared by functions (not deployed as a function itself)
         ├── retailer/        # retailer adapter (ADR 0004): one interface (getAccessToken, searchProducts, getPromotions, readList, writeListLines) for every retailer
+        │   ├── accountLinking.ts # linkAccount / unlinkAccount / getLinkStatus: checks everything before using AH's one-time login code, seals the refresh token with a new data key, replaces any old link, audits
+        │   ├── pgStores.ts    # Postgres TokenStore + LinkStore over SUPABASE_DB_URL (postgres.js); the only code that touches private.retailer_accounts
         │   ├── accountTokens.ts # withAccessToken(): single-flight refresh (ADR 0003/0007) — lock the row, refresh, re-encrypt the rotated token, audit and commit before the access token is used; AH refusing the token marks the account relink_needed
         │   ├── types.ts       # retailer-neutral types + RetailerError codes (disabled, auth, http, timeout, schema, invalid, unsupported, not_linked)
         │   ├── ahSchema.ts    # checks AH responses and maps them to our types (schema error instead of wrong data); builds list PATCH items, refusing quantity < 1 (never removes)
