@@ -256,7 +256,7 @@ src/
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload
 │   ├── RecipePreviewPanel   # side panel; Instructions tab (ingredients + steps, with per-step photos when available, scalable by servings or by a target amount of one ingredient) and Original PDF tab (signed URL in an iframe)
-│   ├── UserMenu             # avatar dropdown with sign-out, admin toggle, and independent display-unit toggles (temperature, volume, mass)
+│   ├── UserMenu             # avatar dropdown with sign-out, admin toggle, independent display-unit toggles (temperature, volume, mass), and a link to Settings
 │   └── IngredientSearch     # chip-based ingredient typeahead; select suggestions, remove with the chip's × button
 ├── context/
 │   └── AuthContext          # session state, allowlist check, signOut, adminMode, unitPrefs (fetched from profiles, updated via updateUnitPref)
@@ -266,11 +266,13 @@ src/
 │   ├── useIngredientSearch.js # useIngredientSuggestions() — debounced typeahead over stored canonical_name/name values;
 │   │                           # useIngredientFilter() — given selected chips, returns recipes matching ALL of them (AND)
 │   ├── useRecipeIngredients.js # ingredient list for a single recipe, in display order
+│   ├── useAhLink.js           # household ah_enabled + AH link status through the link-account function; link(pasted) / unlink(); never sees tokens
 │   └── useRecipeStepImages.js  # per-step photo URLs for a single recipe, gated on an exact count match with parsed steps
 ├── pages/
 │   ├── Login                # login screen with Google OAuth
 │   ├── Home                 # main app screen; cart icon in header opens ShoppingListDrawer
-│   └── PrivacyPolicy        # GDPR privacy policy (/privacy)
+│   ├── Settings             # /settings: Albert Heijn card — link status, step-by-step desktop link flow with a paste box, unlink (shown only when the household's ah_enabled switch is on; unlink always available)
+│   └── PrivacyPolicy        # GDPR privacy policy (/privacy), incl. recipe parsing (Gemini), households and the optional AH link
 └── lib/
     ├── supabase.js           # Supabase client
     ├── pdfUtils.js           # computeContentHash — SHA-256 hash of PDF bytes for duplicate detection
@@ -285,6 +287,7 @@ src/
     ├── staples.js             # weekStartOf(), checkStaple(), planDueStaples() — which staples are due this week (cadence in whole Mon–Sun weeks, skip_next, bonus stock cover via covered_until); dates are plain YYYY-MM-DD strings
     ├── stockup.js             # parseBonusMechanism() reads AH deal labels ("2e GRATIS", "2+1 GRATIS", "3 VOOR 5,00") into a pack group size; planStockUp() buys non-perishable staples on bonus up to max_weeks_stock, rounded to whole deals, and returns the new covered_until
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp); bestUnitInSystem() picks the display unit for an amount within one system
+    ├── ahLink.js              # AH_LOGIN_URL, linkStatusView() (what the Settings card shows per status), checkPastedLink() (stops a paste that can't work before AH's one-time code is used), formatLinkDate()
     ├── householdSync.js       # toHouseholdSyncPayload() — reshapes the shopping list state into the picks / adjustments payload for sync_household_shopping_list(), dropping entries the database would reject (last duplicate wins)
     ├── recipeSort.js          # RECIPE_TABLE_COLUMNS config (name, times, difficulty, cuisine, protein, and four nutrition columns) + sortRecipes() / compareRecipesByColumn() for RecipeTable.jsx's list view — nulls always sort last in both directions; isEstimated() / formatRecipeCell() mark AI-estimated nutrition values with ~
     └── utils.js              # cn() helper for combining Tailwind classes
@@ -298,6 +301,7 @@ src/
     ├── units.test.js          # unit reading, including T vs t
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
+    ├── ahLink.test.js         # Settings card per status (switch off, not linked, linked, relink needed; unlink always possible), paste checks, dates
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
     ├── accountLinking.test.js # login-code reading, code exchange, link (newest key, re-link replaces), refusals before the code is used, unlink always allowed, status without token data
     ├── accountTokens.test.js  # single-flight refresh: rotated token saved before use and kept if the action fails, two runs at once, relink_needed on auth, other failures change nothing, no tokens in audit events
