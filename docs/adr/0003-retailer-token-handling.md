@@ -1,6 +1,6 @@
 # 0003. Retailer tokens: single-flight refresh and envelope encryption
 
-- Status: Accepted
+- Status: Accepted. Step 2 of the single-flight refresh is refined by [0007](0007-access-tokens-never-stored.md): access tokens are never stored
 - Date: 2026-10-24 (storage revised 2026-10-25 after review)
 - Deciders: Chris, David
 
