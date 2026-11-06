@@ -10,6 +10,7 @@ Short records of decisions that are expensive to reverse. One file per decision,
 | [0004](0004-retailer-adapter.md) | All retailer calls go through one adapter | Accepted |
 | [0005](0005-incremental-rollout.md) | Roll out the AH weekly shop in small, reversible steps | Accepted |
 | [0006](0006-one-account-per-retailer.md) | One account per retailer per household | Accepted |
+| [0007](0007-access-tokens-never-stored.md) | Retailer access tokens are never stored | Accepted |
 
 Design context: the AH Weekly Shop high-level design and the API spike findings in `spike/ah-api/FINDINGS.md`.
 

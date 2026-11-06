@@ -203,6 +203,7 @@ The `private` schema is not exposed through the Supabase API, so the browser can
 | Table / function | Purpose |
 |---|---|
 | `private.audit_events` | Append-only log of security-relevant actions (e.g. `household.created`). No shopping contents, no tokens. Identifiers are cleared, not the event, when a user or household is deleted. Rows cannot be edited, and can only be deleted once older than 12 months (retention purge) |
+| `private.retailer_accounts` | One row per (household, retailer) linked account (`UNIQUE (household_id, retailer)`, [ADR 0006](docs/adr/0006-one-account-per-retailer.md)). Holds only the envelope-encrypted refresh token (`token_ciphertext`/`token_iv`, `wrapped_key`/`wrapped_key_iv`, `key_version`; see `supabase/functions/_shared/tokenCrypto.ts` and [ADR 0003](docs/adr/0003-retailer-token-handling.md)) plus `status` (`linked` / `relink_needed`), `token_version`, `linked_by`, `last_refresh_at`. Access tokens are never stored ([ADR 0007](docs/adr/0007-access-tokens-never-stored.md)). No browser access; deleted with its household |
 | `private.data_requests` | Log of GDPR requests: type, dates, outcome, handled by. No request contents. See [data-requests.md](docs/privacy/data-requests.md) |
 | `private.is_household_member()` / `is_household_owner()` | Membership checks called by every household-owned table's RLS policies |
 
