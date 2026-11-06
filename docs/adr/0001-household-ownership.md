@@ -1,6 +1,6 @@
 # 0001. Households own shopping data, not individual users
 
-- Status: Accepted
+- Status: Accepted. The "one retailer account per household" rule is superseded by [0006](0006-one-account-per-retailer.md)
 - Date: 2026-10-24
 - Deciders: Chris, David
 
@@ -15,7 +15,7 @@ Keying the new tables by `user_id` would work for one person, but moving to shar
 - A new `households` table owns all shopping data: staples, equivalence groups, ingredient mappings, recipe picks, retailer account and weekly runs.
 - Users join a household through `household_members` (`household_id`, `user_id`, `role` = `owner` | `member`).
 - A user belongs to at most one household (`UNIQUE (user_id)` on `household_members`). Dropping this later is cheap; adding it to live data is not.
-- One retailer account per household.
+- One retailer account per household. *(Superseded by [0006](0006-one-account-per-retailer.md): one account per retailer per household.)*
 - Households are created only through `public.create_household()`, which adds the caller as owner and writes an audit event in one transaction.
 - When the last member is removed (they leave or their account is deleted), a trigger deletes the household and everything it owns.
 - Recipe picks move from per-user `shopping_lists` to a household-owned table.
