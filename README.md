@@ -189,7 +189,9 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `recipes` | One row per uploaded PDF; status machine: `pending` → `processing` → `ready` / `failed` / `rejected`; includes parsed fields like `cook_time_minutes`, `difficulty`, `cuisine`, `protein_source` (Chicken/Beef/Pork/Turkey/Seafood/Vegetarian/Other/null), and per-serving nutrition (`calories_kcal`, `fat_g`, `saturated_fat_g`, `carbs_g`, `sugar_g`, `fibre_g`, `protein_g`, `salt_g` — all nullable; copied from the card when printed, otherwise estimated by Gemini from the ingredient list, with the estimated field names listed in `nutrition_estimated`) |
 | `ingredients` | One row per ingredient per recipe; written by `parse-recipe` edge function only; CASCADE deleted when recipe is deleted |
 | `recipe_step_images` | One row per matched step photo (`step_index` + `storage_path`); extracted client-side from the PDF's steps page at upload time, independently of parsing; CASCADE deleted when recipe is deleted |
-| `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change |
+| `shopping_lists` | One row per user; stores recipe selections (with serving sizes) and per-item quantity adjustments as JSONB; upserted on every change. Still what the app reads; being replaced by the household tables below (rollout phase 2) |
+| `household_recipe_picks` | One row per recipe a household has picked (`servings`, `added_by`). Members read and write through `private.is_household_member()`. Mirrored from `shopping_lists` on every save during rollout phase 2; reads switch over in the next step. See [ADR 0001](docs/adr/0001-household-ownership.md) |
+| `household_list_adjustments` | One row per quantity tweak or checked-off item on a household's merged list (`item_key` from `ingredientMerge.js`, `buy_qty`; 0 = checked off). Same access rules as `household_recipe_picks` |
 | `app_config` | Key/value config for environment-specific settings; service role only |
 | `households` | A shared home that owns shopping data (staples, mappings, AH link, weekly runs). Settings: `time_zone`, `run_weekday`, `run_hour`, `automation_enabled`, and `ah_enabled` (admin-only feature switch that hides all AH features when off). Created via `create_household()`; every existing user got one from `private.ensure_households()`, which can be re-run safely. See [ADR 0001](docs/adr/0001-household-ownership.md) |
 | `household_members` | Links users to a household with `role` = `owner` / `member`; a user belongs to at most one household |
@@ -222,6 +224,7 @@ The `private` schema is not exposed through the Supabase API, so the browser can
 - `recipes.uploaded_by` → `auth.users.id`
 - `ingredients.recipe_id` → `recipes.id` (CASCADE DELETE)
 - `shopping_lists.user_id` → `auth.users.id` (UNIQUE — one list per user)
+- `household_recipe_picks.household_id` / `household_list_adjustments.household_id` → `households.id` (CASCADE DELETE); `household_recipe_picks.recipe_id` → `recipes.id` (CASCADE DELETE). Written through `public.sync_household_shopping_list(picks, adjustments)`, which runs as the caller (RLS applies), replaces the household's rows with the given list in one transaction, and creates a household for users who don't have one yet.
 - `household_members.household_id` → `households.id` (CASCADE DELETE); `household_members.user_id` → `auth.users.id` (CASCADE DELETE, UNIQUE — one household per user). When the last member is removed, a trigger deletes the household.
 - `private.audit_events.household_id` / `actor_id` → SET NULL on delete, so the event survives erasure without identifying anyone.
 
@@ -246,7 +249,7 @@ src/
 │   └── AuthContext          # session state, allowlist check, signOut, adminMode, unitPrefs (fetched from profiles, updated via updateUnitPref)
 ├── hooks/
 │   ├── useUploadQueue.js      # upload orchestration: validation, deduplication, concurrent uploads, rate limiting
-│   ├── useShoppingList.js     # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists
+│   ├── useShoppingList.js     # useReducer state for recipe selections + adjusted quantities; debounced upsert to shopping_lists, then mirrors the list into the household tables via sync_household_shopping_list() (rollout phase 2; failures only logged)
 │   ├── useIngredientSearch.js # useIngredientSuggestions() — debounced typeahead over stored canonical_name/name values;
 │   │                           # useIngredientFilter() — given selected chips, returns recipes matching ALL of them (AND)
 │   ├── useRecipeIngredients.js # ingredient list for a single recipe, in display order
@@ -269,6 +272,7 @@ src/
     ├── staples.js             # weekStartOf(), checkStaple(), planDueStaples() — which staples are due this week (cadence in whole Mon–Sun weeks, skip_next, bonus stock cover via covered_until); dates are plain YYYY-MM-DD strings
     ├── stockup.js             # parseBonusMechanism() reads AH deal labels ("2e GRATIS", "2+1 GRATIS", "3 VOOR 5,00") into a pack group size; planStockUp() buys non-perishable staples on bonus up to max_weeks_stock, rounded to whole deals, and returns the new covered_until
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp); bestUnitInSystem() picks the display unit for an amount within one system
+    ├── householdSync.js       # toHouseholdSyncPayload() — reshapes the shopping list state into the picks / adjustments payload for sync_household_shopping_list(), dropping entries the database would reject (last duplicate wins)
     ├── recipeSort.js          # RECIPE_TABLE_COLUMNS config (name, times, difficulty, cuisine, protein, and four nutrition columns) + sortRecipes() / compareRecipesByColumn() for RecipeTable.jsx's list view — nulls always sort last in both directions; isEstimated() / formatRecipeCell() mark AI-estimated nutrition values with ~
     └── utils.js              # cn() helper for combining Tailwind classes
 └── tests/                    # Vitest unit tests for src/lib/ (run with `npm test`)
@@ -281,6 +285,7 @@ src/
     ├── units.test.js          # unit reading, including T vs t
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
+    ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
     └── recipeSort.test.js     # sortRecipes() / compareRecipesByColumn() — ascending/descending, nulls last, 0 treated as a real value; estimate marking per field
 
 supabase/
