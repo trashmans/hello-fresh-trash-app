@@ -27,6 +27,22 @@ Individual commands:
 | `list-test [productId]` | Adds a free-text line + a product line | Yes (delete manually) |
 | `list-edit-test` | Adds a test product, then tries changing quantity, ticking, unticking and removing it | Yes (cleans up after itself) |
 
+## Weekly trial (`weekly.mjs`)
+
+A local trial of the AH weekly shop for your own account, outside the app. It plans this week's staples with the app's real planner (`src/lib/planWeek.js`: due rules, bonus stock-up, whole packs), compares the plan with your AH shopping list (`src/lib/listDiff.js`), and only after you confirm adds what's missing. It never removes or lowers anything on your list.
+
+```
+cp spike/ah-api/staples.example.json spike/ah-api/staples.json   # then edit it
+node spike/ah-api/spike.mjs login        # once, if you have no tokens yet
+node spike/ah-api/weekly.mjs plan        # dry run: shows the products found and the changes
+node spike/ah-api/weekly.mjs send        # same, asks [y/N], then writes to your AH list
+```
+
+- `staples.json` (your staples) and `weekly-state.json` (what was added when, bonus stock) are gitignored.
+- Run `send` once per week, on the day you order (Monday suits the bonus week). The week is Monday–Sunday: sending on Friday counts as this week, so weekly items would be due again on Monday.
+- If a product is wrong, pin it: copy the `[id …]` that `plan` shows (or one from `spike.mjs search`) into that staple's `productId`.
+- Needs Node 22.15+ (it loads the app's `src/lib` files directly).
+
 Raw API responses go to `spike/ah-api/out/` and tokens to `spike/ah-api/.tokens.json`. Both are gitignored; they contain personal data.
 
 ## Security

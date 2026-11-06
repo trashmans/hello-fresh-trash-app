@@ -1,3 +1,6 @@
 # AH login tokens and raw API responses contain personal data — never commit
 .tokens.json
 out/
+# weekly trial: your staples and run history are personal — never commit
+staples.json
+weekly-state.json
