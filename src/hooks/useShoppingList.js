@@ -2,6 +2,7 @@ import { useReducer, useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { toast } from 'sonner'
+import { toHouseholdSyncPayload } from '@/lib/householdSync'
 
 const initialState = { recipeSelections: [], adjustedItems: [] }
 
@@ -117,7 +118,17 @@ export function useShoppingList() {
           if (error) {
             console.error('shopping_lists save error:', error)
             toast.error(`Could not save your shopping list: ${error.message}`)
+            return
           }
+          // Rollout phase 2 (docs/adr/0005), expand step: mirror the list into the
+          // household tables. shopping_lists is still what the app reads, so a failure
+          // here is only logged, never shown to the user.
+          const { picks, adjustments } = toHouseholdSyncPayload(state)
+          supabase
+            .rpc('sync_household_shopping_list', { picks, adjustments })
+            .then(({ error: syncError }) => {
+              if (syncError) console.warn('household shopping list sync failed:', syncError.message)
+            })
         })
     }, 500)
   }, [state, loaded, session?.user?.id])
