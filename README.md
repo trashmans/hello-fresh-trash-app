@@ -286,6 +286,7 @@ src/
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
+    ├── ahAdapter.test.js      # AH response checks, list lines (never removes), kill switch, retries/backoff/timeouts, request spacing, per-line outcomes, fake adapter, adapter choice per environment
     ├── tokenCrypto.test.js    # AH token envelope encryption: round trip, wrong key / account / swapped key / tampering all fail, fresh IVs, reseal after rotation, V1 → V2 key rotation
     └── recipeSort.test.js     # sortRecipes() / compareRecipesByColumn() — ascending/descending, nulls last, 0 treated as a real value; estimate marking per field
 
@@ -299,6 +300,12 @@ supabase/
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
     ├── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
     └── _shared/             # code shared by functions (not deployed as a function itself)
+        ├── retailer/        # retailer adapter (ADR 0004): one interface (getAccessToken, searchProducts, getPromotions, readList, writeListLines) for every retailer
+        │   ├── types.ts       # retailer-neutral types + RetailerError codes (disabled, auth, http, timeout, schema, invalid, unsupported)
+        │   ├── ahSchema.ts    # checks AH responses and maps them to our types (schema error instead of wrong data); builds list PATCH items, refusing quantity < 1 (never removes)
+        │   ├── ahAdapter.ts   # real AH mobile API: timeouts, retry with backoff on 429/5xx, spaced requests, one PATCH per line, kill switch
+        │   ├── fakeAdapter.ts # made-up products and an in-memory list for preview/local — never touches AH
+        │   └── index.ts       # retailerAdapterFor(): fake unless APP_ENVIRONMENT=production; there RETAILER_AH_ENABLED=true is the kill switch
         └── tokenCrypto.ts   # envelope encryption for retailer refresh tokens (ADR 0003): sealNewToken / openToken / resealToken / rewrapDataKey, AES-256-GCM with the account id bound in; master keys from RETAILER_TOKEN_KEY_V<n>
 
 docs/
