@@ -286,6 +286,7 @@ src/
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
+    ├── tokenCrypto.test.js    # AH token envelope encryption: round trip, wrong key / account / swapped key / tampering all fail, fresh IVs, reseal after rotation, V1 → V2 key rotation
     └── recipeSort.test.js     # sortRecipes() / compareRecipesByColumn() — ascending/descending, nulls last, 0 treated as a real value; estimate marking per field
 
 supabase/
@@ -296,7 +297,9 @@ supabase/
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     ├── admin-reparse/       # admin-only; clears a ready or failed recipe (any uploader) and sets it back to pending so parse-recipe runs again
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
-    └── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
+    ├── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
+    └── _shared/             # code shared by functions (not deployed as a function itself)
+        └── tokenCrypto.ts   # envelope encryption for retailer refresh tokens (ADR 0003): sealNewToken / openToken / resealToken / rewrapDataKey, AES-256-GCM with the account id bound in; master keys from RETAILER_TOKEN_KEY_V<n>
 
 docs/
 ├── adr/                     # architecture decision records — one file per decision that is expensive to reverse (see adr/README.md)
