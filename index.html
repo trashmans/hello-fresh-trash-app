@@ -1,11 +1,14 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hello Fresh Trash</title>
     <meta name="description" content="Your personal HelloFresh recipe catalogue" />
-    <meta name="theme-color" content="#16a34a" />
+    <meta name="theme-color" content="#3B5249" />
+    <!-- Applies a saved dark-mode choice before the page draws (no light flash).
+         A file, not an inline script: the CSP in vercel.json allows script-src 'self' only. -->
+    <script src="/theme-init.js"></script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

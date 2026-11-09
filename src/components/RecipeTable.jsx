@@ -3,6 +3,9 @@ import { FileText, ShoppingCart, Trash2, RefreshCw, Loader2, ArrowUp, ArrowDown,
 import { Button } from '@/components/ui/button'
 import { RECIPE_TABLE_COLUMNS as COLUMNS, sortRecipes, formatRecipeCell, isEstimated } from '@/lib/recipeSort'
 
+// Filled dots in the Difficulty pill (shape as well as colour, so it reads without colour vision).
+const DIFFICULTY_LEVELS = { easy: 1, medium: 2, hard: 3 }
+
 const ESTIMATE_TOOLTIP = 'AI estimate from the ingredient list — not printed on the recipe card'
 
 export default function RecipeTable({
@@ -36,10 +39,10 @@ export default function RecipeTable({
 
   return (
     <div className="space-y-2">
-    <div className="overflow-x-auto rounded-md border border-border">
+    <div className="overflow-x-auto rounded-md border border-border bg-card">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border bg-muted/40 text-left">
+          <tr className="border-b border-border bg-muted text-left">
             <th className="w-10 px-3 py-2" />
             {COLUMNS.map(column => {
               const isActive = sort.column === column.key
@@ -69,7 +72,7 @@ export default function RecipeTable({
             return (
               <tr
                 key={recipe.id}
-                className={`border-b border-border last:border-0 cursor-pointer hover:bg-accent/50 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
+                className={`border-b border-border last:border-0 cursor-pointer hover:bg-accent/60 transition-colors ${isSelected ? 'bg-secondary/15' : 'even:bg-muted/40'}`}
                 onClick={() => onSelect(recipe)}
               >
                 <td className="px-3 py-2">
@@ -90,11 +93,35 @@ export default function RecipeTable({
                   if (column.key === 'name') {
                     return (
                       <td key={column.key} className="px-3 py-2 whitespace-nowrap">
-                        <span className="font-medium">{recipe.name ?? recipe.filename}</span>
+                        <span className="font-semibold">{recipe.name ?? recipe.filename}</span>
                       </td>
                     )
                   }
                   const cell = formatRecipeCell(recipe, column)
+                  if (column.key === 'difficulty' && !cell.empty) {
+                    const level = DIFFICULTY_LEVELS[String(cell.text).toLowerCase()] ?? 0
+                    return (
+                      <td key={column.key} className="px-3 py-2 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary/15 px-2 py-0.5 text-xs font-medium">
+                          {level > 0 && (
+                            <span className="inline-flex gap-0.5" aria-hidden="true">
+                              {[1, 2, 3].map(dot => (
+                                <span key={dot} className={`h-1.5 w-1.5 rounded-full ${dot <= level ? 'bg-secondary' : 'bg-secondary/30'}`} />
+                              ))}
+                            </span>
+                          )}
+                          {cell.text}
+                        </span>
+                      </td>
+                    )
+                  }
+                  if ((column.key === 'cuisine' || column.key === 'protein_source') && !cell.empty) {
+                    return (
+                      <td key={column.key} className="px-3 py-2 whitespace-nowrap">
+                        <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">{cell.text}</span>
+                      </td>
+                    )
+                  }
                   return (
                     <td key={column.key} className="px-3 py-2 whitespace-nowrap">
                       {cell.estimated ? (
@@ -117,8 +144,8 @@ export default function RecipeTable({
                       <button
                         className={`rounded p-1 transition-colors ${
                           isSelected
-                            ? 'text-primary bg-primary/15'
-                            : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
+                            ? 'bg-secondary text-secondary-foreground'
+                            : 'text-muted-foreground hover:text-secondary hover:bg-secondary/10'
                         }`}
                         onClick={(e) => { e.stopPropagation(); onToggle(recipe) }}
                         title={isSelected ? 'Remove from shopping list' : 'Add to shopping list'}

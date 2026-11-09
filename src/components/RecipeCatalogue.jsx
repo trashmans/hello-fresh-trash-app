@@ -591,16 +591,16 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
           return (
             <Card
               key={recipe.id}
-              className={`cursor-pointer hover:border-primary transition-colors relative ${isSelected ? 'border-primary' : ''}`}
+              className={`cursor-pointer hover:border-secondary/60 transition-colors relative ${isSelected ? 'border-secondary ring-1 ring-secondary' : ''}`}
               onClick={() => onSelect(recipe)}
             >
               <CardContent className="p-4 flex flex-col gap-2">
                 {onToggle && (
                   <button
-                    className={`absolute top-2 left-2 z-10 rounded p-1 transition-colors ${
+                    className={`absolute top-2 left-2 z-10 rounded-md p-1.5 shadow-sm transition-colors ${
                       isSelected
-                        ? 'text-primary bg-primary/15'
-                        : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
+                        ? 'bg-secondary text-secondary-foreground'
+                        : 'bg-card/90 text-muted-foreground hover:text-secondary'
                     }`}
                     onClick={(e) => { e.stopPropagation(); onToggle(recipe) }}
                     title={isSelected ? 'Remove from shopping list' : 'Add to shopping list'}
@@ -646,7 +646,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
                   size="icon"
                   disabled={deleting === recipe.id}
                   onClick={(e) => handleDelete(recipe, e)}
-                  className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                  className="absolute top-2 right-2 bg-card/90 shadow-sm text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

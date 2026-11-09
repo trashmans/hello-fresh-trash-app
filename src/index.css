@@ -18,6 +18,12 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-badge: var(--badge);
+  --color-badge-foreground: var(--badge-foreground);
+  --color-header: var(--header);
+  --color-header-foreground: var(--header-foreground);
+  --color-header-title: var(--header-title);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -27,24 +33,73 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Light mode (default): Tuscan Garden & Herb. Dark mode (.dark on <html>,
+   chosen in Settings): Crisp Orchard. Text tokens are checked at 4.5:1 or
+   better against the surfaces they sit on, including the 15% tints used for
+   status pills (bg-primary/15 text-primary). Source palettes and the
+   light/dark pairing: the "Hello Fresh Trash: 4-tab wireframes" design canvas. */
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.185 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.696 0.17 149.578);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.25 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.25 0 0);
-  --muted-foreground: oklch(0.62 0 0);
-  --popover: oklch(0.185 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --accent: oklch(0.25 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.696 0.17 149.578);
+  --background: #EFE8DC;           /* Warm Oatmeal */
+  --foreground: #1F1F1F;
+  --card: #FFFFFF;
+  --card-foreground: #1F1F1F;
+  --popover: #FFFFFF;
+  --popover-foreground: #1F1F1F;
+  --primary: #9E4A2B;              /* Terracotta Clay, darkened for white text */
+  --primary-foreground: #FFFFFF;
+  --secondary: #3B5249;            /* Rosemary Green */
+  --secondary-foreground: #FFFFFF;
+  --muted: #E4DCCD;
+  --muted-foreground: #5E574B;
+  --accent: #E4DCCD;
+  --accent-foreground: #1F1F1F;
+  --destructive: #B03427;          /* Sun-Ripened Tomato, darkened */
+  --destructive-foreground: #FFFFFF;
+  --badge: #B03427;                /* tomato badges by day */
+  --badge-foreground: #FFFFFF;
+  --header: #3B5249;               /* rosemary app bar by day */
+  --header-foreground: #FFFFFF;
+  --header-title: #FFFFFF;
+  --border: #D6CCBB;
+  --input: #B8AC97;
+  --ring: #3B5249;
+}
+
+.dark {
+  --background: #121110;           /* Orchard Charcoal, deep */
+  --foreground: #F3F1EA;
+  --card: #38332B;                 /* raised cards stand out from the page */
+  --card-foreground: #F3F1EA;
+  --popover: #38332B;
+  --popover-foreground: #F3F1EA;
+  --primary: #F3887A;              /* Orchard Apple, lightened for dark text */
+  --primary-foreground: #121110;
+  --secondary: #34C474;            /* Crisp Leaf, lightened */
+  --secondary-foreground: #121110;
+  --muted: #454037;
+  --muted-foreground: #B9B6AC;
+  --accent: #454037;
+  --accent-foreground: #F3F1EA;
+  --destructive: #F78B7C;
+  --destructive-foreground: #121110;
+  --badge: #F39C12;                /* Warm Honey badges by night */
+  --badge-foreground: #121110;
+  --header: #1C1A16;               /* charcoal app bar by night */
+  --header-foreground: #F3F1EA;
+  --header-title: #34C474;         /* Crisp Leaf title */
+  --border: #534E44;
+  --input: #625C51;
+  --ring: #34C474;
+}
+
+/* Page-wide defaults so text that doesn't set its own colour (headings,
+   outline/ghost buttons, plain paragraphs) follows the theme instead of the
+   browser's default black. The body background also fills the space outside
+   narrow pages like Settings and Privacy. */
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
 }

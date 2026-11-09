@@ -1,17 +1,41 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Copy, ExternalLink, Loader2 } from 'lucide-react'
+import { ArrowLeft, Copy, ExternalLink, Loader2, Moon, Sun } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useAhLink } from '@/hooks/useAhLink'
+import { useTheme } from '@/hooks/useTheme'
 import { AH_LOGIN_URL, checkPastedLink, formatLinkDate, linkStatusView } from '@/lib/ahLink'
 
 const TONES = {
-  linked: 'bg-primary/15 text-primary',
-  relink_needed: 'bg-destructive/15 text-destructive',
+  linked: 'bg-secondary text-secondary-foreground',
+  relink_needed: 'bg-destructive text-destructive-foreground',
   not_linked: 'bg-muted text-muted-foreground',
   unavailable: 'bg-muted text-muted-foreground',
+}
+
+function AppearanceCard() {
+  const { theme, setTheme } = useTheme()
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Appearance</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <div role="group" aria-label="Colour theme" className="inline-flex gap-1 rounded-lg border border-border p-1">
+          <Button type="button" variant={theme === 'light' ? 'default' : 'ghost'} aria-pressed={theme === 'light'} onClick={() => setTheme('light')}>
+            <Sun className="h-4 w-4" /> Light
+          </Button>
+          <Button type="button" variant={theme === 'dark' ? 'default' : 'ghost'} aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}>
+            <Moon className="h-4 w-4" /> Dark
+          </Button>
+        </div>
+        <p className="text-muted-foreground">Saved on this device only.</p>
+      </CardContent>
+    </Card>
+  )
 }
 
 function AlbertHeijnCard() {
@@ -124,11 +148,12 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-background p-6 max-w-2xl mx-auto space-y-6">
       <div>
-        <Button variant="ghost" asChild>
-          <Link to="/home">← Back</Link>
+        <Button variant="outline" asChild>
+          <Link to="/home"><ArrowLeft className="h-4 w-4" /> Back to recipes</Link>
         </Button>
       </div>
       <h1 className="text-2xl font-semibold">Settings</h1>
+      <AppearanceCard />
       <AlbertHeijnCard />
     </div>
   )

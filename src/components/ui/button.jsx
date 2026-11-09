@@ -1,4 +1,5 @@
 import { cva } from 'class-variance-authority'
+import { Slot } from 'radix-ui'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
@@ -7,7 +8,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground shadow hover:bg-primary/90',
-        destructive: 'bg-destructive text-white shadow-sm hover:bg-destructive/90',
+        destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
         outline: 'border border-border bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
@@ -27,9 +28,12 @@ const buttonVariants = cva(
   }
 )
 
-export function Button({ className, variant, size, ...props }) {
+// asChild renders the child element (e.g. a <Link> or <a>) with the button's
+// styles instead of wrapping it in a <button> (a link inside a button is invalid HTML).
+export function Button({ className, variant, size, asChild = false, ...props }) {
+  const Comp = asChild ? Slot.Root : 'button'
   return (
-    <button
+    <Comp
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

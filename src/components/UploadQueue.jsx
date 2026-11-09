@@ -8,7 +8,7 @@ function formatBytes(bytes) {
 
 function StatusIcon({ status }) {
   if (status === 'uploading') return <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0 mt-0.5" />
-  if (status === 'done') return <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+  if (status === 'done') return <CheckCircle2 className="h-4 w-4 text-secondary shrink-0 mt-0.5" />
   if (status === 'failed') return <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
   return <Clock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
 }
