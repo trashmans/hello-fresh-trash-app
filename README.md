@@ -65,7 +65,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 | Technology | Responsible for |
 |---|---|
 | **React** | Structure, logic, state |
-| **Tailwind CSS** | Visual styling — utility classes applied directly in JSX |
+| **Tailwind CSS** | Visual styling — utility classes applied directly in JSX. Colours come from CSS variables in `src/index.css`: light mode (default) uses the Tuscan Garden & Herb palette in `:root`, dark mode uses Crisp Orchard in `.dark`, switched in Settings. Use the semantic classes, not fixed colours like `text-green-500`, so both modes work: `primary` (terracotta / apple) for actions such as Upload and Link; `secondary` (rosemary / leaf green) for chosen or good states such as recipes in this week's list, ingredient filter chips and "Linked"; `badge` (tomato / honey) for counts; `header` / `header-foreground` / `header-title` for the app bar |
 | **shadcn/ui** | Pre-built components (`src/components/ui/`) — Button, Card, Input, Sheet, and more |
 | **lucide-react** | Icons |
 
@@ -266,12 +266,13 @@ src/
 │   ├── useIngredientSearch.js # useIngredientSuggestions() — debounced typeahead over stored canonical_name/name values;
 │   │                           # useIngredientFilter() — given selected chips, returns recipes matching ALL of them (AND)
 │   ├── useRecipeIngredients.js # ingredient list for a single recipe, in display order
+│   ├── useTheme.js            # light/dark choice for this device: keeps <html class="dark">, the theme-color meta tag and localStorage (hft-theme) in step; public/theme-init.js applies the saved choice before React loads
 │   ├── useAhLink.js           # household ah_enabled + AH link status through the link-account function; link(pasted) / unlink(); never sees tokens
 │   └── useRecipeStepImages.js  # per-step photo URLs for a single recipe, gated on an exact count match with parsed steps
 ├── pages/
 │   ├── Login                # login screen with Google OAuth
 │   ├── Home                 # main app screen; cart icon in header opens ShoppingListDrawer
-│   ├── Settings             # /settings: Albert Heijn card — link status, step-by-step desktop link flow with a paste box, unlink (shown only when the household's ah_enabled switch is on; unlink always available)
+│   ├── Settings             # /settings: Appearance card (Light / Dark, saved per device) and Albert Heijn card — link status, step-by-step desktop link flow with a paste box, unlink (shown only when the household's ah_enabled switch is on; unlink always available)
 │   └── PrivacyPolicy        # GDPR privacy policy (/privacy), incl. recipe parsing (Gemini), households and the optional AH link
 └── lib/
     ├── supabase.js           # Supabase client
@@ -287,6 +288,7 @@ src/
     ├── staples.js             # weekStartOf(), checkStaple(), planDueStaples() — which staples are due this week (cadence in whole Mon–Sun weeks, skip_next, bonus stock cover via covered_until); dates are plain YYYY-MM-DD strings
     ├── stockup.js             # parseBonusMechanism() reads AH deal labels ("2e GRATIS", "2+1 GRATIS", "3 VOOR 5,00") into a pack group size; planStockUp() buys non-perishable staples on bonus up to max_weeks_stock, rounded to whole deals, and returns the new covered_until
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp); bestUnitInSystem() picks the display unit for an amount within one system
+    ├── theme.js               # THEME_STORAGE_KEY, normalizeTheme() (only 'dark' means dark; anything else is light), toggleTheme(), themeColorFor() (browser bar colour per theme)
     ├── ahLink.js              # AH_LOGIN_URL, linkStatusView() (what the Settings card shows per status), checkPastedLink() (stops a paste that can't work before AH's one-time code is used), formatLinkDate()
     ├── householdSync.js       # toHouseholdSyncPayload() — reshapes the shopping list state into the picks / adjustments payload for sync_household_shopping_list(), dropping entries the database would reject (last duplicate wins)
     ├── recipeSort.js          # RECIPE_TABLE_COLUMNS config (name, times, difficulty, cuisine, protein, and four nutrition columns) + sortRecipes() / compareRecipesByColumn() for RecipeTable.jsx's list view — nulls always sort last in both directions; isEstimated() / formatRecipeCell() mark AI-estimated nutrition values with ~
@@ -301,6 +303,7 @@ src/
     ├── units.test.js          # unit reading, including T vs t
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
+    ├── theme.test.js          # theme key, light fallback for unknown values, toggling, browser bar colours
     ├── ahLink.test.js         # Settings card per status (switch off, not linked, linked, relink needed; unlink always possible), paste checks, dates
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
     ├── accountLinking.test.js # login-code reading, code exchange, link (newest key, re-link replaces), refusals before the code is used, unlink always allowed, status without token data

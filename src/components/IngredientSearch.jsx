@@ -39,13 +39,13 @@ export default function IngredientSearchBar({
           {selected.map(term => (
             <span
               key={term}
-              className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary text-xs font-medium pl-2.5 pr-1.5 py-1"
+              className="inline-flex items-center gap-1 rounded-full bg-secondary text-secondary-foreground text-xs font-medium pl-2.5 pr-1.5 py-1"
             >
               {term}
               <button
                 type="button"
                 onClick={() => onRemove(term)}
-                className="rounded-full p-0.5 hover:bg-primary/20"
+                className="rounded-full p-0.5 hover:bg-secondary-foreground/20"
                 aria-label={`Remove ${term}`}
               >
                 <X className="h-3 w-3" />

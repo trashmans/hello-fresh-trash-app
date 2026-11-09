@@ -43,9 +43,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <header className="border-b border-border px-6 py-4 flex items-center justify-between shrink-0">
+      <header className="border-b border-border bg-header text-header-foreground px-6 py-4 flex items-center justify-between shrink-0">
         <Link to="/home">
-          <h1 className="text-lg font-semibold text-primary hover:opacity-80 transition-opacity">
+          <h1 className="text-lg font-semibold text-header-title hover:opacity-80 transition-opacity">
             Hello Fresh Trash
           </h1>
         </Link>
@@ -61,7 +61,7 @@ export default function Home() {
               <ShoppingCart className="h-5 w-5" />
             </Button>
             {shoppingList.selectedIds.length > 0 && (
-              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center pointer-events-none">
+              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-badge text-badge-foreground text-xs font-semibold flex items-center justify-center pointer-events-none">
                 {shoppingList.selectedIds.length}
               </span>
             )}
