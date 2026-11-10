@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
-import { ShoppingCart, X, RotateCcw, Minus, Plus, Copy, Trash2, Scale } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, FileText, ShoppingCart, X, RotateCcw, Minus, Plus, Copy, Trash2, Scale } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,6 +12,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { mergeIngredients } from '@/lib/ingredientMerge'
+import { groupByAisle } from '@/lib/aisles'
 import { computeScaleFactorFromIngredient } from '@/lib/scaling'
 import { unitOptionsFor } from '@/lib/units'
 import { toast } from 'sonner'
@@ -138,6 +140,7 @@ export default function ShoppingListPanel({ shoppingList }) {
   const [recipes, setRecipes] = useState([])
   const [ingredientsMap, setIngredientsMap] = useState({})
   const [editingKey, setEditingKey] = useState(null)
+  const [coverUrls, setCoverUrls] = useState({})
 
   useEffect(() => {
     const ids = recipeSelections.map(r => r.recipe_id)
@@ -148,10 +151,18 @@ export default function ShoppingListPanel({ shoppingList }) {
     }
 
     Promise.all([
-      supabase.from('recipes').select('id, name, servings').in('id', ids),
+      supabase.from('recipes').select('id, name, servings, cover_path').in('id', ids),
       supabase.from('ingredients').select('*').in('recipe_id', ids),
     ]).then(([{ data: recipeData }, { data: ingData }]) => {
       setRecipes(recipeData ?? [])
+      const coverPaths = [...new Set((recipeData ?? []).map(r => r.cover_path).filter(Boolean))]
+      if (coverPaths.length > 0) {
+        supabase.storage.from('recipe-pdfs').createSignedUrls(coverPaths, 3600).then(({ data: signed }) => {
+          const map = {}
+          for (const entry of signed ?? []) if (entry.signedUrl) map[entry.path] = entry.signedUrl
+          setCoverUrls(map)
+        })
+      }
       const map = {}
       for (const ing of ingData ?? []) {
         if (!map[ing.recipe_id]) map[ing.recipe_id] = []
@@ -229,193 +240,235 @@ export default function ShoppingListPanel({ shoppingList }) {
       .catch(() => toast.error('Could not copy to clipboard'))
   }
 
-  return (
-    <section className="mx-auto w-full max-w-2xl flex flex-col rounded-xl border border-border bg-card text-card-foreground overflow-hidden">
-        <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-          <h1 className="flex items-center gap-2 text-lg font-semibold">
-            <ShoppingCart className="h-5 w-5" />
-            Shopping List
-          </h1>
-        </div>
+  const groupedItems = groupByAisle(sortedItems.filter(item => !isChecked(item)))
+  const checkedItems = sortedItems.filter(item => isChecked(item))
+  const openCount = sortedItems.length - checkedItems.length
 
-        <div className="flex-1 overflow-y-auto">
-          {/* Zone 1 — Selected recipes with serving steppers */}
-          {recipeSelections.length > 0 && (
-            <div className="px-6 py-4 border-b border-border space-y-3">
-              {recipeSelections.map(({ recipe_id, servings }) => {
-                const recipe = recipesMap[recipe_id]
-                const dbServings = recipe?.servings ?? null
-                const baseServings = dbServings ?? servings
-                const isChanged = dbServings !== null && servings !== dbServings
+  function renderRecipe({ recipe_id, servings }) {
+    const recipe = recipesMap[recipe_id]
+    const dbServings = recipe?.servings ?? null
+    const baseServings = dbServings ?? servings
+    const isChanged = dbServings !== null && servings !== dbServings
 
-                return (
-                  <div key={recipe_id} className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-3">
-                      <span className="flex-1 text-sm font-medium truncate min-w-0">
-                        {recipe?.name ?? '…'}
-                      </span>
-                      <div className="flex flex-col items-center shrink-0">
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => setServings(recipe_id, servings - 1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-10 text-center text-sm font-medium tabular-nums">
-                            {formatServings(servings)}
-                          </span>
-                          {isChanged && (
-                            <button
-                              className="text-muted-foreground hover:text-foreground transition-colors"
-                              onClick={() => setServings(recipe_id, baseServings)}
-                              title="Reset to default"
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                            </button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => setServings(recipe_id, servings + 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        {dbServings !== null && (
-                          <span className="text-xs text-muted-foreground mt-0.5">
-                            default: {dbServings}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                        onClick={() => removeRecipe(recipe_id)}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                    <IngredientScaleControl
-                      ingredients={ingredientsMap[recipe_id] ?? []}
-                      baseServings={baseServings}
-                      onApply={(newServings) => setServings(recipe_id, newServings)}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Zone 2 — Merged ingredient list */}
-          <TooltipProvider>
-            <div className="px-6 py-4 space-y-1">
-              {recipeSelections.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  Check recipes in the catalogue to build your shopping list.
-                </p>
+    return (
+      <div key={recipe_id} className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-3">
+          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center">
+            {recipe?.cover_path && coverUrls[recipe.cover_path] ? (
+              <img src={coverUrls[recipe.cover_path]} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+          <span className="flex-1 text-sm font-medium truncate min-w-0">
+            {recipe?.name ?? '…'}
+          </span>
+          <div className="flex flex-col items-center shrink-0">
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setServings(recipe_id, servings - 1)}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="w-10 text-center text-sm font-medium tabular-nums">
+                {formatServings(servings)}
+              </span>
+              {isChanged && (
+                <button
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setServings(recipe_id, baseServings)}
+                  title="Reset to default"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </button>
               )}
-
-              {sortedItems.map(item => {
-                const buyQty = getBuyQty(item)
-                const checked = isChecked(item)
-                const isEditing = editingKey === item.key
-
-                return (
-                  <div
-                    key={item.key}
-                    className={`flex items-start gap-3 py-1.5 transition-opacity ${checked ? 'opacity-40' : ''}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => handleCheckToggle(item)}
-                      className="h-4 w-4 shrink-0 cursor-pointer accent-primary mt-0.5"
-                    />
-
-                    <span className={`flex-1 text-sm ${checked ? 'line-through text-muted-foreground' : ''}`}>
-                      {item.name}
-                      {item.preparation ? `, ${item.preparation}` : ''}
-                    </span>
-
-                    {item.computedQty !== null && (
-                      isEditing ? (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleQtyStep(item, -1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-8 text-center text-sm tabular-nums">
-                            {formatQty(buyQty)}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleQtyStep(item, 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                          <button
-                            className="text-xs text-muted-foreground hover:text-foreground ml-1"
-                            onClick={() => setEditingKey(null)}
-                          >
-                            done
-                          </button>
-                        </div>
-                      ) : (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              className={`text-sm shrink-0 tabular-nums transition-colors ${
-                                checked
-                                  ? 'text-muted-foreground line-through cursor-default'
-                                  : 'text-muted-foreground hover:text-foreground cursor-pointer'
-                              }`}
-                              onClick={() => { if (!checked) setEditingKey(item.key) }}
-                            >
-                              {formatQty(buyQty)}{item.unit ? ` ${item.unit}` : ''}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="left">
-                            <div className="text-xs space-y-1 max-w-48">
-                              {item.contributions.map((c, i) => (
-                                <div key={i} className="flex items-baseline gap-1">
-                                  <span className="font-medium tabular-nums">
-                                    {c.scaledQty !== null ? formatQty(c.scaledQty) : '?'}
-                                    {item.unit ? ` ${item.unit}` : ''}
-                                  </span>
-                                  <span className="text-muted-foreground">· {c.recipeName}</span>
-                                  {c.scaleFactor !== 1 && (
-                                    <span className="text-muted-foreground/70">
-                                      ({formatQty(c.baseQty)} ×{parseFloat(c.scaleFactor.toFixed(2))})
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      )
-                    )}
-                  </div>
-                )
-              })}
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setServings(recipe_id, servings + 1)}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
             </div>
-          </TooltipProvider>
+            {dbServings !== null && (
+              <span className="text-xs text-muted-foreground mt-0.5">
+                default: {dbServings}
+              </span>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+            onClick={() => removeRecipe(recipe_id)}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+        <IngredientScaleControl
+          ingredients={ingredientsMap[recipe_id] ?? []}
+          baseServings={baseServings}
+          onApply={(newServings) => setServings(recipe_id, newServings)}
+        />
+      </div>
+    )
+  }
+
+  function renderItem(item) {
+    const buyQty = getBuyQty(item)
+    const checked = isChecked(item)
+    const isEditing = editingKey === item.key
+
+    return (
+      <div
+        key={item.key}
+        className={`flex items-start gap-3 py-1.5 transition-opacity ${checked ? 'opacity-40' : ''}`}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={() => handleCheckToggle(item)}
+          className="h-4 w-4 shrink-0 cursor-pointer accent-primary mt-0.5"
+        />
+
+        <div className="flex-1 min-w-0">
+          <span className={`block text-sm ${checked ? 'line-through text-muted-foreground' : ''}`}>
+            {item.name}
+            {item.preparation ? `, ${item.preparation}` : ''}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {[...new Set(item.contributions.map(c => c.recipeName))].join(', ')}
+          </span>
         </div>
 
-        {/* Zone 3 — Sticky footer */}
+        {item.computedQty !== null && (
+          isEditing ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => handleQtyStep(item, -1)}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="w-8 text-center text-sm tabular-nums">
+                {formatQty(buyQty)}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => handleQtyStep(item, 1)}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground ml-1"
+                onClick={() => setEditingKey(null)}
+              >
+                done
+              </button>
+            </div>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={`text-sm shrink-0 tabular-nums transition-colors ${
+                    checked
+                      ? 'text-muted-foreground line-through cursor-default'
+                      : 'text-muted-foreground hover:text-foreground cursor-pointer'
+                  }`}
+                  onClick={() => { if (!checked) setEditingKey(item.key) }}
+                >
+                  {formatQty(buyQty)}{item.unit ? ` ${item.unit}` : ''}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <div className="text-xs space-y-1 max-w-48">
+                  {item.contributions.map((c, i) => (
+                    <div key={i} className="flex items-baseline gap-1">
+                      <span className="font-medium tabular-nums">
+                        {c.scaledQty !== null ? formatQty(c.scaledQty) : '?'}
+                        {item.unit ? ` ${item.unit}` : ''}
+                      </span>
+                      <span className="text-muted-foreground">· {c.recipeName}</span>
+                      {c.scaleFactor !== 1 && (
+                        <span className="text-muted-foreground/70">
+                          ({formatQty(c.baseQty)} ×{parseFloat(c.scaleFactor.toFixed(2))})
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-6xl grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      {/* Left (top on phones) — this week's recipes, with servings */}
+      <section aria-label="This week's recipes" className="rounded-xl border border-border bg-card text-card-foreground overflow-hidden">
+        <div className="px-6 pt-5 pb-4 border-b border-border flex items-baseline justify-between gap-3">
+          <h2 className="text-lg font-semibold">
+            This week · {recipeSelections.length} {recipeSelections.length === 1 ? 'recipe' : 'recipes'}
+          </h2>
+          <Link to="/recipes" className="text-sm font-medium text-secondary hover:underline">Add more</Link>
+        </div>
+        {recipeSelections.length === 0 ? (
+          <p className="px-6 py-8 text-center text-sm text-muted-foreground">
+            Pick recipes with the cart button on the Recipes tab.
+          </p>
+        ) : (
+          <div className="px-6 py-4 space-y-4">
+            {recipeSelections.map(renderRecipe)}
+          </div>
+        )}
+      </section>
+
+      {/* Right (below on phones) — the merged list, grouped by aisle */}
+      <section aria-label="Shopping list" className="rounded-xl border border-border bg-card text-card-foreground overflow-hidden flex flex-col">
+        <div className="px-6 pt-5 pb-4 border-b border-border">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <ShoppingCart className="h-5 w-5" />
+            Shopping list{recipeSelections.length > 0 ? ` · ${openCount} ${openCount === 1 ? 'item' : 'items'}` : ''}
+          </h2>
+          {recipeSelections.length > 0 && (
+            <p className="mt-1 text-sm text-muted-foreground">Tick what you already have; ticked items aren't copied.</p>
+          )}
+        </div>
+
+        <TooltipProvider>
+          <div className="px-6 pb-4">
+            {recipeSelections.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">Your list is empty.</p>
+            )}
+            {groupedItems.map(({ aisle, items }) => (
+              <div key={aisle}>
+                <h3 className="pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{aisle}</h3>
+                <div className="space-y-1">{items.map(renderItem)}</div>
+              </div>
+            ))}
+            {checkedItems.length > 0 && (
+              <div>
+                <h3 className="pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Already have</h3>
+                <div className="space-y-1">{checkedItems.map(renderItem)}</div>
+              </div>
+            )}
+          </div>
+        </TooltipProvider>
+
+        {/* Footer — list actions */}
         {recipeSelections.length > 0 && (
-          <div className="px-6 py-4 border-t border-border flex gap-2 shrink-0">
+          <div className="px-6 py-4 border-t border-border flex flex-wrap gap-2 shrink-0">
             {hasChecked && (
               <Button
                 variant="outline"
@@ -428,16 +481,23 @@ export default function ShoppingListPanel({ shoppingList }) {
               </Button>
             )}
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
-              className={hasChecked ? 'flex-1' : 'w-full'}
+              className="flex-1"
               onClick={handleCopyForReminders}
             >
               <Copy className="h-3 w-3 mr-1" />
               Copy for Reminders
             </Button>
+            <Button variant="default" size="sm" className="flex-1" asChild>
+              <Link to="/ordering">
+                Send to AH
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </Button>
           </div>
         )}
-    </section>
+      </section>
+    </div>
   )
 }
