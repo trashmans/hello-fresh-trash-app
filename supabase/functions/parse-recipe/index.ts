@@ -333,7 +333,7 @@ Deno.serve(async (req) => {
       "name": "ingredient name only, in English (e.g. chicken breast, garlic clove)",
       "canonical_name": "base-form ingredient for search, in English — strip preparation, quantity words, and adjectives (e.g. 'chicken breast' → 'chicken', 'fresh garlic cloves' → 'garlic', 'extra virgin olive oil' → 'olive oil', 'baby spinach leaves' → 'spinach', 'soy sauce' → 'soy sauce'). Use the shortest recognisable common name.",
       "quantity": numeric value or null,
-      "unit": "unit string or null",
+      "unit": "unit string or null — see PACKAGED ITEMS below",
       "preparation": "prep method, in English (e.g. diced, sliced) or null",
       "display_order": 1
     }
@@ -350,7 +350,20 @@ NUTRITION: Fill two separate objects, both per serving, each with the same eight
 - "nutrition_estimate": your own estimate of ALL eight values per serving, worked out from the ingredient list (the first-column quantities and the servings count above), whether or not the PDF prints them. Use null only if the ingredient list gives you nothing to estimate from.
 - Round calories to a whole number and grams to one decimal place. Use plain numbers (e.g. 420, 12.5) with no units in the value itself.
 
-STEPS: Write each step in your own words rather than copying the card's sentences. Keep every quantity, time, temperature, ingredient and the order of steps exactly as on the card, and keep each step about as detailed as the original; only the wording should change. Don't merge, split or skip steps.
+PACKAGED ITEMS: Meal-kit cards often give only a count with no unit for something that comes in a package, meaning one of the kit's own packets (e.g. "Cannellini Beans 1", "Mushroom Stock Concentrate 2"). A shopper can't buy "1 cannellini beans", so set "unit" to the grocery package that replaces it, and keep "quantity" as the count on the card:
+- beans, chickpeas, lentils, coconut milk, tinned tomatoes or corn → "can"
+- stock or broth concentrate → "stock cube"
+- spice blends, seasoning mixes, dried herbs → "packet"
+- sauces, pastes, condiments (e.g. chili crisp, pesto, hoisin) → "jar"
+- anything else sold only in a package → the most usual shop package for it (e.g. "bag", "tub", "carton", "pack")
+Leave "unit" null for things bought and counted on their own (e.g. onion, lemon, egg, zucchini, bell pepper, demi-baguette). Never invent a weight or volume, and never change a unit or weight the card already gives.
+
+STEPS: Write each step in your own words rather than copying the card's sentences, and make it concise: short imperative sentences, roughly 20–45 words per step. Keep, in this order of priority:
+1. Cut size and shape (e.g. "dice into ½-inch pieces", "thinly slice", "mince").
+2. Heat level (e.g. "medium-high heat", "high broil").
+3. Cooking time (e.g. "4–5 minutes").
+4. What it should look like when it's done (e.g. "until golden brown and crispy", "until softened", "until the sauce thickens").
+Drop filler: reassurances, remarks about the kit's packaging, repeated tips, and words like "carefully" or "simply". Keep every ingredient, quantity, time and temperature, and keep the steps in the card's order. Don't merge, split or skip steps (the app matches each step to its photo by position); a step that is only preparation filler, such as washing produce, becomes one short sentence rather than being dropped.
 
 TEMPERATURES: Whenever a step mentions an oven or cooking temperature, wrap the numeric value in the step text using this exact marker syntax: {{temp:VALUEU}}, where VALUE is the number as written (digits only, no unit symbol, no comma) and U is F for Fahrenheit or C for Celsius, matching whichever the source PDF states. This lets the app convert and display it in the reader's preferred unit. Examples:
 - "Preheat oven to 425 degrees." → "Preheat oven to {{temp:425F}} degrees."
