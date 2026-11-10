@@ -55,8 +55,8 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="font-semibold text-base mb-2">Albert Heijn link (optional)</h2>
             <p>
-              If Albert Heijn linking is switched on for your household, you can choose to link your AH account in
-              Settings. The app then stores an <strong>encrypted AH login token</strong>, when it was linked and when it
+              If Albert Heijn linking is switched on for your household, you can choose to link your AH account on
+              the Automated ordering tab. The app then stores an <strong>encrypted AH login token</strong>, when it was linked and when it
               was last used. We never see or store your AH password: you log in on Albert Heijn's own page.
             </p>
             <p className="mt-2">
@@ -66,7 +66,7 @@ export default function PrivacyPolicy() {
               database.
             </p>
             <p className="mt-2">
-              Linking is based on your consent. You can withdraw it at any time by unlinking in Settings, which deletes
+              Linking is based on your consent. You can withdraw it at any time by unlinking on the Automated ordering tab, which deletes
               the token immediately. We keep a log of linking, unlinking and token refreshes (who and when, never
               tokens or shopping contents) for 12 months.
             </p>

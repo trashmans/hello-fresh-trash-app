@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext'
 export default function Login() {
   const { session, authError } = useAuth()
 
-  if (session) return <Navigate to="/home" replace />
+  if (session) return <Navigate to="/recipes" replace />
 
   const handleGoogleSignIn = async () => {
     await supabase.auth.signInWithOAuth({

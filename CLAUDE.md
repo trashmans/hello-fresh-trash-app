@@ -48,7 +48,7 @@ The human runs all npm commands. After code changes, prompt them to run the appr
 - **React 19** + **Vite** — component framework and build tool
 - **Tailwind v4** — utility classes directly in JSX, no config file to edit
 - **shadcn/ui** — pre-built components live in `src/components/ui/`, use these rather than building from scratch
-- **React Router v7** with `BrowserRouter` — clean URLs (`/home`), not hash routing (`/#/home`)
+- **React Router v7** with `BrowserRouter` — clean URLs (`/recipes`), not hash routing (`/#/recipes`)
 - **Supabase** — backend: auth (Google OAuth), Postgres database, file storage, edge functions
 - **Vercel** — frontend hosting, deployed via GitHub Actions (not the native Vercel Git integration)
 

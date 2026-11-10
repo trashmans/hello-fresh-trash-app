@@ -73,7 +73,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 
 ### Routing Layer
 
-**React Router v7** handles navigation between pages entirely in the browser — no page reloads. Uses `BrowserRouter` mode (`/home`) because Vercel redirects unknown paths to `index.html`, allowing clean URLs.
+**React Router v7** handles navigation between pages entirely in the browser — no page reloads. Uses `BrowserRouter` mode (`/recipes`) because Vercel redirects unknown paths to `index.html`, allowing clean URLs.
 
 ---
 
@@ -85,7 +85,7 @@ The app itself is split into four layers. Each layer has one job and can be upda
 | **Vite** | Build tool and local dev server. Compiles JSX and serves the app locally. `npm run build` compiles everything into `dist/` for deployment. |
 | **GitHub Actions** | CI/CD pipeline. Ten workflows cover frontend, database migration, and edge function deploys (each split into preview/production), preview migration cleanup, dependency bump checks, unit tests on every PR, and secret scanning. |
 | **Vercel CLI** | The tool GitHub Actions uses to build and deploy to Vercel. All output is logged in GitHub Actions — no Vercel dashboard needed to debug failures. |
-| **Vercel** | Frontend hosting. Supports private repositories, provides a preview URL for every PR, and serves clean `/home` style URLs. |
+| **Vercel** | Frontend hosting. Supports private repositories, provides a preview URL for every PR, and serves clean `/recipes` style URLs. |
 | **Dependabot** | Automated dependency updates. Once a month, opens one grouped PR each for npm and GitHub Actions minor/patch bumps. Every major bump gets its own PR so breaking changes stand out. Security fixes arrive immediately, outside this schedule (requires **Dependabot security updates** enabled in repo settings). |
 
 #### GitHub Actions workflows
@@ -250,9 +250,11 @@ src/
 ├── components/
 │   ├── ui/                  # shadcn/ui base components (Button, Card, Input, Sheet, Tabs, Tooltip, …)
 │   ├── ProtectedRoute       # redirects unauthenticated users to login
+│   ├── AppShell             # layout for signed-in pages: header (title, upload, cart with count, account menu), side menu on desktop and bottom tab bar on phones (Recipes, Shopping, Automated ordering, Social); holds the shared shopping list and passes it to pages through the router outlet
+│   ├── AlbertHeijnCard      # link / unlink an Albert Heijn account: status, step-by-step desktop link flow with a paste box (shown only when the household's ah_enabled switch is on; unlink always available)
 │   ├── RecipeCatalogue      # gallery of all ready recipes; cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own
 │   ├── RecipeTable          # sortable list-view alternative to the gallery (name, cook/prep time, difficulty, cuisine, protein, and nutrition columns); AI-estimated nutrition values show as ~value with a sparkle icon, tooltip, and a legend under the table; sort config and comparison logic live in src/lib/recipeSort.js
-│   ├── ShoppingListDrawer   # slide-in drawer: recipe servings steppers (or scale by a target amount of one ingredient instead), merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
+│   ├── ShoppingListPanel    # the Shopping tab's list: recipe servings steppers (or scale by a target amount of one ingredient instead), merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload
 │   ├── RecipePreviewPanel   # side panel; Instructions tab (ingredients + steps, with per-step photos when available, scalable by servings or by a target amount of one ingredient) and Original PDF tab (signed URL in an iframe)
@@ -271,8 +273,11 @@ src/
 │   └── useRecipeStepImages.js  # per-step photo URLs for a single recipe, gated on an exact count match with parsed steps
 ├── pages/
 │   ├── Login                # login screen with Google OAuth
-│   ├── Home                 # main app screen; cart icon in header opens ShoppingListDrawer
-│   ├── Settings             # /settings: Appearance card (Light / Dark, saved per device) and Albert Heijn card — link status, step-by-step desktop link flow with a paste box, unlink (shown only when the household's ah_enabled switch is on; unlink always available)
+│   ├── Recipes              # /recipes (Recipes tab): ingredient search, gallery or list, preview panel; /home redirects here
+│   ├── Shopping             # /shopping (Shopping tab): ShoppingListPanel
+│   ├── Ordering             # /ordering (Automated ordering tab): AlbertHeijnCard plus what's coming in rollout phases 4–6
+│   ├── Social               # /social (Social tab): placeholder for sharing, friends and groups
+│   ├── Settings             # /settings: Appearance card (Light / Dark, saved per device); AH linking moved to the Automated ordering tab
 │   └── PrivacyPolicy        # GDPR privacy policy (/privacy), incl. recipe parsing (Gemini), households and the optional AH link
 └── lib/
     ├── supabase.js           # Supabase client

@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
 import { ShoppingCart, X, RotateCcw, Minus, Plus, Copy, Trash2, Scale } from 'lucide-react'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -124,7 +123,7 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
   )
 }
 
-export default function ShoppingListDrawer({ open, onClose, shoppingList }) {
+export default function ShoppingListPanel({ shoppingList }) {
   // Shopping list lines follow the same volume / mass preference as the recipe view.
   const { unitPrefs } = useAuth()
   const {
@@ -231,14 +230,13 @@ export default function ShoppingListDrawer({ open, onClose, shoppingList }) {
   }
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-full sm:max-w-lg flex flex-col p-0 gap-0 text-foreground">
-        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-          <SheetTitle className="flex items-center gap-2">
+    <section className="mx-auto w-full max-w-2xl flex flex-col rounded-xl border border-border bg-card text-card-foreground overflow-hidden">
+        <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+          <h1 className="flex items-center gap-2 text-lg font-semibold">
             <ShoppingCart className="h-5 w-5" />
             Shopping List
-          </SheetTitle>
-        </SheetHeader>
+          </h1>
+        </div>
 
         <div className="flex-1 overflow-y-auto">
           {/* Zone 1 — Selected recipes with serving steppers */}
@@ -440,7 +438,6 @@ export default function ShoppingListDrawer({ open, onClose, shoppingList }) {
             </Button>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+    </section>
   )
 }

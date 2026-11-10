@@ -1,4 +1,4 @@
-// Display logic for the Albert Heijn card on the Settings page. Pure: the page calls the
+// Display logic for the Albert Heijn card on the Automated ordering tab. Pure: the page calls the
 // link-account Edge Function (src/hooks/useAhLink.js) and uses these to decide what to show.
 
 /** AH's app login page. After login it redirects to appie://login-exit?code=…, which only
