@@ -33,7 +33,7 @@ Shopping data can reveal sensitive traits by inference (diet, religion, health, 
 | Supabase | Processor: database, auth, storage, Edge Functions | All app data | EU: West EU (Ireland), both production and preview |
 | Vercel | Processor: frontend hosting | Request metadata (IP, user agent) | Global edge network |
 | Google | Sign-in provider | Name, email, picture at sign-in | Global |
-| Google (Gemini API) | Processor: recipe PDF parsing | Uploaded recipe PDFs | Global |
+| Google (Gemini API) | Processor: recipe PDF parsing; translating staple product searches into Dutch | Uploaded recipe PDFs; staple search words (no user data) | Global |
 | Apple, Google, Mozilla push services | Deliver push messages (**planned**) | Encrypted push payload with no item names | Global |
 | Albert Heijn | Recipient at the user's request | Shopping list lines written to the user's own AH account | Netherlands |
 

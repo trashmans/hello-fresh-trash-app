@@ -1,6 +1,9 @@
 // Search the household's supermarket (AH) for products, for the Staples screen (rollout phase 4).
 //
-// POST { query: 'halfvolle melk' } → { products: [{ externalId, title, salesUnitSize, price, bonus }] }
+// POST { query: 'crushed tomatoes' } → { products: [{ externalId, title, salesUnitSize, price, bonus }], searchedFor: ['tomatenblokjes', 'crushed tomatoes'] }
+//
+// English works: Gemini turns the query into the Dutch words AH uses (_shared/translateSearch.ts),
+// and AH is searched for those first, then for the words as typed.
 //
 // Uses the household's linked account (token refreshed single-flight, never stored or
 // returned), saves every product seen in public.retailer_products (the product cache,
@@ -15,6 +18,7 @@ import { createSql, pgTokenStore } from '../_shared/retailer/pgStores.ts'
 import { searchRetailerProducts } from '../_shared/retailer/productSearch.ts'
 import { RetailerError } from '../_shared/retailer/types.ts'
 import { masterKeysFromEnv, TokenCryptoError } from '../_shared/tokenCrypto.ts'
+import { translateSearchToDutch } from '../_shared/translateSearch.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -71,6 +75,7 @@ Deno.serve(async (req) => {
         householdId,
         retailer: RETAILER,
       }, fn),
+      translate: (query) => translateSearchToDutch(query, Deno.env.get('GEMINI_API_KEY')),
       search: (token, query, size) => adapter.searchProducts(token, query, size),
       async saveProducts(rows) {
         await sql`
