@@ -256,7 +256,7 @@ src/
 │   ├── RecipeTable          # sortable list-view alternative to the gallery (name, cook/prep time, difficulty, cuisine, protein, and nutrition columns); AI-estimated nutrition values show as ~value with a sparkle icon, tooltip, and a legend under the table; sort config and comparison logic live in src/lib/recipeSort.js
 │   ├── ShoppingListPanel    # the Shopping tab's list: recipe servings steppers (or scale by a target amount of one ingredient instead), merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
-│   ├── UploadQueue          # per-file progress list shown during batch upload
+│   ├── UploadQueue          # per-file progress list shown during batch upload; closes itself 4 s after a fully successful batch, stays open (with Clear) when anything failed
 │   ├── RecipePreviewPanel   # side panel; Instructions tab (ingredients + steps, with per-step photos when available, scalable by servings or by a target amount of one ingredient) and Original PDF tab (signed URL in an iframe)
 │   ├── UserMenu             # avatar dropdown with sign-out, admin toggle, independent display-unit toggles (temperature, volume, mass), and a link to Settings
 │   └── IngredientSearch     # chip-based ingredient typeahead; select suggestions, remove with the chip's × button

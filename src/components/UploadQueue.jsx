@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -13,11 +14,25 @@ function StatusIcon({ status }) {
   return <Clock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
 }
 
+// How long a fully successful batch stays on screen before it closes itself.
+// Batches with a failure stay until Clear is pressed, so the error can be read.
+const AUTO_CLOSE_MS = 4000
+
 export default function UploadQueue({ queue, summary, isRunning, onClear }) {
+  const onClearRef = useRef(onClear)
+  onClearRef.current = onClear
+
+  const allSucceeded = !isRunning && summary != null && summary.failed === 0 && summary.uploaded > 0
+  useEffect(() => {
+    if (!allSucceeded) return
+    const timer = setTimeout(() => onClearRef.current(), AUTO_CLOSE_MS)
+    return () => clearTimeout(timer)
+  }, [allSucceeded])
+
   if (queue.length === 0) return null
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 rounded-lg border border-border bg-card shadow-lg sm:left-auto sm:w-80">
+    <div role="status" className="fixed bottom-20 md:bottom-4 left-4 right-4 z-50 rounded-lg border border-border bg-card text-card-foreground shadow-lg sm:left-auto sm:w-80">
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <p className="text-sm font-semibold">
           {isRunning ? 'Uploading…' : 'Uploads'}
