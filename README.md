@@ -254,7 +254,7 @@ src/
 │   ├── AlbertHeijnCard      # link / unlink an Albert Heijn account: status, step-by-step desktop link flow with a paste box (shown only when the household's ah_enabled switch is on; unlink always available)
 │   ├── RecipeCatalogue      # gallery of all ready recipes; cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own
 │   ├── RecipeTable          # sortable list-view alternative to the gallery (name, cook/prep time, difficulty, cuisine, protein, and nutrition columns); AI-estimated nutrition values show as ~value with a sparkle icon, tooltip, and a legend under the table; sort config and comparison logic live in src/lib/recipeSort.js
-│   ├── ShoppingListPanel    # the Shopping tab's list: recipe servings steppers (or scale by a target amount of one ingredient instead), merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
+│   ├── ShoppingListPanel    # the Shopping tab: two columns on desktop (stacked on phones) — this week's recipes with cover thumbnails and servings steppers, and the list grouped by aisle (src/lib/aisles.js) with the recipe(s) each item is for, ticked items under "Already have", Copy for Reminders and Send to AH (links to the Automated ordering tab); recipe servings steppers (or scale by a target amount of one ingredient instead), merged ingredient list with per-item quantity controls, persists to shopping_lists via useShoppingList
 │   ├── PDFUploader          # file picker UI; delegates to useUploadQueue
 │   ├── UploadQueue          # per-file progress list shown during batch upload; closes itself 4 s after a fully successful batch, stays open (with Clear) when anything failed
 │   ├── RecipePreviewPanel   # side panel; Instructions tab (ingredients + steps, with per-step photos when available, scalable by servings or by a target amount of one ingredient) and Original PDF tab (signed URL in an iframe)
@@ -293,6 +293,7 @@ src/
     ├── staples.js             # weekStartOf(), checkStaple(), planDueStaples() — which staples are due this week (cadence in whole Mon–Sun weeks, skip_next, bonus stock cover via covered_until); dates are plain YYYY-MM-DD strings
     ├── stockup.js             # parseBonusMechanism() reads AH deal labels ("2e GRATIS", "2+1 GRATIS", "3 VOOR 5,00") into a pack group size; planStockUp() buys non-perishable staples on bonus up to max_weeks_stock, rounded to whole deals, and returns the new covered_until
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp); bestUnitInSystem() picks the display unit for an amount within one system
+    ├── aisles.js              # AISLES, aisleFor() (keyword rules, first match wins: 'garlic powder' → Herbs & spices, 'mushroom stock concentrate' → Pantry, 'green beans' → Produce), groupByAisle() for the Shopping tab
     ├── theme.js               # THEME_STORAGE_KEY, normalizeTheme() (only 'dark' means dark; anything else is light), toggleTheme(), themeColorFor() (browser bar colour per theme)
     ├── ahLink.js              # AH_LOGIN_URL, linkStatusView() (what the Settings card shows per status), checkPastedLink() (stops a paste that can't work before AH's one-time code is used), formatLinkDate()
     ├── householdSync.js       # toHouseholdSyncPayload() — reshapes the shopping list state into the picks / adjustments payload for sync_household_shopping_list(), dropping entries the database would reject (last duplicate wins)
@@ -308,6 +309,7 @@ src/
     ├── units.test.js          # unit reading, including T vs t
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
+    ├── aisles.test.js         # aisle for ~90 real ingredient names incl. the tricky ones, case and preparation words, unknown → Other, grouping order
     ├── theme.test.js          # theme key, light fallback for unknown values, toggling, browser bar colours
     ├── ahLink.test.js         # Settings card per status (switch off, not linked, linked, relink needed; unlink always possible), paste checks, dates
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
