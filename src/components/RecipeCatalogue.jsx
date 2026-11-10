@@ -7,9 +7,20 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { renderPdfCoverBlob } from '@/lib/pdfCover'
 import RecipeTable from '@/components/RecipeTable'
+import RecipeDeleteMenu from '@/components/RecipeDeleteMenu'
+import { RECIPE_FILTERS, normalizeRecipeFilter, filterRecipes } from '@/lib/recipeFilter'
 import { STATUS_POLL_MS, isInProgress, inProgressIdsToCheck, mergeStatusUpdates, recipeCardState } from '@/lib/recipeStatus'
 
 const VIEW_MODE_STORAGE_KEY = 'recipeCatalogueViewMode'
+const OWNER_FILTER_STORAGE_KEY = 'recipeCatalogueOwnerFilter'
+
+function loadOwnerFilter() {
+  try {
+    return normalizeRecipeFilter(localStorage.getItem(OWNER_FILTER_STORAGE_KEY))
+  } catch {
+    return 'all'
+  }
+}
 
 function loadViewMode() {
   try {
@@ -174,6 +185,16 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   const [reparseWatch, setReparseWatch] = useState(() => new Set())
   const [backfilling, setBackfilling] = useState(false)
   const [viewMode, setViewModeRaw] = useState(loadViewMode)
+  const [ownerFilter, setOwnerFilterRaw] = useState(loadOwnerFilter)
+
+  function setOwnerFilter(filter) {
+    setOwnerFilterRaw(filter)
+    try {
+      localStorage.setItem(OWNER_FILTER_STORAGE_KEY, filter)
+    } catch {
+      // Same as the view mode: remembered per device when storage allows.
+    }
+  }
 
   function setViewMode(mode) {
     setViewModeRaw(mode)
@@ -453,9 +474,12 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
   // ingredientMatches already contains only recipes matching every
   // selected ingredient chip (AND match) — see useIngredientFilter.
+  // The owner filter (all / mine / friends) applies first; friend ids come
+  // with the Social tab, so for now "friends" is disabled and matches nothing.
+  const ownerRecipes = filterRecipes(recipes, ownerFilter, { userId: session.user.id })
   const displayRecipes = ingredientMatches
-    ? recipes.filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
-    : recipes
+    ? ownerRecipes.filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
+    : ownerRecipes
 
   // List view only applies to ready recipes — columns like cook time
   // don't mean anything for a still-processing upload, so pending/failed/
@@ -484,7 +508,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     )
   }
 
-  if (ingredientMatches && displayRecipes.length === 0) {
+  if (ingredientMatches && ownerRecipes.length > 0 && displayRecipes.length === 0) {
     return (
       <Card className="flex flex-col items-center text-center py-16">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
@@ -499,6 +523,34 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   const canDelete = (recipe) =>
     recipe.uploaded_by === session?.user?.id || adminMode
 
+  const ownerFilterControl = (
+    <div role="group" aria-label="Show recipes" className="flex flex-wrap items-center gap-1 rounded-md border border-border p-0.5">
+      {RECIPE_FILTERS.map(f => {
+        const unavailable = Boolean(f.needsSocial)
+        const active = ownerFilter === f.key
+        return (
+          <button
+            key={f.key}
+            type="button"
+            disabled={unavailable}
+            aria-pressed={active}
+            title={unavailable ? 'Available once the Social tab is live' : undefined}
+            onClick={() => setOwnerFilter(f.key)}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              active
+                ? 'bg-secondary text-secondary-foreground'
+                : unavailable
+                  ? 'text-muted-foreground/60 cursor-not-allowed'
+                  : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {f.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+
   function getDuplicateId(recipe) {
     const match = (recipe.rejection_reason ?? '').match(/^duplicate:(.+)$/)
     return match?.[1] ?? null
@@ -506,7 +558,9 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4 gap-4">
+      <div className="flex flex-wrap items-center justify-between mb-4 gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+        {ownerFilterControl}
         {adminMode && recipesMissingCovers.length > 0 ? (
           <Button
             variant="outline"
@@ -520,7 +574,8 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
             }
             Generate {recipesMissingCovers.length} missing cover{recipesMissingCovers.length === 1 ? '' : 's'} (admin)
           </Button>
-        ) : <span />}
+        ) : null}
+        </div>
         <div className="flex items-center gap-1 rounded-md border border-border p-0.5 shrink-0">
           <button
             className={`rounded p-1.5 transition-colors ${viewMode === 'icon' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
@@ -538,6 +593,14 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
           </button>
         </div>
       </div>
+      {ownerRecipes.length === 0 && (
+        <Card className="flex flex-col items-center text-center py-12">
+          <p className="text-lg font-semibold">{ownerFilter === 'mine' ? "You haven't uploaded any recipes yet" : 'No recipes here yet'}</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {ownerFilter === 'mine' ? 'Upload a recipe PDF, or switch to All recipes.' : 'Switch to All recipes to see everything.'}
+          </p>
+        </Card>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {displayRecipes.map(recipe => {
         const card = recipeCardState(recipe, { userId: session.user.id, adminMode, watchedIds: reparseWatch })
@@ -641,15 +704,11 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
                 </Button>
               )}
               {canDelete(recipe) && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={deleting === recipe.id}
-                  onClick={(e) => handleDelete(recipe, e)}
-                  className="absolute top-2 right-2 bg-card/90 shadow-sm text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <RecipeDeleteMenu
+                  recipe={recipe}
+                  deleting={deleting === recipe.id}
+                  onDelete={(r, e) => handleDelete(r, e)}
+                />
               )}
             </Card>
           )

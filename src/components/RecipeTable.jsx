@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { FileText, ShoppingCart, Trash2, RefreshCw, Loader2, ArrowUp, ArrowDown, ArrowUpDown, Sparkles } from 'lucide-react'
+import { FileText, ShoppingCart, RefreshCw, Loader2, ArrowUp, ArrowDown, ArrowUpDown, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import RecipeDeleteMenu from '@/components/RecipeDeleteMenu'
 import { RECIPE_TABLE_COLUMNS as COLUMNS, sortRecipes, formatRecipeCell, isEstimated } from '@/lib/recipeSort'
 
 // Filled dots in the Difficulty pill (shape as well as colour, so it reads without colour vision).
@@ -166,15 +167,12 @@ export default function RecipeTable({
                       </Button>
                     )}
                     {canDelete(recipe) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        disabled={deleting === recipe.id}
-                        onClick={(e) => onDelete(recipe, e)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <RecipeDeleteMenu
+                        variant="row"
+                        recipe={recipe}
+                        deleting={deleting === recipe.id}
+                        onDelete={onDelete}
+                      />
                     )}
                   </div>
                 </td>
