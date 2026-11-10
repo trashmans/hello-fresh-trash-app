@@ -1,7 +1,8 @@
 // Product search for the Staples screen (rollout phase 4).
 //
 // searchRetailerProducts() checks the query, checks the user's household may use the
-// retailer (member + ah_enabled), runs the search through the household's linked account
+// retailer (member + ah_enabled), asks deps.translate (if given) for the Dutch words AH
+// uses — English searches work that way — then runs the search(es) through the household's linked account
 // (single-flight token refresh, accountTokens.ts), saves every product it saw in the
 // product cache (public.retailer_products) and returns the orderable ones in the
 // retailer's order. The database and the retailer sit behind ProductSearchDeps so this is
@@ -73,6 +74,8 @@ export interface ProductSearchDeps {
   search(accessToken: string, query: string, size: number): Promise<RetailerProduct[]>
   saveProducts(rows: ProductRow[]): Promise<void>
   now(): string
+  /** The query in the retailer's language (Dutch for AH), or null if unsure. Failures are ignored. */
+  translate?(query: string): Promise<string | null>
   /** Called when the product cache couldn't be updated; the search still succeeds. */
   onCacheError?(error: unknown): void
 }
@@ -80,7 +83,7 @@ export interface ProductSearchDeps {
 export async function searchRetailerProducts(
   deps: ProductSearchDeps,
   { userId, retailer, query: raw }: { userId: string; retailer: string; query: unknown },
-): Promise<{ products: SearchResult[] }> {
+): Promise<{ products: SearchResult[]; searchedFor: string[] }> {
   const check = checkSearchQuery(raw)
   if (!check.ok) throw new RetailerError('invalid', check.message)
 
@@ -89,7 +92,22 @@ export async function searchRetailerProducts(
     throw new RetailerError('forbidden', 'Supermarket features are not switched on for your household')
   }
 
-  const found = await deps.withToken(household.householdId, (token) => deps.search(token, check.query, RESULT_SIZE))
+  // The translated term first (it matches AH's product names), then the words as typed.
+  const terms = [check.query]
+  if (deps.translate) {
+    try {
+      const translated = checkSearchQuery(await deps.translate(check.query))
+      if (translated.ok && translated.query.toLowerCase() !== check.query.toLowerCase()) terms.unshift(translated.query)
+    } catch {
+      // No translation: search the words as typed.
+    }
+  }
+
+  const found = await deps.withToken(household.householdId, async (token) => {
+    const all: RetailerProduct[] = []
+    for (const term of terms) all.push(...(await deps.search(token, term, RESULT_SIZE)))
+    return all
+  })
 
   const unique: RetailerProduct[] = []
   const seen = new Set<number>()
@@ -108,5 +126,5 @@ export async function searchRetailerProducts(
     }
   }
 
-  return { products: unique.filter((p) => p.orderable).map(toSearchResult) }
+  return { products: unique.filter((p) => p.orderable).map(toSearchResult), searchedFor: terms }
 }

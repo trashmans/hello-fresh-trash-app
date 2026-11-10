@@ -253,6 +253,7 @@ src/
 │   ├── ui/                  # shadcn/ui base components (Button, Card, Input, Sheet, Tabs, Tooltip, …)
 │   ├── ProtectedRoute       # redirects unauthenticated users to login
 │   ├── AppShell             # layout for signed-in pages: header (title, upload, cart with count, account menu), side menu on desktop and bottom tab bar on phones (Recipes, Shopping, Automated ordering, Social); holds the shared shopping list and passes it to pages through the router outlet
+│   ├── StaplesCard          # Staples on the Automated ordering tab: list with a one-line summary (describeStaple), add / edit form with AH product search on submit (pin a product, or keep a search term), quantity, every N weeks, stock up on bonus up to N weeks; skip next, pause / resume, remove with a confirm. Shown only when the household's ah_enabled switch is on
 │   ├── AlbertHeijnCard      # link / unlink an Albert Heijn account: status, step-by-step desktop link flow with a paste box (shown only when the household's ah_enabled switch is on; unlink always available)
 │   ├── RecipeCatalogue      # gallery of all ready recipes, filtered by All / My / Friends' recipes (src/lib/recipeFilter.js; Friends' is disabled until the Social tab exists; remembered per device); cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own through RecipeDeleteMenu
 │   ├── RecipeDeleteMenu     # "⋯" menu → Delete recipe… → confirmation (covers the card, or inline in a list row), so one stray click can't delete a recipe
@@ -272,13 +273,14 @@ src/
 │   │                           # useIngredientFilter() — given selected chips, returns recipes matching ALL of them (AND)
 │   ├── useRecipeIngredients.js # ingredient list for a single recipe, in display order
 │   ├── useTheme.js            # light/dark choice for this device: keeps <html class="dark">, the theme-color meta tag and localStorage (hft-theme) in step; public/theme-init.js applies the saved choice before React loads
+│   ├── useStaples.js          # household staples (household_staples, with the pinned product's cached title / pack size / price) — add / update / remove — and searchProducts(query) through the retailer-products function
 │   ├── useAhLink.js           # household ah_enabled + AH link status through the link-account function; link(pasted) / unlink(); never sees tokens
 │   └── useRecipeStepImages.js  # per-step photo URLs for a single recipe, gated on an exact count match with parsed steps
 ├── pages/
 │   ├── Login                # login screen with Google OAuth
 │   ├── Recipes              # /recipes (Recipes tab): ingredient search, gallery or list, preview panel; /home redirects here
 │   ├── Shopping             # /shopping (Shopping tab): ShoppingListPanel
-│   ├── Ordering             # /ordering (Automated ordering tab): AlbertHeijnCard plus what's coming in rollout phases 4–6
+│   ├── Ordering             # /ordering (Automated ordering tab): AlbertHeijnCard, StaplesCard, and what's coming in rollout phases 5–6
 │   ├── Social               # /social (Social tab): placeholder for sharing, friends and groups
 │   ├── Settings             # /settings: Appearance card (Light / Dark, saved per device); AH linking moved to the Automated ordering tab
 │   └── PrivacyPolicy        # GDPR privacy policy (/privacy), incl. recipe parsing (Gemini), households and the optional AH link
@@ -298,6 +300,7 @@ src/
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp); bestUnitInSystem() picks the display unit for an amount within one system
     ├── aisles.js              # AISLES, aisleFor() (keyword rules, first match wins: 'garlic powder' → Herbs & spices, 'mushroom stock concentrate' → Pantry, 'green beans' → Produce), groupByAisle() for the Shopping tab
     ├── recipeFilter.js        # RECIPE_FILTERS (all, mine, friends — friends needs the Social tab), normalizeRecipeFilter() for saved values, filterRecipes() by uploader
+    ├── stapleForm.js          # STAPLE_LIMITS (match the household_staples checks), toStapleRow() turns the form into a row or per-field messages (stock up on bonus = non-perishable with a weeks limit), describeStaple() for the list
     ├── theme.js               # THEME_STORAGE_KEY, normalizeTheme() (only 'dark' means dark; anything else is light), toggleTheme(), themeColorFor() (browser bar colour per theme)
     ├── ahLink.js              # AH_LOGIN_URL, linkStatusView() (what the Settings card shows per status), checkPastedLink() (stops a paste that can't work before AH's one-time code is used), formatLinkDate()
     ├── householdSync.js       # toHouseholdSyncPayload() — reshapes the shopping list state into the picks / adjustments payload for sync_household_shopping_list(), dropping entries the database would reject (last duplicate wins)
@@ -315,6 +318,7 @@ src/
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, and scaleIngredients()
     ├── aisles.test.js         # aisle for ~90 real ingredient names incl. the tricky ones, case and preparation words, unknown → Other, grouping order
     ├── recipeFilter.test.js   # filter list, saved-value fallback, all / mine / friends, no friends yet, list not changed
+    ├── stapleForm.test.js     # form → row: pinned product or search term, numbers typed as text, stock-up rules, all errors at once, ranges; one-line summaries incl. paused / skipping
     ├── theme.test.js          # theme key, light fallback for unknown values, toggling, browser bar colours
     ├── ahLink.test.js         # Settings card per status (switch off, not linked, linked, relink needed; unlink always possible), paste checks, dates
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
@@ -333,7 +337,7 @@ supabase/
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     ├── admin-reparse/       # admin-only; clears a ready or failed recipe (any uploader) and sets it back to pending so parse-recipe runs again
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
-    ├── retailer-products/   # searches the household's AH through its link (POST { query }), caches the products in retailer_products, returns the orderable ones; needs ah_enabled and a linked account; fake AH on preview
+    ├── retailer-products/   # searches the household's AH through its link (POST { query }; English works: Gemini turns it into AH's Dutch words first, see _shared/translateSearch.ts, and both are searched), caches the products in retailer_products, returns the orderable ones; needs ah_enabled and a linked account; fake AH on preview
     ├── link-account/        # signed-in user links / unlinks / checks their household's AH account (POST { action: 'status' | 'link' | 'unlink', pasted }); linking needs households.ah_enabled; never returns tokens
     ├── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
     └── _shared/             # code shared by functions (not deployed as a function itself)

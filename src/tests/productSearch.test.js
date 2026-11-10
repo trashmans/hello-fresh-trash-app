@@ -110,3 +110,62 @@ describe('searchRetailerProducts', () => {
     await expect(searchRetailerProducts(d, { userId: 'u-1', retailer: 'ah', query: 'melk' })).rejects.toMatchObject({ code: 'not_linked' })
   })
 })
+
+// English searches: deps.translate (Gemini in the Edge Function) turns the query into the
+// Dutch words AH uses. Results for the Dutch term come first, then for the words as typed.
+describe('searchRetailerProducts with translation', () => {
+  const tomatoes = { externalId: 201, title: 'AH Tomatenblokjes', salesUnitSize: '400 g', price: 0.89, orderable: true, promotion: null }
+  const passata = { externalId: 202, title: 'AH Passata', salesUnitSize: '500 g', price: 1.29, orderable: true, promotion: null }
+
+  function translatingDeps(translation, byTerm) {
+    const d = deps()
+    d.translate = async (query) => {
+      d.calls.push(['translate', query])
+      if (translation instanceof Error) throw translation
+      return translation
+    }
+    d.search = async (token, query, size) => { d.calls.push(['search', token, query, size]); return byTerm[query] ?? [] }
+    return d
+  }
+
+  it('searches the Dutch term first, then the words as typed, under one token, and says what it searched for', async () => {
+    const d = translatingDeps('tomatenblokjes', { tomatenblokjes: [tomatoes, passata], 'crushed tomatoes': [passata, milk] })
+    const result = await searchRetailerProducts(d, { userId: 'u-1', retailer: 'ah', query: 'crushed tomatoes' })
+    expect(d.calls).toEqual([
+      ['getHousehold', 'u-1'],
+      ['translate', 'crushed tomatoes'],
+      ['withToken', 'hh-1'],
+      ['search', 'access-token', 'tomatenblokjes', 12],
+      ['search', 'access-token', 'crushed tomatoes', 12],
+      ['saveProducts', 3],
+    ])
+    expect(result.products.map((p) => p.externalId)).toEqual([201, 202, 101])
+    expect(result.searchedFor).toEqual(['tomatenblokjes', 'crushed tomatoes'])
+  })
+
+  it('searches once when the query is already Dutch (same words, any case or spacing)', async () => {
+    const d = translatingDeps('Halfvolle  Melk ', { 'halfvolle melk': [milk] })
+    const result = await searchRetailerProducts(d, { userId: 'u-1', retailer: 'ah', query: 'halfvolle melk' })
+    expect(d.calls.filter((c) => c[0] === 'search')).toEqual([['search', 'access-token', 'halfvolle melk', 12]])
+    expect(result.searchedFor).toEqual(['halfvolle melk'])
+  })
+
+  it('falls back to the words as typed when translation fails or gives nothing usable', async () => {
+    for (const translation of [new Error('Gemini down'), null, '', 'x', 'y'.repeat(61)]) {
+      const d = translatingDeps(translation, { onions: [milk] })
+      const result = await searchRetailerProducts(d, { userId: 'u-1', retailer: 'ah', query: 'onions' })
+      expect(d.calls.filter((c) => c[0] === 'search')).toEqual([['search', 'access-token', 'onions', 12]])
+      expect(result.searchedFor).toEqual(['onions'])
+    }
+  })
+
+  it('does not translate a refused query or for a household without AH', async () => {
+    const d = translatingDeps('melk', {})
+    await expect(searchRetailerProducts(d, { userId: 'u-1', retailer: 'ah', query: 'a' })).rejects.toMatchObject({ code: 'invalid' })
+    const off = translatingDeps('melk', {})
+    off.getHousehold = async () => ({ householdId: 'hh-1', ahEnabled: false })
+    await expect(searchRetailerProducts(off, { userId: 'u-1', retailer: 'ah', query: 'milk' })).rejects.toMatchObject({ code: 'forbidden' })
+    expect(d.calls.some((c) => c[0] === 'translate')).toBe(false)
+    expect(off.calls.some((c) => c[0] === 'translate')).toBe(false)
+  })
+})

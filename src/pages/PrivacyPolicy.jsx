@@ -68,6 +68,7 @@ export default function PrivacyPolicy() {
             <p className="mt-2">
               With the link on, your household can also keep a list of <strong>staples</strong>: things you buy
               regularly, how many and how often. To find them, the app searches AH's product range through your link
+              (search words are first sent to Google's Gemini API to put them into Dutch; nothing about you is sent)
               and keeps the product details it sees (name, pack size, price), which contain nothing about you. Staples
               belong to your household, everyone in it can see and change them, and they are deleted when you remove
               them or the household is deleted.
