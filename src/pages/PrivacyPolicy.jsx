@@ -66,6 +66,13 @@ export default function PrivacyPolicy() {
               database.
             </p>
             <p className="mt-2">
+              With the link on, your household can also keep a list of <strong>staples</strong>: things you buy
+              regularly, how many and how often. To find them, the app searches AH's product range through your link
+              and keeps the product details it sees (name, pack size, price), which contain nothing about you. Staples
+              belong to your household, everyone in it can see and change them, and they are deleted when you remove
+              them or the household is deleted.
+            </p>
+            <p className="mt-2">
               Linking is based on your consent. You can withdraw it at any time by unlinking on the Automated ordering tab, which deletes
               the token immediately. We keep a log of linking, unlinking and token refreshes (who and when, never
               tokens or shopping contents) for 12 months.
