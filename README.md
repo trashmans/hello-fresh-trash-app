@@ -206,6 +206,8 @@ All tables have RLS enabled. Migrations live in `supabase/migrations/` and are d
 | `household_list_adjustments` | One row per quantity tweak or checked-off item on a household's merged list (`item_key` from `ingredientMerge.js`, `buy_qty`; 0 = checked off). Same access rules as `household_recipe_picks` |
 | `app_config` | Key/value config for environment-specific settings; service role only |
 | `households` | A shared home that owns shopping data (staples, mappings, AH link, weekly runs). Settings: `time_zone`, `run_weekday`, `run_hour`, `automation_enabled`, and `ah_enabled` (admin-only feature switch that hides all AH features when off). Created via `create_household()`; every existing user got one from `private.ensure_households()`, which can be re-run safely. See [ADR 0001](docs/adr/0001-household-ownership.md) |
+| `household_staples` | Things a household buys regularly (rollout phase 4): `name`, a pinned product (`retailer` + `product_external_id`) or a `search_term` the planner resolves each week, `quantity`, `cadence_weeks`, `perishable` / `max_weeks_stock` (stock up on bonus, non-perishables only), `skip_next`, `active`, and the planner's `last_added_on` / `covered_until`. Columns match the planner in `src/lib/staples.js` / `stockup.js`. Members read and write through `private.is_household_member()`; deleted with the household |
+| `retailer_products` | Product cache: AH products seen in a search (`title`, `sales_unit_size`, last `price`, `orderable`, `last_seen_at`), keyed by (`retailer`, `external_id`). No owner and no personal data: signed-in users read, only the `retailer-products` function writes |
 | `household_members` | Links users to a household with `role` = `owner` / `member`; a user belongs to at most one household |
 
 ### Private schema
@@ -317,6 +319,7 @@ src/
     ├── ahLink.test.js         # Settings card per status (switch off, not linked, linked, relink needed; unlink always possible), paste checks, dates
     ├── householdSync.test.js  # sync payload: mapping, 0 kept as checked-off, last duplicate wins, default servings, invalid entries dropped
     ├── accountLinking.test.js # login-code reading, code exchange, link (newest key, re-link replaces), refusals before the code is used, unlink always allowed, status without token data
+    ├── productSearch.test.js  # staple product search: query rules, cache rows, refuses users without AH before touching the token, de-duplicates, caches everything seen, returns orderable only, survives a cache failure
     ├── accountTokens.test.js  # single-flight refresh: rotated token saved before use and kept if the action fails, two runs at once, relink_needed on auth, other failures change nothing, no tokens in audit events
     ├── ahAdapter.test.js      # AH response checks, list lines (never removes), kill switch, retries/backoff/timeouts, request spacing, per-line outcomes, fake adapter, adapter choice per environment
     ├── tokenCrypto.test.js    # AH token envelope encryption: round trip, wrong key / account / swapped key / tampering all fail, fresh IVs, reseal after rotation, V1 → V2 key rotation
@@ -330,10 +333,12 @@ supabase/
     ├── retry-parse/         # resets a failed recipe to pending (max 3 retries)
     ├── admin-reparse/       # admin-only; clears a ready or failed recipe (any uploader) and sets it back to pending so parse-recipe runs again
     ├── admin-set-cover/     # admin-only; sets cover_path on an existing recipe (recipes has no client UPDATE policy — see security rules)
+    ├── retailer-products/   # searches the household's AH through its link (POST { query }), caches the products in retailer_products, returns the orderable ones; needs ah_enabled and a linked account; fake AH on preview
     ├── link-account/        # signed-in user links / unlinks / checks their household's AH account (POST { action: 'status' | 'link' | 'unlink', pasted }); linking needs households.ah_enabled; never returns tokens
     ├── cleanup-recipes/     # hourly cron; deletes failed recipes after 48 h, resets stuck processing
     └── _shared/             # code shared by functions (not deployed as a function itself)
         ├── retailer/        # retailer adapter (ADR 0004): one interface (getAccessToken, searchProducts, getPromotions, readList, writeListLines) for every retailer
+        │   ├── productSearch.ts # searchRetailerProducts: query check (2–60 chars), household + ah_enabled check, search through withAccessToken, product-cache rows, orderable results only
         │   ├── accountLinking.ts # linkAccount / unlinkAccount / getLinkStatus: checks everything before using AH's one-time login code, seals the refresh token with a new data key, replaces any old link, audits
         │   ├── pgStores.ts    # Postgres TokenStore + LinkStore over SUPABASE_DB_URL (postgres.js); the only code that touches private.retailer_accounts
         │   ├── accountTokens.ts # withAccessToken(): single-flight refresh (ADR 0003/0007) — lock the row, refresh, re-encrypt the rotated token, audit and commit before the access token is used; AH refusing the token marks the account relink_needed
