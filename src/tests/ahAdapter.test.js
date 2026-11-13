@@ -272,6 +272,23 @@ describe('retailerAdapterFor', () => {
     await rejectsWith(off.readList('tok'), 'disabled')
   })
 
+  it('preview can use the real AH only when RETAILER_AH_MODE is exactly "real" (test window, dedicated test account)', async () => {
+    const real = retailerAdapterFor('ah', (k) => ({ APP_ENVIRONMENT: 'preview', RETAILER_AH_MODE: 'real', RETAILER_AH_ENABLED: 'true' })[k])
+    expect(real.kind).toBe('ah')
+    expect(real.enabled).toBe(true)
+    const killed = retailerAdapterFor('ah', (k) => ({ RETAILER_AH_MODE: 'real' })[k])
+    expect(killed.kind).toBe('ah')
+    await rejectsWith(killed.readList('tok'), 'disabled')
+    for (const mode of ['REAL', ' real', 'true', 'yes', 'fake', '']) {
+      expect(retailerAdapterFor('ah', (k) => ({ RETAILER_AH_MODE: mode, RETAILER_AH_ENABLED: 'true' })[k]).kind).toBe('fake')
+    }
+  })
+
+  it('production always uses the real adapter, whatever RETAILER_AH_MODE says', () => {
+    const prod = retailerAdapterFor('ah', (k) => ({ APP_ENVIRONMENT: 'production', RETAILER_AH_MODE: 'fake', RETAILER_AH_ENABLED: 'true' })[k])
+    expect(prod.kind).toBe('ah')
+  })
+
   it('refuses retailers that have no adapter yet', () => {
     expect(() => retailerAdapterFor('jumbo', () => undefined)).toThrow(RetailerError)
   })

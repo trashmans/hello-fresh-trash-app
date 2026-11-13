@@ -17,15 +17,28 @@ Albert Heijn has no public API. The spike uses the unofficial mobile API, which 
 - Calls use timeouts, retry with exponential backoff, and a low request rate.
 - A kill switch (`RETAILER_AH_ENABLED`) turns all AH traffic off without a deploy.
 - Personal bonus offers returned by AH are never written to shared tables; only national promotions are cached.
-- **A fake adapter** returns recorded responses. Preview and local always use it; only production uses the real AH adapter.
+- **A fake adapter** returns recorded responses. Preview and local use it by default; production always uses the real AH adapter.
+- **Real-AH test windows on preview** (amended 2026-11-13, see below): with `RETAILER_AH_MODE=real` set on the preview project, preview uses the real AH adapter, so a feature is tested end to end against the real AH before it is promoted to production. Link a dedicated test AH account where AH allows one; otherwise the owner's own account, for a single short test window, unlinked straight after.
 - The run logic is plan, diff, apply: the plan and diff are pure functions in `src/lib/` with Vitest tests. Only apply talks to the adapter.
 
 ## Consequences
 
 - An AH API change is fixed in one file.
-- Preview deploys can never touch a real AH account, matching the README's "no real data in preview" rule.
+- By default preview deploys never touch a real AH account. A test window is the one exception to the README's "no real data in preview" rule, and it is kept short: the linked account is unlinked (its token deleted) and the setting removed straight after.
 - A second retailer is a new adapter plus a `retailer` value, not a schema change.
 - The fake adapter's recorded responses must be scrubbed of personal data before they are committed (public repo).
+
+## Amendment 2026-11-13: real-AH test windows on preview
+
+- Deciders: Chris, David
+- Why: production should never be the first place the deployed code meets the real AH ("feature doesn't work in preview? You don't promote it to prod"). Before this, the real AH calls had only been tested from the local spike, not through the Edge Functions, encrypted token storage and refresh.
+- How: `RETAILER_AH_MODE=real` (exactly that value) on the preview project switches preview to the real adapter; `RETAILER_AH_ENABLED=true` is still needed, so the kill switch works the same. Production ignores the setting and always uses the real adapter.
+- Which account: a dedicated test AH account where AH allows one. AH requires a phone number and a delivery address for a new account, so that isn't practical today; until it is, the owner (Chris) links his own account for the window.
+- Guardrails, because unreviewed PR code runs on preview and the token opens the whole AH account (name, address, phone, order history, list):
+  - one test window at a time, done in a single sitting;
+  - no other PR that touches `supabase/functions/` is opened or updated during the window (only Chris and David can deploy to preview; Dependabot PRs don't deploy);
+  - afterwards, unlink in the app (deletes the stored token at once) and unset `RETAILER_AH_MODE` (back to the fake);
+  - real mode is never left on between windows.
 
 ## Alternatives considered
 
