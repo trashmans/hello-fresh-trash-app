@@ -178,8 +178,9 @@ Set per Supabase project with `npx supabase secrets set NAME=value --project-ref
 | Secret | Preview | Production |
 |---|---|---|
 | `RETAILER_TOKEN_KEY_V1` | Its own random key (`openssl rand -base64 32`) | A **different** random key. Backup copy in the shared password manager — losing it means every household re-links AH |
-| `APP_ENVIRONMENT` | Not set (preview always uses the fake AH adapter) | `production` |
-| `RETAILER_AH_ENABLED` | Not needed | `true` lets the app call AH; anything else is the kill switch |
+| `APP_ENVIRONMENT` | Not set (preview uses the fake AH adapter) | `production` |
+| `RETAILER_AH_MODE` | Not set (fake AH). `real` only during a short test window; unlink and unset straight after ([ADR 0004](docs/adr/0004-retailer-adapter.md) has the guardrails) | Not needed (production always uses the real AH) |
+| `RETAILER_AH_ENABLED` | `true` during a real-AH test window; otherwise not needed | `true` lets the app call AH; anything else is the kill switch |
 
 Rotation: add `RETAILER_TOKEN_KEY_V2`, re-wrap the data keys, then remove V1 ([ADR 0003](docs/adr/0003-retailer-token-handling.md)).
 
@@ -350,7 +351,7 @@ supabase/
         │   ├── ahSchema.ts    # checks AH responses and maps them to our types (schema error instead of wrong data); builds list PATCH items, refusing quantity < 1 (never removes)
         │   ├── ahAdapter.ts   # real AH mobile API: timeouts, retry with backoff on 429/5xx, spaced requests, one PATCH per line, kill switch
         │   ├── fakeAdapter.ts # made-up products and an in-memory list for preview/local — never touches AH
-        │   └── index.ts       # retailerAdapterFor(): fake unless APP_ENVIRONMENT=production; there RETAILER_AH_ENABLED=true is the kill switch
+        │   └── index.ts       # retailerAdapterFor(): real AH on production, or on preview with RETAILER_AH_MODE=real (test window, test account only); fake otherwise. With the real adapter, RETAILER_AH_ENABLED=true is the kill switch
         └── tokenCrypto.ts   # envelope encryption for retailer refresh tokens (ADR 0003): sealNewToken / openToken / resealToken / rewrapDataKey, AES-256-GCM with the account id bound in; master keys from RETAILER_TOKEN_KEY_V<n>
 
 docs/
