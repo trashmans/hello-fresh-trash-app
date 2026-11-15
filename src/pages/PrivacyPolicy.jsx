@@ -60,9 +60,11 @@ export default function PrivacyPolicy() {
               was last used. We never see or store your AH password: you log in on Albert Heijn's own page.
             </p>
             <p className="mt-2">
-              The token is used only to add items to your household's AH shopping list. The app never removes items,
-              and never places orders or makes payments: you check out in the AH app yourself. Albert Heijn receives the
-              list items the app adds to your account. The token is encrypted with a key that is kept outside our
+              The token is used only to read your household's AH shopping list and to add items to it. The list is
+              read when someone in your household opens this week's preview, to show what would change; it is shown
+              on their screen and not stored by the app. The app never removes items, and never places orders or
+              makes payments: you check out in the AH app yourself. Albert Heijn receives the list items the app adds
+              to your account. The token is encrypted with a key that is kept outside our
               database.
             </p>
             <p className="mt-2">

@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext'
 // search through the retailer-products Edge Function. Pinned products come with their
 // cached title, pack size and price (public.retailer_products).
 
-const STAPLE_SELECT = '*, product:retailer_products(title, sales_unit_size, price)'
+export const STAPLE_SELECT = '*, product:retailer_products(title, sales_unit_size, price)'
 
 async function errorMessage(error, fallback) {
   if (error instanceof FunctionsHttpError) {

@@ -255,6 +255,7 @@ src/
 │   ├── ProtectedRoute       # redirects unauthenticated users to login
 │   ├── AppShell             # layout for signed-in pages: header (title, upload, cart with count, account menu), side menu on desktop and bottom tab bar on phones (Recipes, Shopping, Automated ordering, Social); holds the shared shopping list and passes it to pages through the router outlet
 │   ├── StaplesCard          # Staples on the Automated ordering tab: list with a one-line summary (describeStaple), add / edit form with AH product search on submit (pin a product, or keep a search term), quantity, every N weeks, stock up on bonus up to N weeks; skip next, pause / resume, remove with a confirm. Shown only when the household's ah_enabled switch is on
+│   ├── WeekPreviewCard      # "This week's preview" on the Automated ordering tab (rollout phase 5): a Preview / Refresh button, then what would change on the AH list (add / increase / untick, with pack size, bonus and where it comes from), what is already on it, staples not included and why, and staples needing a product. A dry run: never sends anything. Shown only when the household's ah_enabled switch is on
 │   ├── AlbertHeijnCard      # link / unlink an Albert Heijn account: status, step-by-step desktop link flow with a paste box (shown only when the household's ah_enabled switch is on; unlink always available)
 │   ├── RecipeCatalogue      # gallery of all ready recipes, filtered by All / My / Friends' recipes (src/lib/recipeFilter.js; Friends' is disabled until the Social tab exists; remembered per device); cart button toggles recipe into shopping list; clicking a card opens the preview panel; uploaders can delete their own through RecipeDeleteMenu
 │   ├── RecipeDeleteMenu     # "⋯" menu → Delete recipe… → confirmation (covers the card, or inline in a list row), so one stray click can't delete a recipe
@@ -275,13 +276,14 @@ src/
 │   ├── useRecipeIngredients.js # ingredient list for a single recipe, in display order
 │   ├── useTheme.js            # light/dark choice for this device: keeps <html class="dark">, the theme-color meta tag and localStorage (hft-theme) in step; public/theme-init.js applies the saved choice before React loads
 │   ├── useStaples.js          # household staples (household_staples, with the pinned product's cached title / pack size / price) — add / update / remove — and searchProducts(query) through the retailer-products function
+│   ├── useWeekPreview.js      # run(): loads the household's staples and the shared list's recipes and ingredients, calls the read-only retailer-week function for the AH list and this week's staple products, and plans in the browser with buildWeekPreview(); only on request (each run refreshes the AH login once)
 │   ├── useAhLink.js           # household ah_enabled + AH link status through the link-account function; link(pasted) / unlink(); never sees tokens
 │   └── useRecipeStepImages.js  # per-step photo URLs for a single recipe, gated on an exact count match with parsed steps
 ├── pages/
 │   ├── Login                # login screen with Google OAuth
 │   ├── Recipes              # /recipes (Recipes tab): ingredient search, gallery or list, preview panel; /home redirects here
 │   ├── Shopping             # /shopping (Shopping tab): ShoppingListPanel
-│   ├── Ordering             # /ordering (Automated ordering tab): AlbertHeijnCard, StaplesCard, and what's coming in rollout phases 5–6
+│   ├── Ordering             # /ordering (Automated ordering tab): AlbertHeijnCard, StaplesCard, WeekPreviewCard, and what's coming in rollout phase 6
 │   ├── Social               # /social (Social tab): placeholder for sharing, friends and groups
 │   ├── Settings             # /settings: Appearance card (Light / Dark, saved per device); AH linking moved to the Automated ordering tab
 │   └── PrivacyPolicy        # GDPR privacy policy (/privacy), incl. recipe parsing (Gemini), households and the optional AH link
