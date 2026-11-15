@@ -1,0 +1,207 @@
+import { describe, it, expect } from 'vitest'
+import { recipeTextLines, stapleReasonText, buildWeekPreview } from '@/lib/weekPreview'
+
+const MONDAY = '2026-11-16'
+
+// household_staples rows as useStaples loads them (with the cached product joined).
+const staple = (over) => ({
+  id: 's', name: 'Staple', retailer: 'ah', product_external_id: null, search_term: null, product: null,
+  quantity: 1, cadence_weeks: 1, perishable: true, max_weeks_stock: null,
+  skip_next: false, active: true, last_added_on: null, covered_until: null,
+  ...over,
+})
+const milk = staple({
+  id: 's-milk', name: 'Milk', product_external_id: 101,
+  product: { title: 'AH Halfvolle melk', sales_unit_size: '1 l', price: 1.19 },
+  quantity: 2, last_added_on: '2026-11-09',
+})
+const rice = staple({
+  id: 's-rice', name: 'Rice', product_external_id: 104,
+  product: { title: 'AH Basmati rijst', sales_unit_size: '1 kg', price: 2.99 },
+  cadence_weeks: 4, perishable: false, max_weeks_stock: 8, last_added_on: '2026-11-09',
+})
+const bananas = staple({ id: 's-ban', name: 'Bananas', search_term: 'bananen' })
+const riceOnBonus = { 's-rice': { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, mechanism: '2e GRATIS' } }
+const bananasFound = { 's-ban': { externalId: 103, title: 'AH Bananen tros', salesUnitSize: 'per tros', price: 1.69, mechanism: null } }
+
+// mergeIngredients() items, cut down to what the preview reads.
+const item = (key, name, computedQty, unit = null) => ({ key, name, computedQty, unit })
+
+describe('recipeTextLines', () => {
+  it('gives one free-text line per ingredient, with the amount to buy', () => {
+    const items = [item('garlic|count:clove', 'Garlic', 3, 'clove'), item('olive oil|volume:metric', 'Olive oil', 90, 'mL')]
+    expect(recipeTextLines(items, [])).toEqual([
+      { text: 'Garlic', amount: '3 clove' },
+      { text: 'Olive oil', amount: '90 mL' },
+    ])
+  })
+
+  it('leaves out items ticked as already have', () => {
+    const items = [item('a|count:', 'Onion', 2), item('b|count:', 'Carrot', 1)]
+    expect(recipeTextLines(items, [{ key: 'a|count:', buy_qty: 0 }])).toEqual([{ text: 'Carrot', amount: '1' }])
+  })
+
+  it('uses an adjusted quantity, but never more than the recipes need', () => {
+    const items = [item('a|mass:metric', 'Rice', 300, 'g'), item('b|mass:metric', 'Flour', 200, 'g')]
+    const adjusted = [{ key: 'a|mass:metric', buy_qty: 100 }, { key: 'b|mass:metric', buy_qty: 500 }]
+    expect(recipeTextLines(items, adjusted)).toEqual([
+      { text: 'Rice', amount: '100 g' },
+      { text: 'Flour', amount: '200 g' },
+    ])
+  })
+
+  it('rounds amounts like the Shopping tab does', () => {
+    expect(recipeTextLines([item('a|mass:metric', 'Butter', 33.3333, 'g')], [])).toEqual([{ text: 'Butter', amount: '33.33 g' }])
+  })
+
+  it('keeps an ingredient without a quantity, with no amount', () => {
+    expect(recipeTextLines([item('salt|count:', 'Salt', null)], [])).toEqual([{ text: 'Salt', amount: null }])
+  })
+
+  it('makes one line when the same ingredient is listed in two kinds of unit', () => {
+    const items = [item('olive oil|volume:metric', 'Olive oil', 30, 'mL'), item('olive oil|count:', 'olive oil ', 1)]
+    expect(recipeTextLines(items, [])).toEqual([{ text: 'Olive oil', amount: '30 mL + 1' }])
+  })
+
+  it('gives nothing for an empty or missing list', () => {
+    expect(recipeTextLines([], [])).toEqual([])
+    expect(recipeTextLines()).toEqual([])
+  })
+})
+
+describe('stapleReasonText', () => {
+  it('has plain words for every planner reason', () => {
+    const reasons = ['first_time', 'cadence', 'running_out', 'stock_up', 'not_yet', 'covered', 'skipped', 'inactive', 'missing_product']
+    for (const reason of reasons) {
+      expect(stapleReasonText(reason), reason).toMatch(/\S/)
+      expect(stapleReasonText(reason), reason).not.toBe(reason)
+    }
+  })
+
+  it('falls back to the reason itself when it is unknown', () => {
+    expect(stapleReasonText('something_new')).toBe('something_new')
+  })
+})
+
+describe('buildWeekPreview', () => {
+  it('reports the Monday of the run week', () => {
+    expect(buildWeekPreview({ runDate: '2026-11-19' }).weekStart).toBe(MONDAY)
+  })
+
+  it('throws on an invalid run date', () => {
+    expect(() => buildWeekPreview({ runDate: 'next week' })).toThrow()
+  })
+
+  it('adds a due pinned staple from the cached product, without a live lookup', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk] })
+    expect(preview.changes).toEqual([
+      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', from: 0, to: 2, sources: ['staple'] },
+    ])
+    expect(preview.staples).toEqual([
+      { staple_id: 's-milk', name: 'Milk', included: true, reason: 'cadence', reasonText: stapleReasonText('cadence'), packs: 2 },
+    ])
+    expect(preview.review).toEqual([])
+  })
+
+  it('stocks up a non-perishable staple that is on bonus this week', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [rice], liveProducts: riceOnBonus })
+    expect(preview.changes).toHaveLength(1)
+    expect(preview.changes[0]).toMatchObject({ action: 'add', productId: 104, to: 2, sources: ['stockup'], detail: '1 kg · 2e GRATIS' })
+    expect(preview.staples[0]).toMatchObject({ included: true, reason: 'stock_up', packs: 2 })
+  })
+
+  it('leaves that staple out when it is not on bonus and not due', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [rice] })
+    expect(preview.changes).toEqual([])
+    expect(preview.staples[0]).toMatchObject({ included: false, reason: 'not_yet', packs: 0 })
+  })
+
+  it('uses the product found for a search-term staple', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [bananas], liveProducts: bananasFound })
+    expect(preview.changes[0]).toMatchObject({ action: 'add', productId: 103, title: 'AH Bananen tros', detail: 'per tros', to: 1 })
+    expect(preview.staples[0]).toMatchObject({ included: true, reason: 'first_time' })
+  })
+
+  it('flags a search-term staple with no product found', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [bananas] })
+    expect(preview.changes).toEqual([])
+    expect(preview.staples[0]).toMatchObject({ staple_id: 's-ban', included: false, reason: 'missing_product' })
+    expect(preview.review).toEqual([{ reason: 'missing_product', staple_id: 's-ban', name: 'Bananas' }])
+  })
+
+  it('lists paused and skipped staples as not included, without flagging them', () => {
+    const paused = { ...milk, id: 's-paused', active: false }
+    const skipped = { ...milk, id: 's-skip', skip_next: true }
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [paused, skipped] })
+    expect(preview.changes).toEqual([])
+    expect(preview.staples.map(s => [s.staple_id, s.included, s.reason])).toEqual([
+      ['s-paused', false, 'inactive'],
+      ['s-skip', false, 'skipped'],
+    ])
+    expect(preview.review).toEqual([])
+  })
+
+  it('adds recipe ingredients as free-text lines by name, amount only shown', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 90, 'mL'), item('onion|count:', 'Onion', 2)],
+      adjustedItems: [{ key: 'onion|count:', buy_qty: 0 }],
+    })
+    expect(preview.changes).toEqual([
+      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', from: 0, to: 1, sources: ['recipe'] },
+    ])
+  })
+
+  it('puts staples first, then recipe ingredients, in the target lines', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY, staples: [milk],
+      mergedItems: [item('garlic|count:clove', 'Garlic', 3, 'clove')],
+    })
+    expect(preview.lines).toEqual([
+      { productId: 101, text: null, packs: 2, sources: ['staple'] },
+      { productId: null, text: 'Garlic', packs: 1, sources: ['recipe'] },
+    ])
+  })
+
+  it('compares with the current AH list: raise, untick, or leave alone', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [milk, { ...bananas, last_added_on: null }],
+      liveProducts: bananasFound,
+      mergedItems: [item('garlic|count:clove', 'Garlic', 3, 'clove'), item('olive oil|volume:metric', 'Olive oil', 90, 'mL')],
+      currentList: [
+        { productId: 101, text: 'AH Halfvolle melk', quantity: 1, ticked: false },   // fewer than needed
+        { productId: 103, text: 'AH Bananen tros', quantity: 3, ticked: false },     // already enough
+        { productId: null, text: 'olive  OIL', quantity: 1, ticked: true },          // ticked last week
+        { productId: null, text: 'Kaarsen', quantity: 1, ticked: false },            // added by hand
+      ],
+    })
+    expect(preview.changes.map(c => [c.action, c.title, c.from, c.to])).toEqual([
+      ['increase', 'AH Halfvolle melk', 1, 2],
+      ['add', 'Garlic', 0, 1],
+      ['untick', 'Olive oil', 0, 1],
+    ])
+    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', quantity: 3 }])
+  })
+
+  it('gives no changes when the list already matches (safe to run again)', () => {
+    const first = buildWeekPreview({ runDate: MONDAY, staples: [milk], mergedItems: [item('g|count:', 'Garlic', 3)] })
+    const currentList = first.lines.map(l => ({ productId: l.productId, text: l.text ?? 'x', quantity: l.packs, ticked: false }))
+    const again = buildWeekPreview({ runDate: MONDAY, staples: [milk], mergedItems: [item('g|count:', 'Garlic', 3)], currentList })
+    expect(again.changes).toEqual([])
+    expect(again.onListAlready).toHaveLength(2)
+  })
+
+  it('combines two staples pinned to the same product into one line', () => {
+    const second = { ...milk, id: 's-milk-2', name: 'Milk for coffee', quantity: 1 }
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk, second] })
+    expect(preview.changes).toHaveLength(1)
+    expect(preview.changes[0]).toMatchObject({ productId: 101, to: 3, sources: ['staple', 'staple'] })
+  })
+
+  it('is empty for a household with nothing planned', () => {
+    expect(buildWeekPreview({ runDate: MONDAY })).toEqual({
+      weekStart: MONDAY, lines: [], changes: [], onListAlready: [], staples: [], review: [],
+    })
+  })
+})
