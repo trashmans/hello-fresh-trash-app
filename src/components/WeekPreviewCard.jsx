@@ -2,6 +2,7 @@ import { Loader2, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useWeekPreview } from '@/hooks/useWeekPreview'
+import { AISLES } from '@/lib/aisles'
 
 const ACTION_LABEL = { add: 'Add', increase: 'Increase', untick: 'Untick' }
 const SOURCE_LABEL = { staple: 'Staple', stockup: 'Bonus stock-up', recipe: 'Recipe' }
@@ -9,6 +10,14 @@ const SOURCE_LABEL = { staple: 'Staple', stockup: 'Bonus stock-up', recipe: 'Rec
 const weekLabel = (weekStart) =>
   new Date(`${weekStart}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
 const timeLabel = (date) => date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+
+// [{ aisle, items }] in shop-walking order, like the Shopping tab; empty aisles left out.
+const byAisle = (items) =>
+  AISLES.map(aisle => ({ aisle, items: items.filter(i => i.aisle === aisle) })).filter(group => group.items.length > 0)
+
+function AisleHeading({ children }) {
+  return <h4 className="pt-3 pb-1 text-xs font-semibold text-muted-foreground">{children}</h4>
+}
 
 function Section({ title, children }) {
   return (
@@ -91,17 +100,24 @@ export default function WeekPreviewCard({ shoppingList }) {
                   Nothing to change. Your AH list already covers this week.
                 </p>
               ) : (
-                <ul className="divide-y divide-border">
-                  {preview.changes.map(c => <ChangeRow key={c.productId ?? `t:${c.text}`} change={c} />)}
-                </ul>
+                byAisle(preview.changes).map(({ aisle, items }) => (
+                  <div key={aisle}>
+                    <AisleHeading>{aisle}</AisleHeading>
+                    <ul className="divide-y divide-border">
+                      {items.map(c => <ChangeRow key={c.productId ?? `t:${c.text}`} change={c} />)}
+                    </ul>
+                  </div>
+                ))
               )}
             </Section>
 
             {preview.onListAlready.length > 0 && (
               <Section title={`Already on your AH list · ${preview.onListAlready.length}`}>
-                <p className="text-muted-foreground">
-                  {preview.onListAlready.map(l => `${l.title} × ${l.quantity}`).join(', ')}
-                </p>
+                {byAisle(preview.onListAlready).map(({ aisle, items }) => (
+                  <p key={aisle} className="text-muted-foreground">
+                    <span className="font-medium text-foreground">{aisle}:</span> {items.map(l => `${l.title} × ${l.quantity}`).join(', ')}
+                  </p>
+                ))}
               </Section>
             )}
 

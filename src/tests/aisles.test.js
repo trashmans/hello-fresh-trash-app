@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { AISLES, aisleFor, groupByAisle } from '@/lib/aisles'
 
 describe('AISLES', () => {
-  it('lists the aisles in shop-walking order, with Other last', () => {
-    expect(AISLES).toEqual(['Produce', 'Meat & fish', 'Dairy & eggs', 'Bakery', 'Pantry', 'Herbs & spices', 'Other'])
+  it('lists the aisles in shop-walking order, with Household and Other last', () => {
+    expect(AISLES).toEqual(['Produce', 'Meat & fish', 'Dairy & eggs', 'Bakery', 'Pantry', 'Herbs & spices', 'Household', 'Other'])
   })
 })
 
@@ -32,6 +32,30 @@ describe('aisleFor', () => {
       for (const name of names) expect([name, aisleFor(name)]).toEqual([name, aisle])
     })
   }
+
+  // Staples are named by the household, not by a recipe card: fruit by variety, brand
+  // names, non-food. These are the names from the first household's staples.
+  const stapleCases = {
+    Produce: ['Fuji apples', 'Pink Lady apples', 'Blueberries', 'Bananas', 'Onions', 'Garlic', 'Cilantro', 'strawberries', 'raspberry'],
+    'Dairy & eggs': ['Large eggs', 'Cheddar', 'Port Salut', 'gruyère', 'camembert'],
+    Pantry: ['Fruit & nut muesli', 'Doritos', 'Crushed flax seed', 'Sunflower seeds', 'Pumpkin seeds', 'granola', 'potato chips', 'popcorn'],
+    Household: [
+      'Nalys Blitz huishoudrol', 'Sponges', 'Ariel Color detergent', 'paper towels', 'kitchen roll', 'toilet paper',
+      'dish soap', 'dishwasher tablets', 'trash bags', 'aluminium foil', 'baking paper',
+    ],
+  }
+
+  for (const [aisle, names] of Object.entries(stapleCases)) {
+    it(`puts ${names.length} staple names in ${aisle}`, () => {
+      for (const name of names) expect([name, aisleFor(name)]).toEqual([name, aisle])
+    })
+  }
+
+  it('keeps food that only sounds like a household item where it was', () => {
+    expect(aisleFor('ciabatta roll')).toBe('Bakery')
+    expect(aisleFor('spring roll wrappers')).toBe('Bakery')
+    expect(aisleFor('rice paper')).toBe('Pantry')
+  })
 
   it('ignores case, extra spaces and preparation words', () => {
     expect(aisleFor('  Cannellini Beans, rinsed and drained ')).toBe('Pantry')

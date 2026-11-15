@@ -95,7 +95,7 @@ describe('buildWeekPreview', () => {
   it('adds a due pinned staple from the cached product, without a live lookup', () => {
     const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk] })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', from: 0, to: 2, sources: ['staple'] },
+      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', aisle: 'Dairy & eggs', from: 0, to: 2, sources: ['staple'] },
     ])
     expect(preview.staples).toEqual([
       { staple_id: 's-milk', name: 'Milk', included: true, reason: 'cadence', reasonText: stapleReasonText('cadence'), packs: 2 },
@@ -148,7 +148,7 @@ describe('buildWeekPreview', () => {
       adjustedItems: [{ key: 'onion|count:', buy_qty: 0 }],
     })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', from: 0, to: 1, sources: ['recipe'] },
+      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', aisle: 'Pantry', from: 0, to: 1, sources: ['recipe'] },
     ])
   })
 
@@ -181,7 +181,7 @@ describe('buildWeekPreview', () => {
       ['add', 'Garlic', 0, 1],
       ['untick', 'Olive oil', 0, 1],
     ])
-    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', quantity: 3 }])
+    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', aisle: 'Produce', quantity: 3 }])
   })
 
   it('gives no changes when the list already matches (safe to run again)', () => {
@@ -197,6 +197,39 @@ describe('buildWeekPreview', () => {
     const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk, second] })
     expect(preview.changes).toHaveLength(1)
     expect(preview.changes[0]).toMatchObject({ productId: 101, to: 3, sources: ['staple', 'staple'] })
+  })
+
+  it('files a staple under the aisle of its own name, not of the Dutch product title', () => {
+    const detergent = staple({
+      id: 's-det', name: 'Ariel Color detergent', product_external_id: 201,
+      product: { title: 'Ariel Vloeibaar color wasmiddel', sales_unit_size: '1,2 l', price: 9.99 },
+    })
+    const eggs = staple({
+      id: 's-eggs', name: 'Large eggs', product_external_id: 105,
+      product: { title: 'AH Scharreleieren L', sales_unit_size: '10 stuks', price: 3.49 },
+    })
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [detergent, eggs] })
+    expect(preview.changes.map(c => [c.title, c.aisle])).toEqual([
+      ['Ariel Vloeibaar color wasmiddel', 'Household'],
+      ['AH Scharreleieren L', 'Dairy & eggs'],
+    ])
+  })
+
+  it('files recipe ingredients under the same aisle as the Shopping tab', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('garlic powder|count:', 'Garlic powder', 1), item('spinach|mass:metric', 'Spinach', 200, 'g'), item('x|count:', 'Wonton wrappers', 1)],
+    })
+    expect(preview.changes.map(c => [c.title, c.aisle])).toEqual([
+      ['Garlic powder', 'Herbs & spices'],
+      ['Spinach', 'Produce'],
+      ['Wonton wrappers', 'Other'],
+    ])
+  })
+
+  it('uses the first staple name when two staples share a product', () => {
+    const second = { ...milk, id: 's-milk-2', name: 'Something for coffee', quantity: 1 }
+    expect(buildWeekPreview({ runDate: MONDAY, staples: [milk, second] }).changes[0].aisle).toBe('Dairy & eggs')
   })
 
   it('is empty for a household with nothing planned', () => {

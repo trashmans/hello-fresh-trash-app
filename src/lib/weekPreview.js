@@ -7,9 +7,14 @@
 // lines taken from the Shopping tab's merged list: one line per ingredient name,
 // without items ticked as "Already have". The amount is shown in the preview but is
 // not part of the line's text, so changing servings never creates a second line.
+//
+// Every line gets an aisle (aisles.js) so the screen can group it like the Shopping
+// tab: recipe lines by ingredient name, staple lines by the staple's own name (the
+// product title is Dutch, the rules are English).
 
 import { planWeek } from './planWeek'
 import { diffList } from './listDiff'
+import { aisleFor } from './aisles'
 
 const REASON_TEXT = {
   first_time: 'First order',
@@ -81,8 +86,8 @@ export function recipeTextLines(mergedItems = [], adjustedItems = []) {
  * Returns {
  *   weekStart      Monday of the week
  *   lines          target lines [{ productId | null, text | null, packs, sources }]
- *   changes        [{ action: 'add' | 'increase' | 'untick', productId, text, title, detail, from, to, sources }]
- *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, quantity }]
+ *   changes        [{ action: 'add' | 'increase' | 'untick', productId, text, title, detail, aisle, from, to, sources }]
+ *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, aisle, quantity }]
  *   staples        [{ staple_id, name, included, reason, reasonText, packs }] in the order given
  *   review         staples a person should look at [{ reason, staple_id, name }]
  * }
@@ -99,7 +104,7 @@ export function buildWeekPreview({
   // Staples → planner rows. Each staple is its own "product id" so a live answer
   // and the cached product can be looked up the same way.
   const products = {}
-  const shown = new Map() // line key → { title, detail }
+  const shown = new Map() // line key → { title, detail, aisle }
   const names = new Map()
   const plannerStaples = []
 
@@ -122,6 +127,7 @@ export function buildWeekPreview({
       shown.set(key, {
         title: product.title || staple.name,
         detail: [product.salesUnitSize, product.mechanism].filter(Boolean).join(' · ') || null,
+        aisle: shown.get(key)?.aisle ?? aisleFor(staple.name), // first staple with this product decides
       })
     }
   }
@@ -129,14 +135,14 @@ export function buildWeekPreview({
   const plan = planWeek({ runDate, staples: plannerStaples, products })
 
   const recipeLines = recipeTextLines(mergedItems, adjustedItems)
-  for (const { text, amount } of recipeLines) shown.set(lineKey(null, text), { title: text, detail: amount })
+  for (const { text, amount } of recipeLines) shown.set(lineKey(null, text), { title: text, detail: amount, aisle: aisleFor(text) })
 
   const lines = [
     ...plan.lines,
     ...recipeLines.map(({ text }) => ({ productId: null, text, packs: 1, sources: ['recipe'] })),
   ]
   const lineByKey = new Map(lines.map(line => [lineKey(line.productId, line.text), line]))
-  const describe = (key) => shown.get(key) ?? { title: lineByKey.get(key)?.text ?? 'Unknown product', detail: null }
+  const describe = (key) => shown.get(key) ?? { title: lineByKey.get(key)?.text ?? 'Unknown product', detail: null, aisle: 'Other' }
 
   const changes = diffList(lines, currentList ?? []).map(change => {
     const key = lineKey(change.productId, change.text)
