@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useStaples } from '@/hooks/useStaples'
 import { STAPLE_LIMITS, describeStaple, toStapleRow } from '@/lib/stapleForm'
+import { groupByAisle } from '@/lib/aisles'
 
 const euro = (price) => (price == null ? null : `€${Number(price).toFixed(2)}`)
 const EMPTY_FORM = { name: '', productExternalId: null, productLabel: '', searchTerm: '', quantity: 1, cadenceWeeks: 1, stockUp: false, maxWeeksStock: 6 }
@@ -252,20 +253,25 @@ export default function StaplesCard() {
             {staples.length === 0 && editing !== 'new' && (
               <p className="rounded-md border border-dashed border-border py-6 text-center text-muted-foreground">No staples yet. Add the first one.</p>
             )}
-            <ul className="divide-y divide-border">
-              {staples.map((s) => (editing === s.id ? (
-                <li key={s.id} className="py-3">
-                  <StapleForm
-                    initial={formFrom(s)}
-                    searchProducts={searchProducts}
-                    onCancel={() => setEditing(null)}
-                    onSave={async (row) => { const m = await update(s.id, row); if (!m) setEditing(null); return m }}
-                  />
-                </li>
-              ) : (
-                <StapleRow key={s.id} staple={s} onEdit={() => setEditing(s.id)} onUpdate={update} onRemove={remove} />
-              )))}
-            </ul>
+            {groupByAisle(staples).map(({ aisle, items }) => (
+              <div key={aisle}>
+                <h3 className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{aisle}</h3>
+                <ul className="divide-y divide-border">
+                  {items.map((s) => (editing === s.id ? (
+                    <li key={s.id} className="py-3">
+                      <StapleForm
+                        initial={formFrom(s)}
+                        searchProducts={searchProducts}
+                        onCancel={() => setEditing(null)}
+                        onSave={async (row) => { const m = await update(s.id, row); if (!m) setEditing(null); return m }}
+                      />
+                    </li>
+                  ) : (
+                    <StapleRow key={s.id} staple={s} onEdit={() => setEditing(s.id)} onUpdate={update} onRemove={remove} />
+                  )))}
+                </ul>
+              </div>
+            ))}
           </>
         )}
       </CardContent>
