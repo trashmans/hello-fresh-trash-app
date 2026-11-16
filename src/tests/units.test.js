@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeUnit, toBaseUnit, convertIngredientUnit, bestUnitInSystem } from '@/lib/units'
+import { normalizeUnit, toBaseUnit, convertIngredientUnit, bestUnitInSystem, unitOptionsFor, unitOptionValueFor } from '@/lib/units'
 
 describe('normalizeUnit', () => {
   it('reads US recipe shorthand by case: capital T is a tablespoon, lowercase t a teaspoon', () => {
@@ -48,5 +48,50 @@ describe('bestUnitInSystem', () => {
   it('returns null for an unknown type or system', () => {
     expect(bestUnitInSystem(100, 'count', 'metric')).toBeNull()
     expect(bestUnitInSystem(100, 'mass', 'imperial')).toBeNull()
+  })
+})
+
+// The "scale by ingredient" unit dropdown offers the standard spellings (tsp, tbsp,
+// cup…), but recipes store units as written on the card ("Cup", "cups", "TBSP").
+// Selecting an ingredient must preselect the option for its own unit; otherwise the
+// dropdown shows its first option (tsp) while the amount is still read in the
+// recipe's unit, so 0.75 cups of rice looked like "0.75 tsp".
+describe('unitOptionValueFor', () => {
+  it("gives the dropdown's spelling for a unit as the recipe wrote it", () => {
+    expect(unitOptionValueFor('Cup')).toBe('cup')
+    expect(unitOptionValueFor('cups')).toBe('cup')
+    expect(unitOptionValueFor('TBSP')).toBe('tbsp')
+    expect(unitOptionValueFor('Tablespoons')).toBe('tbsp')
+    expect(unitOptionValueFor('T')).toBe('tbsp')
+    expect(unitOptionValueFor('t')).toBe('tsp')
+    expect(unitOptionValueFor('oz.')).toBe('oz')
+    expect(unitOptionValueFor('Grams')).toBe('g')
+    expect(unitOptionValueFor('mL')).toBe('ml')
+  })
+
+  it('is always one of the options the dropdown offers for that unit', () => {
+    for (const raw of ['Cup', 'cups', 'TBSP', 'tsp', 'T', 't', 'fl oz', 'oz', 'LB', 'lbs', 'g', 'Kg', 'ml', 'L', 'Liters']) {
+      const values = unitOptionsFor(raw).map(o => o.value)
+      expect(values, raw).toContain(unitOptionValueFor(raw))
+    }
+  })
+
+  it('keeps the rice example in cups, not the first option in the list', () => {
+    const options = unitOptionsFor('Cup')
+    expect(options[0].value).toBe('tsp') // why the dropdown used to show tsp
+    expect(unitOptionValueFor('Cup')).toBe('cup')
+  })
+
+  it('leaves a unit that is not a measurement as written', () => {
+    expect(unitOptionValueFor('clove')).toBe('clove')
+    expect(unitOptionValueFor('Stock Cube')).toBe('Stock Cube')
+    expect(unitOptionsFor('clove').map(o => o.value)).toContain(unitOptionValueFor('clove'))
+  })
+
+  it('is empty for a missing unit, like the single option offered for it', () => {
+    expect(unitOptionValueFor(null)).toBe('')
+    expect(unitOptionValueFor(undefined)).toBe('')
+    expect(unitOptionValueFor('')).toBe('')
+    expect(unitOptionsFor(null).map(o => o.value)).toContain(unitOptionValueFor(null))
   })
 })

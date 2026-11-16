@@ -14,7 +14,7 @@ import { useAuth } from '@/context/AuthContext'
 import { mergeIngredients } from '@/lib/ingredientMerge'
 import { groupByAisle } from '@/lib/aisles'
 import { computeScaleFactorFromIngredient } from '@/lib/scaling'
-import { unitOptionsFor } from '@/lib/units'
+import { unitOptionsFor, unitOptionValueFor } from '@/lib/units'
 import { toast } from 'sonner'
 
 function formatQty(qty) {
@@ -50,7 +50,7 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
     const first = scalable[0]
     setIngredientId(first.id)
     setQuantity(first.quantity)
-    setUnit(first.unit ?? '')
+    setUnit(unitOptionValueFor(first.unit))
     setOpen(true)
   }
 
@@ -58,7 +58,7 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
     const ing = scalable.find(i => i.id === id)
     setIngredientId(id)
     setQuantity(ing?.quantity ?? '')
-    setUnit(ing?.unit ?? '')
+    setUnit(unitOptionValueFor(ing?.unit))
   }
 
   function apply() {

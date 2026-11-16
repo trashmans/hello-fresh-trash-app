@@ -205,3 +205,17 @@ export function unitOptionsFor(rawUnit) {
     .filter(key => UNIT_INFO[key].type === resolved.type)
     .map(key => ({ value: key, label: DISPLAY_UNIT_LABEL[key] ?? key }))
 }
+
+/**
+ * The option in unitOptionsFor(rawUnit) that stands for rawUnit itself: the
+ * standard spelling for a measurement ("Cup", "cups" → "cup"; "TBSP", "T" →
+ * "tbsp"), or the unit as written when it isn't one ("clove"), or '' when
+ * there is none. A unit dropdown must start on this value: the recipe's own
+ * spelling is usually not among the options, and a <select> whose value
+ * matches no option shows its first one (tsp) while the form still holds
+ * the recipe's unit.
+ */
+export function unitOptionValueFor(rawUnit) {
+  const resolved = resolveUnit(rawUnit)
+  return resolved ? resolved.canonical : rawUnit ?? ''
+}

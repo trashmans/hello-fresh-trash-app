@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useRecipeIngredients } from '@/hooks/useRecipeIngredients'
 import { useRecipeStepImages } from '@/hooks/useRecipeStepImages'
 import { useAuth } from '@/context/AuthContext'
-import { convertIngredientUnit, formatTemperatureText, unitOptionsFor } from '@/lib/units'
+import { convertIngredientUnit, formatTemperatureText, unitOptionsFor, unitOptionValueFor } from '@/lib/units'
 import { computeScaleFactorFromServings, computeScaleFactorFromIngredient, scaleIngredients, scaleStepText } from '@/lib/scaling'
 
 function formatIngredientLine(ingredient, unitPrefs) {
@@ -35,7 +35,7 @@ function ScaleControls({ recipe, ingredients, scaleState, setScaleState }) {
       mode: 'ingredient',
       ingredientId: id,
       targetQuantity: ing?.quantity ?? '',
-      targetUnit: ing?.unit ?? '',
+      targetUnit: unitOptionValueFor(ing?.unit),
     })
   }
 
