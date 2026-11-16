@@ -8,9 +8,10 @@ import { toMappingRow } from '@/lib/ingredientMappings'
 const euro = (price) => (price == null ? null : `€${Number(price).toFixed(2)}`)
 
 // Maps one recipe ingredient for the household: search AH and pick the product to buy
-// for it, or say the household always has it at home. Saves on the pick itself.
+// for it, or say the household always has it at home. Saves on the pick itself;
+// the confirmation offers Undo.
 // Searching happens on submit (each search refreshes the AH login once).
-export default function IngredientMapForm({ name, searchProducts, onSave, onDone }) {
+export default function IngredientMapForm({ name, searchProducts, onSave, onUndo, onDone }) {
   const [query, setQuery] = useState(name)
   const [results, setResults] = useState(null)
   const [searchedFor, setSearchedFor] = useState([])
@@ -36,7 +37,9 @@ export default function IngredientMapForm({ name, searchProducts, onSave, onDone
     const message = await onSave(result.row)
     setSaving(false)
     if (message) { toast.error(`Could not save the mapping: ${message}`); return }
-    toast.success(done)
+    // A wrong pick can be taken back straight from the confirmation.
+    const mapping = { key: result.row.ingredient_key, label: result.row.label }
+    toast.success(done, onUndo ? { action: { label: 'Undo', onClick: () => onUndo(mapping) } } : undefined)
     onDone()
   }
 

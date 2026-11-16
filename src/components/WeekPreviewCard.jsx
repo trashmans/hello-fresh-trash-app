@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link2, Loader2, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import IngredientMapForm from '@/components/IngredientMapForm'
@@ -33,7 +34,21 @@ function Section({ title, children }) {
 // A recipe ingredient that is still a free-text line can be mapped to an AH product.
 const canMap = (change) => change.productId == null && change.sources.includes('recipe')
 
-function ChangeRow({ change, mapping, onMap, children }) {
+// "Undo mapping" for one ingredient mapping ({ key, label }), as a text button.
+function UndoMapping({ mapping, onUndo, children = 'Undo mapping' }) {
+  return (
+    <button
+      type="button"
+      className="underline underline-offset-2 hover:text-foreground"
+      onClick={() => onUndo(mapping)}
+      aria-label={`Undo the mapping for ${mapping.label}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ChangeRow({ change, mapping, onMap, onUndo, children }) {
   const sources = [...new Set(change.sources)]
   return (
     <li className="py-2">
@@ -57,6 +72,13 @@ function ChangeRow({ change, mapping, onMap, children }) {
           </Button>
         )}
       </div>
+      {onUndo && change.mappedFrom.length > 0 && (
+        <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 pl-[4.75rem] text-xs text-muted-foreground">
+          {change.mappedFrom.map(m => (
+            <span key={m.key}>Mapped from {m.label} · <UndoMapping mapping={m} onUndo={onUndo} /></span>
+          ))}
+        </p>
+      )}
       {children}
     </li>
   )
@@ -69,6 +91,14 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
   const { available, preview, loading, error, run } = useWeekPreview(shoppingList, ingredientMappings.mappings)
   const [mappingFor, setMappingFor] = useState(null) // text of the recipe line being mapped
   if (!available) return null
+
+  // Removes one ingredient mapping; the line goes back to free text (or back on the list) at once.
+  async function undoMapping({ key, label }) {
+    const message = await ingredientMappings.remove(key)
+    if (message) toast.error(`Could not undo the mapping for ${label}: ${message}`)
+    else toast.success(`${label} is no longer mapped`)
+  }
+  const onUndo = ingredientMappings.available ? undoMapping : null
 
   const notIncluded = preview?.staples.filter(s => !s.included && s.reason !== 'missing_product') ?? []
 
@@ -127,12 +157,14 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
                           change={c}
                           mapping={mappingFor === c.text}
                           onMap={canMap(c) && ingredientMappings.available ? () => setMappingFor(c.text) : null}
+                          onUndo={onUndo}
                         >
                           {canMap(c) && mappingFor === c.text && (
                             <IngredientMapForm
                               name={c.text}
                               searchProducts={ingredientMappings.searchProducts}
                               onSave={ingredientMappings.save}
+                              onUndo={undoMapping}
                               onDone={() => setMappingFor(null)}
                             />
                           )}
@@ -148,7 +180,16 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
               <Section title={`Already on your AH list · ${preview.onListAlready.length}`}>
                 {byAisle(preview.onListAlready).map(({ aisle, items }) => (
                   <p key={aisle} className="text-muted-foreground">
-                    <span className="font-medium text-foreground">{aisle}:</span> {items.map(l => `${l.title} × ${l.quantity}`).join(', ')}
+                    <span className="font-medium text-foreground">{aisle}:</span>{' '}
+                    {items.map((l, i) => (
+                      <span key={l.productId ?? `t:${l.text}`}>
+                        {i > 0 && ', '}
+                        {l.title} × {l.quantity}
+                        {onUndo && l.mappedFrom.map(m => (
+                          <span key={m.key}> (<UndoMapping mapping={m} onUndo={onUndo}>undo mapping from {m.label}</UndoMapping>)</span>
+                        ))}
+                      </span>
+                    ))}
                   </p>
                 ))}
               </Section>
@@ -156,9 +197,17 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
 
             {preview.atHome.length > 0 && (
               <Section title={`Always at home · ${preview.atHome.length}`}>
-                <p className="text-muted-foreground">
-                  {preview.atHome.map(l => (l.amount ? `${l.text} (${l.amount})` : l.text)).join(', ')}
-                </p>
+                <ul className="space-y-0.5">
+                  {preview.atHome.map(l => (
+                    <li key={l.key}>
+                      {l.text}
+                      <span className="text-muted-foreground">
+                        {l.amount ? ` · ${l.amount}` : ''}
+                        {onUndo && <> · <UndoMapping mapping={{ key: l.key, label: l.text }} onUndo={onUndo}>Undo</UndoMapping></>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </Section>
             )}
 
