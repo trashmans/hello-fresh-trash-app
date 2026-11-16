@@ -234,7 +234,143 @@ describe('buildWeekPreview', () => {
 
   it('is empty for a household with nothing planned', () => {
     expect(buildWeekPreview({ runDate: MONDAY })).toEqual({
-      weekStart: MONDAY, lines: [], changes: [], onListAlready: [], staples: [], review: [],
+      weekStart: MONDAY, lines: [], changes: [], onListAlready: [], atHome: [], staples: [], review: [],
     })
+  })
+})
+
+// Ingredient mappings (household_ingredient_mappings rows with the cached product joined):
+// a household maps an ingredient once to an AH product, or marks it as always at home.
+describe('buildWeekPreview with ingredient mappings', () => {
+  const mapping = (ingredient_key, label, externalId, title, size) => ({
+    ingredient_key, label, pantry: false, product_external_id: externalId,
+    product: { title, sales_unit_size: size, price: 1 },
+  })
+  const atHome = (ingredient_key, label) => ({ ingredient_key, label, pantry: true, product_external_id: null, product: null })
+
+  const oil = mapping('olive oil', 'Olive oil', 301, 'AH Olijfolie', '1 l')
+  const riceMap = mapping('basmati rice', 'Basmati rice', 104, 'AH Basmati rijst', '1 kg')
+  const garlicMap = mapping('garlic', 'Garlic', 302, 'AH Knoflook', 'per stuk')
+  const milkMap = mapping('milk', 'Milk', 101, 'AH Halfvolle melk', '1 l')
+
+  it('turns a mapped ingredient into its AH product, with whole packs', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 90, 'mL')],
+      mappings: [oil],
+    })
+    expect(preview.changes).toEqual([
+      { action: 'add', productId: 301, text: null, title: 'AH Olijfolie', detail: '1 l · for 90 mL', aisle: 'Pantry', from: 0, to: 1, sources: ['recipe'] },
+    ])
+    expect(preview.review).toEqual([])
+  })
+
+  it('buys enough packs for what the recipes need', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('basmati rice|mass:metric', 'Basmati Rice', 1500, 'g')],
+      mappings: [riceMap],
+    })
+    expect(preview.changes[0]).toMatchObject({ productId: 104, to: 2, detail: '1 kg · for 1500 g' })
+  })
+
+  it('uses the adjusted quantity from the Shopping tab', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('basmati rice|mass:metric', 'Basmati Rice', 1500, 'g')],
+      adjustedItems: [{ key: 'basmati rice|mass:metric', buy_qty: 400 }],
+      mappings: [riceMap],
+    })
+    expect(preview.changes[0]).toMatchObject({ productId: 104, to: 1, detail: '1 kg · for 400 g' })
+  })
+
+  it('finds the mapping whatever way the recipe spells the ingredient', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', '  Olive   Oils ', 90, 'mL')],
+      mappings: [oil],
+    })
+    expect(preview.changes.map(c => c.productId)).toEqual([301])
+  })
+
+  it('leaves an ingredient marked as always at home off the list, and says so', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('salt|volume:us', 'Salt', 1, 'tsp'), item('onion|count:', 'Onion', 2)],
+      mappings: [atHome('salt', 'Salt')],
+    })
+    expect(preview.changes.map(c => c.title)).toEqual(['Onion'])
+    expect(preview.atHome).toEqual([{ text: 'Salt', amount: '1 tsp' }])
+  })
+
+  it('keeps unmapped ingredients as free-text lines next to mapped ones', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 90, 'mL'), item('onion|count:', 'Onion', 2)],
+      mappings: [oil],
+    })
+    expect(preview.lines).toEqual([
+      { productId: 301, text: null, packs: 1, sources: ['recipe'] },
+      { productId: null, text: 'Onion', packs: 1, sources: ['recipe'] },
+    ])
+  })
+
+  it('adds one pack and asks for a check when the amount cannot be compared with the pack', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('garlic|count:clove', 'Garlic', 3, 'clove')],
+      mappings: [garlicMap],
+    })
+    expect(preview.changes[0]).toMatchObject({ productId: 302, to: 1, detail: 'per stuk · for 3 clove' })
+    expect(preview.review).toEqual([{ reason: 'check_quantity', name: 'Garlic', productId: 302 }])
+  })
+
+  it('asks for a check when one ingredient is listed in two kinds of unit', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 30, 'mL'), item('olive oil|count:', 'Olive oil', 1)],
+      mappings: [oil],
+    })
+    expect(preview.changes).toHaveLength(1)
+    expect(preview.changes[0]).toMatchObject({ productId: 301, to: 1, detail: '1 l · for 30 mL + 1' })
+    expect(preview.review).toEqual([{ reason: 'check_quantity', name: 'Olive oil', productId: 301 }])
+  })
+
+  it('combines a mapped ingredient with a staple for the same product', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [milk],
+      mergedItems: [item('milk|volume:metric', 'Milk', 500, 'mL')],
+      mappings: [milkMap],
+    })
+    expect(preview.changes).toHaveLength(1)
+    expect(preview.changes[0]).toMatchObject({ productId: 101, to: 3, sources: ['staple', 'recipe'], aisle: 'Dairy & eggs' })
+  })
+
+  it('ignores a mapped ingredient that is ticked as already have', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 90, 'mL'), item('salt|volume:us', 'Salt', 1, 'tsp')],
+      adjustedItems: [{ key: 'olive oil|volume:metric', buy_qty: 0 }, { key: 'salt|volume:us', buy_qty: 0 }],
+      mappings: [oil, atHome('salt', 'Salt')],
+    })
+    expect(preview.changes).toEqual([])
+    expect(preview.atHome).toEqual([])
+  })
+
+  it('diffs mapped products against the AH list like any other product', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 90, 'mL')],
+      mappings: [oil],
+      currentList: [{ productId: 301, text: 'AH Olijfolie', quantity: 1, ticked: false }],
+    })
+    expect(preview.changes).toEqual([])
+    expect(preview.onListAlready.map(l => l.productId)).toEqual([301])
+  })
+
+  it('behaves as before when the household has no mappings', () => {
+    const args = { runDate: MONDAY, staples: [milk], mergedItems: [item('onion|count:', 'Onion', 2)] }
+    expect(buildWeekPreview({ ...args, mappings: [] })).toEqual(buildWeekPreview(args))
   })
 })
