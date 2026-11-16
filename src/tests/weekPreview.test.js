@@ -95,7 +95,7 @@ describe('buildWeekPreview', () => {
   it('adds a due pinned staple from the cached product, without a live lookup', () => {
     const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk] })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', aisle: 'Dairy & eggs', from: 0, to: 2, sources: ['staple'] },
+      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', aisle: 'Dairy & eggs', mappedFrom: [], from: 0, to: 2, sources: ['staple'] },
     ])
     expect(preview.staples).toEqual([
       { staple_id: 's-milk', name: 'Milk', included: true, reason: 'cadence', reasonText: stapleReasonText('cadence'), packs: 2 },
@@ -148,7 +148,7 @@ describe('buildWeekPreview', () => {
       adjustedItems: [{ key: 'onion|count:', buy_qty: 0 }],
     })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', aisle: 'Pantry', from: 0, to: 1, sources: ['recipe'] },
+      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', aisle: 'Pantry', mappedFrom: [], from: 0, to: 1, sources: ['recipe'] },
     ])
   })
 
@@ -181,7 +181,7 @@ describe('buildWeekPreview', () => {
       ['add', 'Garlic', 0, 1],
       ['untick', 'Olive oil', 0, 1],
     ])
-    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', aisle: 'Produce', quantity: 3 }])
+    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', aisle: 'Produce', mappedFrom: [], quantity: 3 }])
   })
 
   it('gives no changes when the list already matches (safe to run again)', () => {
@@ -260,7 +260,7 @@ describe('buildWeekPreview with ingredient mappings', () => {
       mappings: [oil],
     })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: 301, text: null, title: 'AH Olijfolie', detail: '1 l · for 90 mL', aisle: 'Pantry', from: 0, to: 1, sources: ['recipe'] },
+      { action: 'add', productId: 301, text: null, title: 'AH Olijfolie', detail: '1 l · for 90 mL', aisle: 'Pantry', mappedFrom: [{ key: 'olive oil', label: 'Olive oil' }], from: 0, to: 1, sources: ['recipe'] },
     ])
     expect(preview.review).toEqual([])
   })
@@ -300,7 +300,7 @@ describe('buildWeekPreview with ingredient mappings', () => {
       mappings: [atHome('salt', 'Salt')],
     })
     expect(preview.changes.map(c => c.title)).toEqual(['Onion'])
-    expect(preview.atHome).toEqual([{ text: 'Salt', amount: '1 tsp' }])
+    expect(preview.atHome).toEqual([{ key: 'salt', text: 'Salt', amount: '1 tsp' }])
   })
 
   it('keeps unmapped ingredients as free-text lines next to mapped ones', () => {
@@ -372,5 +372,82 @@ describe('buildWeekPreview with ingredient mappings', () => {
   it('behaves as before when the household has no mappings', () => {
     const args = { runDate: MONDAY, staples: [milk], mergedItems: [item('onion|count:', 'Onion', 2)] }
     expect(buildWeekPreview({ ...args, mappings: [] })).toEqual(buildWeekPreview(args))
+  })
+})
+
+// Undoing a mapping from the preview: each line says which ingredient mappings put it there.
+describe('buildWeekPreview: which mapping a line came from', () => {
+  const mapping = (ingredient_key, label, externalId, title, size) => ({
+    ingredient_key, label, pantry: false, product_external_id: externalId,
+    product: { title, sales_unit_size: size, price: 1 },
+  })
+  const oil = mapping('olive oil', 'Olive oil', 301, 'AH Olijfolie', '1 l')
+  const evoo = mapping('extra virgin olive oil', 'Extra Virgin Olive Oil', 301, 'AH Olijfolie', '1 l')
+  const milkMap = mapping('milk', 'Milk', 101, 'AH Halfvolle melk', '1 l')
+
+  it('names the ingredient behind a mapped line, as the recipe list shows it', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive Oils', 90, 'mL')],
+      mappings: [oil],
+    })
+    expect(preview.changes[0].mappedFrom).toEqual([{ key: 'olive oil', label: 'Olive Oils' }])
+  })
+
+  it('names every ingredient when two are mapped to the same product', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [
+        item('olive oil|volume:metric', 'Olive oil', 90, 'mL'),
+        item('extra virgin olive oil|volume:metric', 'Extra Virgin Olive Oil', 30, 'mL'),
+      ],
+      mappings: [oil, evoo],
+    })
+    expect(preview.changes).toHaveLength(1)
+    // 90 mL + 30 mL is one bottle, not one bottle per ingredient
+    expect(preview.changes[0]).toMatchObject({ productId: 301, to: 1, detail: '1 l · for 90 mL + 30 mL' })
+    expect(preview.changes[0].mappedFrom).toEqual([
+      { key: 'olive oil', label: 'Olive oil' },
+      { key: 'extra virgin olive oil', label: 'Extra Virgin Olive Oil' },
+    ])
+  })
+
+  it('names the ingredient on a line that is also a staple', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [milk],
+      mergedItems: [item('milk|volume:metric', 'Milk', 500, 'mL')],
+      mappings: [milkMap],
+    })
+    expect(preview.changes[0].mappedFrom).toEqual([{ key: 'milk', label: 'Milk' }])
+  })
+
+  it('gives no mapping for staple lines and free-text lines', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [milk],
+      mergedItems: [item('onion|count:', 'Onion', 2)],
+      mappings: [oil],
+    })
+    expect(preview.changes.map(c => c.mappedFrom)).toEqual([[], []])
+  })
+
+  it('names the mapping on a line the AH list already covers', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 90, 'mL')],
+      mappings: [oil],
+      currentList: [{ productId: 301, text: 'AH Olijfolie', quantity: 1, ticked: false }],
+    })
+    expect(preview.onListAlready[0].mappedFrom).toEqual([{ key: 'olive oil', label: 'Olive oil' }])
+  })
+
+  it('gives each always-at-home ingredient its mapping key, once', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('salt|volume:us', 'Salt', 1, 'tsp'), item('salt|count:', 'Salt', 1)],
+      mappings: [{ ingredient_key: 'salt', label: 'Salt', pantry: true, product_external_id: null, product: null }],
+    })
+    expect(preview.atHome).toEqual([{ key: 'salt', text: 'Salt', amount: '1 tsp + 1' }])
   })
 })

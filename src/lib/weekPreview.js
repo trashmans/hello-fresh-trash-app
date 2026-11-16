@@ -115,9 +115,10 @@ export function recipeTextLines(mergedItems = [], adjustedItems = []) {
  * Returns {
  *   weekStart      Monday of the week
  *   lines          target lines [{ productId | null, text | null, packs, sources }]
- *   changes        [{ action: 'add' | 'increase' | 'untick', productId, text, title, detail, aisle, from, to, sources }]
- *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, aisle, quantity }]
- *   atHome         ingredients left off because the household always has them [{ text, amount }]
+ *   changes        [{ action: 'add' | 'increase' | 'untick', productId, text, title, detail, aisle, mappedFrom, from, to, sources }]
+ *                  mappedFrom: the ingredient mappings behind a product line [{ key, label }], [] for other lines
+ *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, aisle, mappedFrom, quantity }]
+ *   atHome         ingredients left off because the household always has them [{ key, text, amount }] (key: the mapping's)
  *   staples        [{ staple_id, name, included, reason, reasonText, packs }] in the order given
  *   review         things a person should look at: [{ reason: 'missing_product', staple_id, name }] for a
  *                  staple without a product, [{ reason: 'check_quantity', name, productId }] for a mapped
@@ -166,10 +167,12 @@ export function buildWeekPreview({
   }
 
   // Recipe ingredients: mapped to a product, always at home, or free text.
+  // Ingredients mapped to the same product share one planner product, so their
+  // amounts are added before packs are worked out.
   const mappingByKey = new Map((mappings ?? []).map(m => [m.ingredient_key, m]))
   const unmapped = []
   const atHomeItems = []
-  const mapped = new Map() // ingredient key → { mapping, text, amounts }
+  const mappedProducts = new Map() // line key → { mapping, text, amounts, from: [{ key, label }] }
   const plannerIngredients = []
   const plannerMappings = {}
 
@@ -178,28 +181,38 @@ export function buildWeekPreview({
     if (mapping?.pantry) { atHomeItems.push(item); continue }
     if (mapping?.product_external_id == null) { unmapped.push(item); continue }
 
-    const productId = `m:${item.key}`
-    if (!mapped.has(item.key)) {
-      mapped.set(item.key, { mapping, text: item.text, amounts: [] })
+    const productId = `m:${mapping.product_external_id}`
+    const key = lineKey(mapping.product_external_id)
+    if (!mappedProducts.has(key)) {
+      mappedProducts.set(key, { mapping, text: item.text, amounts: [], from: [] })
       products[productId] = {
         externalId: mapping.product_external_id,
         salesUnitSize: mapping.product?.sales_unit_size ?? null,
         mechanism: null,
       }
-      plannerMappings[item.key] = { product_id: productId, pantry: false }
     }
-    if (item.amount) mapped.get(item.key).amounts.push(item.amount)
+    const entry = mappedProducts.get(key)
+    if (!entry.from.some(f => f.key === item.key)) entry.from.push({ key: item.key, label: item.text })
+    if (item.amount) entry.amounts.push(item.amount)
+    plannerMappings[item.key] = { product_id: productId, pantry: false }
     plannerIngredients.push({ canonical_name: item.key, name: item.text, quantity: item.qty, unit: item.unit })
   }
 
-  for (const { mapping, text, amounts } of mapped.values()) {
-    const key = lineKey(mapping.product_external_id)
+  for (const [key, { mapping, text, amounts }] of mappedProducts) {
     if (shown.has(key)) continue // also a staple: the staple's title and aisle stand
     shown.set(key, {
       title: mapping.product?.title || mapping.label || text,
       detail: [mapping.product?.sales_unit_size, amounts.length ? `for ${amounts.join(' + ')}` : null].filter(Boolean).join(' · ') || null,
       aisle: aisleFor(text),
     })
+  }
+  const mappedFrom = (key) => mappedProducts.get(key)?.from ?? []
+
+  // Always-at-home ingredients, one entry per mapping.
+  const atHome = new Map()
+  for (const { key, text, amount } of atHomeItems) {
+    if (!atHome.has(key)) atHome.set(key, { key, text, amounts: [] })
+    if (amount) atHome.get(key).amounts.push(amount)
   }
 
   const plan = planWeek({ runDate, staples: plannerStaples, products, ingredients: plannerIngredients, mappings: plannerMappings })
@@ -221,6 +234,7 @@ export function buildWeekPreview({
       productId: change.productId,
       text: change.text,
       ...describe(key),
+      mappedFrom: mappedFrom(key),
       from: change.from,
       to: change.to,
       sources: lineByKey.get(key)?.sources ?? [],
@@ -233,7 +247,7 @@ export function buildWeekPreview({
     .filter(line => !changed.has(lineKey(line.productId, line.text)))
     .map(line => {
       const key = lineKey(line.productId, line.text)
-      return { productId: line.productId, text: line.text, ...describe(key), quantity: onList.get(key)?.quantity ?? line.packs }
+      return { productId: line.productId, text: line.text, ...describe(key), mappedFrom: mappedFrom(key), quantity: onList.get(key)?.quantity ?? line.packs }
     })
 
   return {
@@ -241,7 +255,7 @@ export function buildWeekPreview({
     lines,
     changes,
     onListAlready,
-    atHome: toTextLines(atHomeItems),
+    atHome: [...atHome.values()].map(({ key, text, amounts }) => ({ key, text, amount: amounts.length ? amounts.join(' + ') : null })),
     staples: plan.stapleDecisions.map(d => ({
       staple_id: d.staple_id,
       name: names.get(d.staple_id) ?? '',
