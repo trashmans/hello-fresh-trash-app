@@ -73,7 +73,8 @@ export default function PrivacyPolicy() {
               (search words are first sent to Google's Gemini API to put them into Dutch; nothing about you is sent)
               and keeps the product details it sees (name, pack size, price), which contain nothing about you. Staples
               belong to your household, everyone in it can see and change them, and they are deleted when you remove
-              them or the household is deleted.
+              them or the household is deleted. The same goes for <strong>mapped ingredients</strong>: which AH
+              product your household buys for a recipe ingredient, or that you always have it at home.
             </p>
             <p className="mt-2">
               Linking is based on your consent. You can withdraw it at any time by unlinking on the Automated ordering tab, which deletes
