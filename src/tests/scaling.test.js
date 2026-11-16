@@ -3,6 +3,7 @@ import {
   computeScaleFactorFromServings,
   computeScaleFactorFromIngredient,
   scaleIngredients,
+  scaleStepText,
 } from '@/lib/scaling'
 
 describe('computeScaleFactorFromServings', () => {
@@ -89,5 +90,92 @@ describe('scaleIngredients', () => {
   it('returns the original list when the factor is 1 or missing', () => {
     expect(scaleIngredients(ingredients, 1)).toBe(ingredients)
     expect(scaleIngredients(ingredients, null)).toBe(ingredients)
+  })
+})
+
+// Amounts written inside the instructions. Recipe cards give home-supplied
+// ingredients (water, butter, oil) only there, so they must scale with the
+// servings and follow the viewer's units like the ingredient list does.
+describe('scaleStepText', () => {
+  const US = { volume_unit: 'us', mass_unit: 'us' }
+  const METRIC = { volume_unit: 'metric', mass_unit: 'metric' }
+  const water = 'Wash and dry all produce. Combine 4 cups of water and the stock concentrates in a medium pot.'
+  const butter = 'Melt 1 tablespoon of butter in a large pan over medium-high heat'
+
+  it('scales the water in the reported step when the servings double', () => {
+    expect(scaleStepText(water, 2, US)).toBe('Wash and dry all produce. Combine 8 cups of water and the stock concentrates in a medium pot.')
+  })
+
+  it('scales the butter in the reported step, and makes the unit plural', () => {
+    expect(scaleStepText(butter, 2, US)).toBe('Melt 2 tablespoons of butter in a large pan over medium-high heat')
+  })
+
+  it('scales down, and makes the unit singular again', () => {
+    expect(scaleStepText(water, 0.25, US)).toBe('Wash and dry all produce. Combine 1 cup of water and the stock concentrates in a medium pot.')
+    expect(scaleStepText('Add 2 tablespoons of oil.', 0.5, US)).toBe('Add 1 tablespoon of oil.')
+  })
+
+  it('leaves the text exactly as written when nothing needs to change', () => {
+    for (const text of [water, butter, 'Drizzle with 1 TBSP olive oil and ¼ tsp salt.']) {
+      expect(scaleStepText(text, 1, US)).toBe(text)
+      expect(scaleStepText(text, null, US)).toBe(text)
+      expect(scaleStepText(text, undefined, undefined)).toBe(text)
+    }
+  })
+
+  it("shows step amounts in the viewer's units, like the ingredient list", () => {
+    expect(scaleStepText(water, 1, METRIC)).toBe('Wash and dry all produce. Combine 960 mL of water and the stock concentrates in a medium pot.')
+    expect(scaleStepText(butter, 1, METRIC)).toBe('Melt 15 mL of butter in a large pan over medium-high heat')
+    expect(scaleStepText('Add 500 g of pasta.', 1, US)).toBe('Add 1.1 lb of pasta.')
+  })
+
+  it('scales first and then picks the unit', () => {
+    expect(scaleStepText(water, 2, METRIC)).toBe('Wash and dry all produce. Combine 1.9 L of water and the stock concentrates in a medium pot.')
+  })
+
+  it('reads fractions however they are written', () => {
+    expect(scaleStepText('Add ¼ cup water.', 2, US)).toBe('Add 0.5 cup water.')
+    expect(scaleStepText('Add 1½ cups water.', 2, US)).toBe('Add 3 cups water.')
+    expect(scaleStepText('Add 1 1/2 cups water.', 2, US)).toBe('Add 3 cups water.')
+    expect(scaleStepText('Add 1/2 teaspoon sugar.', 4, US)).toBe('Add 2 teaspoons sugar.')
+    expect(scaleStepText('Add 1.5 cups water.', 2, US)).toBe('Add 3 cups water.')
+  })
+
+  it('keeps abbreviations as the card wrote them', () => {
+    expect(scaleStepText('Heat 1 TBSP oil; add 2 tsp sugar and 10 oz chicken.', 2, US)).toBe('Heat 2 TBSP oil; add 4 tsp sugar and 20 oz chicken.')
+    expect(scaleStepText('Cook 250g rice.', 2, METRIC)).toBe('Cook 500g rice.')
+  })
+
+  it('scales both ends of a range', () => {
+    expect(scaleStepText('Add 2–3 tablespoons of water.', 2, US)).toBe('Add 4–6 tablespoons of water.')
+    expect(scaleStepText('Add 1-2 TBSP water.', 3, US)).toBe('Add 3-6 TBSP water.')
+    expect(scaleStepText('Add 1 to 2 cups of stock.', 2, US)).toBe('Add 2 to 4 cups of stock.')
+  })
+
+  it('scales every amount in a step', () => {
+    expect(scaleStepText('Whisk 2 cups of water with 1 tablespoon of butter and 1 teaspoon of salt.', 2, US))
+      .toBe('Whisk 4 cups of water with 2 tablespoons of butter and 2 teaspoons of salt.')
+  })
+
+  it('leaves times, temperatures, sizes and counts alone', () => {
+    const text = 'Cook 4–5 minutes at {{temp:425F}} degrees. Dice into ½-inch pieces, add 2 cloves of garlic and 3 large eggs, then rest 10 minutes in 2 pans.'
+    expect(scaleStepText(text, 2, METRIC)).toBe(text)
+  })
+
+  it('does not read a unit inside a longer word or a hyphenated size', () => {
+    for (const text of ['Juice 1 lime.', 'Use a 1-cup measure.', 'Add 2 glasses of wine.', 'Slice 1 leek.']) {
+      expect(scaleStepText(text, 2, US)).toBe(text)
+    }
+  })
+
+  it('rounds like the ingredient list', () => {
+    expect(scaleStepText('Add 1 tablespoon of oil.', 1.5, US)).toBe('Add 1.5 tablespoons of oil.')
+    expect(scaleStepText('Add 3 cups of water.', 3.5, US)).toBe('Add 11 cups of water.')
+  })
+
+  it('passes missing text through', () => {
+    expect(scaleStepText('', 2, US)).toBe('')
+    expect(scaleStepText(null, 2, US)).toBeNull()
+    expect(scaleStepText(undefined, 2, US)).toBeUndefined()
   })
 })

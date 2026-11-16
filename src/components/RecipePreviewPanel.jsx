@@ -8,7 +8,7 @@ import { useRecipeIngredients } from '@/hooks/useRecipeIngredients'
 import { useRecipeStepImages } from '@/hooks/useRecipeStepImages'
 import { useAuth } from '@/context/AuthContext'
 import { convertIngredientUnit, formatTemperatureText, unitOptionsFor } from '@/lib/units'
-import { computeScaleFactorFromServings, computeScaleFactorFromIngredient, scaleIngredients } from '@/lib/scaling'
+import { computeScaleFactorFromServings, computeScaleFactorFromIngredient, scaleIngredients, scaleStepText } from '@/lib/scaling'
 
 function formatIngredientLine(ingredient, unitPrefs) {
   const { quantity, unit } = convertIngredientUnit(ingredient.quantity, ingredient.unit, unitPrefs)
@@ -234,7 +234,7 @@ function InstructionsView({ recipe }) {
                   onError={(e) => { e.currentTarget.style.display = 'none' }}
                 />
               )}
-              {formatTemperatureText(step, unitPrefs.temperature_unit)}
+              {formatTemperatureText(scaleStepText(step, scaleFactor, unitPrefs), unitPrefs.temperature_unit)}
             </li>
           ))}
         </ol>
