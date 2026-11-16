@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mergeIngredients } from '@/lib/ingredientMerge'
+import { mergeIngredients, ingredientKey } from '@/lib/ingredientMerge'
 
 // Each recipe serves 2 and is selected at 2 servings unless a test says otherwise.
 function merge(recipes, prefs) {
@@ -201,5 +201,36 @@ describe("mergeIngredients: shown in the user's unit preference", () => {
     expect(merge(butter, METRIC)[0].key).not.toBe(merge(butter, US)[0].key)
     const garlic = [{ id: 'a', ingredients: [ing('Garlic', 2, 'cloves')] }]
     expect(merge(garlic, METRIC)[0].key).toBe(merge(garlic, US)[0].key)
+  })
+})
+
+// The name part of a merged line's key, on its own: what a household's ingredient
+// mapping ("olive oil" → an AH product) is stored under.
+describe('ingredientKey', () => {
+  it('is the same for spellings the shopping list already merges', () => {
+    expect(ingredientKey('Olive Oil')).toBe('olive oil')
+    expect(ingredientKey('  olive   oils ')).toBe('olive oil')
+    expect(ingredientKey('Sweet Potatoes')).toBe(ingredientKey('sweet potato'))
+    expect(ingredientKey('Veggie Stock Concentrate')).toBe(ingredientKey('Vegetable Stock Concentrate'))
+  })
+
+  it('keeps different cuts and kinds apart', () => {
+    expect(ingredientKey('Chicken Breast')).not.toBe(ingredientKey('Chicken Thighs'))
+    expect(ingredientKey('Extra Virgin Olive Oil')).not.toBe(ingredientKey('Olive Oil'))
+  })
+
+  it('matches the name part of the merged line key', () => {
+    const [item] = mergeIngredients(
+      [{ recipe_id: 'a', servings: 2 }],
+      { a: [{ name: 'Sweet Potatoes', quantity: 2, unit: null }] },
+      { a: { id: 'a', name: 'A', servings: 2 } },
+    )
+    expect(item.key.split('|')[0]).toBe(ingredientKey('Sweet Potatoes'))
+  })
+
+  it('is empty for a missing name', () => {
+    expect(ingredientKey('')).toBe('')
+    expect(ingredientKey(null)).toBe('')
+    expect(ingredientKey(undefined)).toBe('')
   })
 })

@@ -86,8 +86,11 @@ export default function WeekPreviewCard({ shoppingList }) {
               <Section title="Needs a look">
                 <ul className="space-y-1">
                   {preview.review.map(r => (
-                    <li key={r.staple_id} className="rounded-md border border-destructive/40 px-3 py-2">
-                      <span className="font-medium">{r.name}:</span> no AH product found. Edit the staple and pin a product.
+                    <li key={r.staple_id ?? `q:${r.productId}:${r.name}`} className="rounded-md border border-destructive/40 px-3 py-2">
+                      <span className="font-medium">{r.name}:</span>{' '}
+                      {r.reason === 'check_quantity'
+                        ? "couldn't work out how many packs the recipes need, so 1 is planned. Check the quantity."
+                        : 'no AH product found. Edit the staple and pin a product.'}
                     </li>
                   ))}
                 </ul>
@@ -118,6 +121,14 @@ export default function WeekPreviewCard({ shoppingList }) {
                     <span className="font-medium text-foreground">{aisle}:</span> {items.map(l => `${l.title} × ${l.quantity}`).join(', ')}
                   </p>
                 ))}
+              </Section>
+            )}
+
+            {preview.atHome.length > 0 && (
+              <Section title={`Always at home · ${preview.atHome.length}`}>
+                <p className="text-muted-foreground">
+                  {preview.atHome.map(l => (l.amount ? `${l.text} (${l.amount})` : l.text)).join(', ')}
+                </p>
               </Section>
             )}
 

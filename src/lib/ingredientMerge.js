@@ -50,6 +50,16 @@ function nameKey(name) {
   return words.join(' ')
 }
 
+/**
+ * The name part of a merged line's key: the same for every spelling the shopping
+ * list merges ("Olive Oil", "olive oils"), different for different cuts and kinds
+ * ("chicken breast" / "chicken thighs"). A household's ingredient mappings are
+ * stored under it (household_ingredient_mappings.ingredient_key).
+ */
+export function ingredientKey(name) {
+  return nameKey(name)
+}
+
 function preferredSystem(type, prefs) {
   if (!prefs) return null
   return (type === 'volume' ? prefs.volume_unit : prefs.mass_unit) ?? null
