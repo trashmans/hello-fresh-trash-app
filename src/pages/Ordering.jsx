@@ -2,17 +2,21 @@ import { useOutletContext } from 'react-router-dom'
 import AlbertHeijnCard from '@/components/AlbertHeijnCard'
 import StaplesCard from '@/components/StaplesCard'
 import WeekPreviewCard from '@/components/WeekPreviewCard'
+import MappedIngredientsCard from '@/components/MappedIngredientsCard'
+import { useIngredientMappings } from '@/hooks/useIngredientMappings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const COMING = [
   { title: 'Send to AH', text: 'Adds the week to your AH shopping list. You still pick a time slot and pay in the AH app.' },
 ]
 
-// Automated ordering tab: the Albert Heijn link, the household's staples (rollout
-// phase 4) and this week's preview (phase 5, a dry run). Sending to AH (phase 6)
+// Automated ordering tab: the Albert Heijn link, the household's staples and ingredient
+// mappings (rollout phase 4) and this week's preview (phase 5, a dry run). The mappings
+// are loaded here because the preview applies them and the list below manages them. Sending to AH (phase 6)
 // is listed so people know what's coming.
 export default function Ordering() {
   const { shoppingList } = useOutletContext()
+  const ingredientMappings = useIngredientMappings()
 
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
@@ -22,7 +26,8 @@ export default function Ordering() {
       </div>
       <AlbertHeijnCard />
       <StaplesCard />
-      <WeekPreviewCard shoppingList={shoppingList} />
+      <WeekPreviewCard shoppingList={shoppingList} ingredientMappings={ingredientMappings} />
+      <MappedIngredientsCard ingredientMappings={ingredientMappings} />
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">

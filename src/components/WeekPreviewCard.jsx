@@ -1,6 +1,8 @@
-import { Loader2, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { Link2, Loader2, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import IngredientMapForm from '@/components/IngredientMapForm'
 import { useWeekPreview } from '@/hooks/useWeekPreview'
 import { AISLES } from '@/lib/aisles'
 
@@ -28,23 +30,34 @@ function Section({ title, children }) {
   )
 }
 
-function ChangeRow({ change }) {
+// A recipe ingredient that is still a free-text line can be mapped to an AH product.
+const canMap = (change) => change.productId == null && change.sources.includes('recipe')
+
+function ChangeRow({ change, mapping, onMap, children }) {
   const sources = [...new Set(change.sources)]
   return (
-    <li className="flex items-start gap-3 py-2">
-      <span className="mt-0.5 w-16 shrink-0 rounded-md bg-secondary px-2 py-0.5 text-center text-xs font-medium text-secondary-foreground">
-        {ACTION_LABEL[change.action] ?? change.action}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="font-medium">{change.title}</p>
-        <p className="text-xs text-muted-foreground">
-          {[change.detail, ...sources.map(s => SOURCE_LABEL[s] ?? s)].filter(Boolean).join(' · ')}
-          {change.action === 'untick' && ' · ticked off on your AH list now'}
-        </p>
+    <li className="py-2">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 w-16 shrink-0 rounded-md bg-secondary px-2 py-0.5 text-center text-xs font-medium text-secondary-foreground">
+          {ACTION_LABEL[change.action] ?? change.action}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">{change.title}</p>
+          <p className="text-xs text-muted-foreground">
+            {[change.detail, ...sources.map(s => SOURCE_LABEL[s] ?? s)].filter(Boolean).join(' · ')}
+            {change.action === 'untick' && ' · ticked off on your AH list now'}
+          </p>
+        </div>
+        <span className="shrink-0 tabular-nums text-sm">
+          {change.action === 'increase' ? `${change.from} → ${change.to}` : `× ${change.to}`}
+        </span>
+        {onMap && !mapping && (
+          <Button size="sm" variant="ghost" className="h-7 shrink-0 px-2 text-xs" onClick={onMap} aria-label={`Map ${change.title} to an AH product`}>
+            <Link2 className="h-3.5 w-3.5" /> Map
+          </Button>
+        )}
       </div>
-      <span className="shrink-0 tabular-nums text-sm">
-        {change.action === 'increase' ? `${change.from} → ${change.to}` : `× ${change.to}`}
-      </span>
+      {children}
     </li>
   )
 }
@@ -52,8 +65,9 @@ function ChangeRow({ change }) {
 // "This week's preview" on the Automated ordering tab (rollout phase 5): a dry run of
 // what the weekly shop would change on the household's AH list. Never sends anything.
 // Hidden unless the household's ah_enabled switch is on.
-export default function WeekPreviewCard({ shoppingList }) {
-  const { available, preview, loading, error, run } = useWeekPreview(shoppingList)
+export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
+  const { available, preview, loading, error, run } = useWeekPreview(shoppingList, ingredientMappings.mappings)
+  const [mappingFor, setMappingFor] = useState(null) // text of the recipe line being mapped
   if (!available) return null
 
   const notIncluded = preview?.staples.filter(s => !s.included && s.reason !== 'missing_product') ?? []
@@ -107,7 +121,23 @@ export default function WeekPreviewCard({ shoppingList }) {
                   <div key={aisle}>
                     <AisleHeading>{aisle}</AisleHeading>
                     <ul className="divide-y divide-border">
-                      {items.map(c => <ChangeRow key={c.productId ?? `t:${c.text}`} change={c} />)}
+                      {items.map(c => (
+                        <ChangeRow
+                          key={c.productId ?? `t:${c.text}`}
+                          change={c}
+                          mapping={mappingFor === c.text}
+                          onMap={canMap(c) && ingredientMappings.available ? () => setMappingFor(c.text) : null}
+                        >
+                          {canMap(c) && mappingFor === c.text && (
+                            <IngredientMapForm
+                              name={c.text}
+                              searchProducts={ingredientMappings.searchProducts}
+                              onSave={ingredientMappings.save}
+                              onDone={() => setMappingFor(null)}
+                            />
+                          )}
+                        </ChangeRow>
+                      ))}
                     </ul>
                   </div>
                 ))
