@@ -71,7 +71,9 @@ export default function PrivacyPolicy() {
               With the link on, your household can also keep a list of <strong>staples</strong>: things you buy
               regularly, how many and how often. To find them, the app searches AH's product range through your link
               (search words are first sent to Google's Gemini API to put them into Dutch; nothing about you is sent)
-              and keeps the product details it sees (name, pack size, price), which contain nothing about you. Staples
+              and keeps the product details it sees (name, pack size, price, photo link), which contain nothing about you. Product
+              photos are loaded by your browser straight from Albert Heijn's image server, which therefore sees your IP
+              address, like any website you visit; the app does not tell it which page you are on. Staples
               belong to your household, everyone in it can see and change them, and they are deleted when you remove
               them or the household is deleted. The same goes for <strong>mapped ingredients</strong>: which AH
               product your household buys for a recipe ingredient, or that you always have it at home.

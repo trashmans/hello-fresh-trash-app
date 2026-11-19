@@ -1,14 +1,22 @@
 import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Home, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { describeMapping } from '@/lib/ingredientMappings'
+import ProductThumb from '@/components/ProductThumb'
 
 function MappingRow({ mapping, onRemove }) {
   const [confirm, setConfirm] = useState(false)
   return (
     <li className="flex flex-wrap items-center gap-3 py-2">
+      {mapping.pantry ? (
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground" aria-hidden="true">
+          <Home className="h-4 w-4" />
+        </span>
+      ) : (
+        <ProductThumb src={mapping.product?.image_url} />
+      )}
       <div className="min-w-0 flex-1">
         <p className="font-medium">{mapping.label}</p>
         <p className="truncate text-xs text-muted-foreground">{describeMapping(mapping)}</p>

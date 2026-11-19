@@ -5,9 +5,9 @@ import { useAuth } from '@/context/AuthContext'
 
 // The household's staples (public.household_staples, RLS: members only) and AH product
 // search through the retailer-products Edge Function. Pinned products come with their
-// cached title, pack size and price (public.retailer_products).
+// cached title, pack size, price and photo (public.retailer_products).
 
-export const STAPLE_SELECT = '*, product:retailer_products(title, sales_unit_size, price)'
+export const STAPLE_SELECT = '*, product:retailer_products(title, sales_unit_size, price, image_url)'
 
 async function errorMessage(error, fallback) {
   if (error instanceof FunctionsHttpError) {
