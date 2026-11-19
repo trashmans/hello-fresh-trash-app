@@ -33,6 +33,7 @@ export interface ProductRow {
   sales_unit_size: string | null
   price: number | null
   orderable: boolean
+  image_url: string | null
   last_seen_at: string
 }
 
@@ -44,6 +45,7 @@ export function toProductRow(retailer: string, p: RetailerProduct, seenAt: strin
     sales_unit_size: p.salesUnitSize,
     price: p.price,
     orderable: p.orderable,
+    image_url: p.imageUrl ?? null,
     last_seen_at: seenAt,
   }
 }
@@ -55,6 +57,8 @@ export interface SearchResult {
   price: number | null
   /** National bonus label (e.g. "2e GRATIS"), or null. */
   bonus: string | null
+  /** Product photo for a thumbnail, or null. */
+  imageUrl: string | null
 }
 
 export function toSearchResult(p: RetailerProduct): SearchResult {
@@ -64,6 +68,7 @@ export function toSearchResult(p: RetailerProduct): SearchResult {
     salesUnitSize: p.salesUnitSize,
     price: p.price,
     bonus: p.promotion?.mechanism ?? null,
+    imageUrl: p.imageUrl ?? null,
   }
 }
 

@@ -24,7 +24,7 @@ async function rejectsWith(promise, code) {
 describe('parseSearchResponse', () => {
   it('maps AH products to our own type', () => {
     expect(parseSearchResponse({ products: [product()] })).toEqual([{
-      externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, orderable: true, promotion: null,
+      externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, orderable: true, promotion: null, imageUrl: null,
     }])
   })
 
@@ -42,6 +42,47 @@ describe('parseSearchResponse', () => {
   it('skips products without an id or title, keeps the rest', () => {
     const items = parseSearchResponse({ products: [product({ webshopId: undefined }), product({ title: '' }), product({ webshopId: '103' })] })
     expect(items.map((p) => p.externalId)).toEqual([103])
+  })
+
+  // AH sends each product photo in five sizes (as seen in the spike's saved search response).
+  const AH_IMG = 'https://static.ah.nl/dam/product/AHI_795f424869674d39514d4b4a6e6332764e5957526877?revLabel=1&fileType=binary'
+  const img = (size, ext = 'WEBP', base = AH_IMG) => ({ width: size, height: size, url: `${base}&rendition=${size}x${size}_${ext}` })
+  const ahImages = [img(800), img(400), img(200), img(48, 'GIF'), img(80, 'JPG')]
+
+  it('picks the 200 px product photo for thumbnails', () => {
+    const [p] = parseSearchResponse({ products: [product({ images: ahImages })] })
+    expect(p.imageUrl).toBe(img(200).url)
+  })
+
+  it('takes the nearest larger size when there is no 200 px one, else the largest there is', () => {
+    expect(parseSearchResponse({ products: [product({ images: [img(800), img(400), img(48, 'GIF')] })] })[0].imageUrl).toBe(img(400).url)
+    expect(parseSearchResponse({ products: [product({ images: [img(48, 'GIF'), img(80, 'JPG')] })] })[0].imageUrl).toBe(img(80, 'JPG').url)
+  })
+
+  it('has no photo when AH sends none, or an empty or odd list', () => {
+    for (const images of [undefined, null, [], 'x', [{}], [{ width: 200 }], [{ url: 42, width: 200 }]]) {
+      expect(parseSearchResponse({ products: [product({ images })] })[0].imageUrl, JSON.stringify(images)).toBeNull()
+    }
+  })
+
+  it("only accepts photos from AH's own image host, over https", () => {
+    const elsewhere = [
+      img(200, 'WEBP', 'https://evil.example/dam/product/x?a=1'),
+      img(200, 'WEBP', 'http://static.ah.nl/dam/product/x?a=1'),
+      img(200, 'WEBP', 'https://static.ah.nl.evil.example/x?a=1'),
+      img(200, 'WEBP', 'javascript:alert(1)//static.ah.nl/?a=1'),
+    ]
+    for (const bad of elsewhere) {
+      expect(parseSearchResponse({ products: [product({ images: [bad] })] })[0].imageUrl, bad.url).toBeNull()
+    }
+    // a bad 200 px entry falls back to a good size rather than to nothing
+    const [p] = parseSearchResponse({ products: [product({ images: [elsewhere[0], img(400)] })] })
+    expect(p.imageUrl).toBe(img(400).url)
+  })
+
+  it('skips a photo URL too long for the product cache', () => {
+    const long = { width: 200, height: 200, url: `https://static.ah.nl/${'x'.repeat(600)}` }
+    expect(parseSearchResponse({ products: [product({ images: [long] })] })[0].imageUrl).toBeNull()
   })
 
   it('stops with a schema error when the response shape changed', () => {
@@ -291,5 +332,13 @@ describe('retailerAdapterFor', () => {
 
   it('refuses retailers that have no adapter yet', () => {
     expect(() => retailerAdapterFor('jumbo', () => undefined)).toThrow(RetailerError)
+  })
+})
+
+describe('fake adapter product photos', () => {
+  it('has no photos (its products are made up), so the screens show a placeholder', async () => {
+    const products = await createFakeAdapter().searchProducts('t', 'melk')
+    expect(products.length).toBeGreaterThan(0)
+    for (const p of products) expect(p.imageUrl).toBeNull()
   })
 })

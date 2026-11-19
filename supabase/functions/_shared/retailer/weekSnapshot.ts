@@ -62,6 +62,8 @@ export interface LiveProduct {
   price: number | null
   /** National bonus label (e.g. "2e GRATIS"), or null. */
   mechanism: string | null
+  /** Product photo for a thumbnail, or null. */
+  imageUrl: string | null
 }
 
 function toLiveProduct(p: RetailerProduct): LiveProduct {
@@ -71,6 +73,7 @@ function toLiveProduct(p: RetailerProduct): LiveProduct {
     salesUnitSize: p.salesUnitSize,
     price: p.price,
     mechanism: p.promotion?.mechanism ?? null,
+    imageUrl: p.imageUrl ?? null,
   }
 }
 

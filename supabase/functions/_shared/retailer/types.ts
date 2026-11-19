@@ -32,6 +32,8 @@ export interface RetailerProduct {
   orderable: boolean
   /** National bonus only; personal offers are never passed on (ADR 0004). */
   promotion: { mechanism: string; priceBefore: number | null } | null
+  /** Product photo for thumbnails (https://static.ah.nl/… only), or null. */
+  imageUrl: string | null
 }
 
 export interface RetailerPromotionPeriod {

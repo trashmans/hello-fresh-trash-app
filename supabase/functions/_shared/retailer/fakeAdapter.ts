@@ -2,21 +2,21 @@
 // no network, an in-memory shopping list. Preview must never touch a real AH account.
 //
 // The products below are made up (names in AH's style, invented ids and prices), so this
-// public repo holds no recorded personal data.
+// public repo holds no recorded personal data. They have no photos: screens show a placeholder.
 
 import { buildListPatchItems } from './ahSchema.ts'
 import { RetailerError } from './types.ts'
 import type { ListLine, RetailerAdapter, RetailerListItem, RetailerProduct } from './types.ts'
 
 export const FAKE_PRODUCTS: RetailerProduct[] = [
-  { externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, orderable: true, promotion: null },
-  { externalId: 102, title: 'AH Volle melk', salesUnitSize: '1 l', price: 1.29, orderable: true, promotion: null },
-  { externalId: 103, title: 'AH Bananen tros', salesUnitSize: 'per tros', price: 1.69, orderable: true, promotion: null },
-  { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, orderable: true, promotion: { mechanism: '2e GRATIS', priceBefore: 2.99 } },
-  { externalId: 105, title: 'AH Scharreleieren L', salesUnitSize: '10 stuks', price: 3.49, orderable: true, promotion: null },
-  { externalId: 106, title: 'AH Koriander', salesUnitSize: '20 g', price: 0.99, orderable: true, promotion: null },
-  { externalId: 107, title: 'AH Pompoenpitten', salesUnitSize: '200 g', price: 2.49, orderable: true, promotion: { mechanism: '25% KORTING', priceBefore: 2.49 } },
-  { externalId: 108, title: 'AH Lijnzaad gebroken', salesUnitSize: '250 g', price: 1.89, orderable: false, promotion: null },
+  { externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, orderable: true, promotion: null, imageUrl: null },
+  { externalId: 102, title: 'AH Volle melk', salesUnitSize: '1 l', price: 1.29, orderable: true, promotion: null, imageUrl: null },
+  { externalId: 103, title: 'AH Bananen tros', salesUnitSize: 'per tros', price: 1.69, orderable: true, promotion: null, imageUrl: null },
+  { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, orderable: true, promotion: { mechanism: '2e GRATIS', priceBefore: 2.99 }, imageUrl: null },
+  { externalId: 105, title: 'AH Scharreleieren L', salesUnitSize: '10 stuks', price: 3.49, orderable: true, promotion: null, imageUrl: null },
+  { externalId: 106, title: 'AH Koriander', salesUnitSize: '20 g', price: 0.99, orderable: true, promotion: null, imageUrl: null },
+  { externalId: 107, title: 'AH Pompoenpitten', salesUnitSize: '200 g', price: 2.49, orderable: true, promotion: { mechanism: '25% KORTING', priceBefore: 2.49 }, imageUrl: null },
+  { externalId: 108, title: 'AH Lijnzaad gebroken', salesUnitSize: '250 g', price: 1.89, orderable: false, promotion: null, imageUrl: null },
 ]
 
 const DAY_MS = 24 * 60 * 60 * 1000
