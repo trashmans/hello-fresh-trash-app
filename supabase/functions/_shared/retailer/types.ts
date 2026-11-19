@@ -11,6 +11,7 @@ export type RetailerErrorCode =
   | 'unsupported' // no adapter for this retailer
   | 'not_linked'  // the household has not linked this retailer
   | 'forbidden'   // not allowed: no household, or the household's AH switch (ah_enabled) is off
+  | 'busy'        // another send for this household is still running
 
 export class RetailerError extends Error {
   code: RetailerErrorCode
