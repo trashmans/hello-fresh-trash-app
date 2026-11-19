@@ -62,7 +62,10 @@ export default function PrivacyPolicy() {
             <p className="mt-2">
               The token is used only to read your household's AH shopping list and to add items to it. The list is
               read when someone in your household opens this week's preview, to show what would change; it is shown
-              on their screen and not stored by the app. The app never removes items, and never places orders or
+              on their screen and not stored by the app. When the preview is sent to AH (by the household owner, and
+              only after confirming), the app adds or raises those items on your AH list and keeps a record of that
+              send for 12 weeks: which items it added, raised or unticked, the quantities and whether each one reached
+              AH. Everyone in your household can see these records. The app never removes items, and never places orders or
               makes payments: you check out in the AH app yourself. Albert Heijn receives the list items the app adds
               to your account. The token is encrypted with a key that is kept outside our
               database.

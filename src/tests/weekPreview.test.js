@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recipeTextLines, stapleReasonText, buildWeekPreview } from '@/lib/weekPreview'
+import { recipeTextLines, stapleReasonText, buildWeekPreview, toSendRequest } from '@/lib/weekPreview'
 
 const MONDAY = '2026-11-16'
 
@@ -234,7 +234,7 @@ describe('buildWeekPreview', () => {
 
   it('is empty for a household with nothing planned', () => {
     expect(buildWeekPreview({ runDate: MONDAY })).toEqual({
-      weekStart: MONDAY, lines: [], changes: [], onListAlready: [], atHome: [], staples: [], review: [],
+      weekStart: MONDAY, lines: [], changes: [], onListAlready: [], atHome: [], staples: [], review: [], stapleUpdates: [],
     })
   })
 })
@@ -523,5 +523,86 @@ describe('buildWeekPreview: product photos', () => {
       currentList: [{ productId: 101, text: 'AH Halfvolle melk', quantity: 2, ticked: false }],
     })
     expect(preview.onListAlready[0].imageUrl).toBe(IMG('milk'))
+  })
+})
+
+// Send to AH (rollout phase 6): the preview turned into the request for the retailer-send
+// function. The server re-reads the AH list and writes only what adds something, so every
+// planned line is sent, including those already on the list (their staples' dates are saved too).
+describe('toSendRequest', () => {
+  const oil = {
+    ingredient_key: 'olive oil', label: 'Olive oil', pantry: false, product_external_id: 301,
+    product: { title: 'AH Olijfolie', sales_unit_size: '1 l', price: 6.99 },
+  }
+
+  it("gives the planner's staple dates with the product each one belongs to", () => {
+    const skipped = { ...milk, id: 's-skip', name: 'Skipped milk', skip_next: true }
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk, rice, skipped], liveProducts: riceOnBonus })
+    expect(preview.stapleUpdates).toEqual([
+      { staple_id: 's-milk', product_id: 101, last_added_on: MONDAY },
+      { staple_id: 's-rice', product_id: 104, last_added_on: MONDAY, covered_until: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
+      { staple_id: 's-skip', product_id: null, skip_next: false },
+    ])
+  })
+
+  it('sends every planned line with its AH description, quantity and where it came from', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [milk],
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 90, 'mL'), item('onion|count:', 'Onion', 2)],
+      mappings: [oil],
+    })
+    expect(toSendRequest(preview)).toEqual({
+      request: {
+        weekStart: MONDAY,
+        lines: [
+          { productId: 101, text: 'AH Halfvolle melk', quantity: 2, sources: ['staple'] },
+          { productId: 301, text: 'AH Olijfolie', quantity: 1, sources: ['recipe'] },
+          { productId: null, text: 'Onion', quantity: 1, sources: ['recipe'] },
+        ],
+        stapleUpdates: [{ staple_id: 's-milk', product_id: 101, last_added_on: MONDAY }],
+      },
+      notSent: [],
+    })
+  })
+
+  it('also sends lines the AH list already covers, so their staples are marked as bought', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY, staples: [milk],
+      currentList: [{ productId: 101, text: 'AH Halfvolle melk', quantity: 5, ticked: false }],
+    })
+    expect(preview.changes).toEqual([])
+    const { request } = toSendRequest(preview)
+    expect(request.lines).toEqual([{ productId: 101, text: 'AH Halfvolle melk', quantity: 2, sources: ['staple'] }])
+    expect(request.stapleUpdates).toEqual([{ staple_id: 's-milk', product_id: 101, last_added_on: MONDAY }])
+  })
+
+  it('lists each source once when a staple and a recipe share a product', () => {
+    const milkMap = { ingredient_key: 'milk', label: 'Milk', pantry: false, product_external_id: 101, product: { title: 'AH Halfvolle melk', sales_unit_size: '1 l', price: 1.19 } }
+    const second = { ...milk, id: 's-milk-2', name: 'Milk for coffee', quantity: 1 }
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk, second], mergedItems: [item('milk|volume:metric', 'Milk', 500, 'mL')], mappings: [milkMap] })
+    expect(toSendRequest(preview).request.lines).toEqual([{ productId: 101, text: 'AH Halfvolle melk', quantity: 4, sources: ['staple', 'recipe'] }])
+  })
+
+  it('leaves out a line above the 20-pack limit and says so, never lowering it quietly', () => {
+    const huge = { ...milk, quantity: 21 }
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [huge], mergedItems: [item('onion|count:', 'Onion', 2)] })
+    const { request, notSent } = toSendRequest(preview)
+    expect(request.lines.map(l => l.text)).toEqual(['Onion'])
+    expect(notSent).toEqual([{ productId: 101, text: 'AH Halfvolle melk', quantity: 21, reason: 'too_many' }])
+    expect(request.stapleUpdates).toEqual([]) // its staple stays due
+  })
+
+  it('has nothing to send for an empty week', () => {
+    expect(toSendRequest(buildWeekPreview({ runDate: MONDAY }))).toEqual({ request: null, notSent: [] })
+  })
+
+  it('has nothing to send when every line is above the limit', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [{ ...milk, quantity: 25 }] })
+    expect(toSendRequest(preview).request).toBeNull()
+  })
+
+  it('handles a missing preview', () => {
+    expect(toSendRequest(null)).toEqual({ request: null, notSent: [] })
   })
 })

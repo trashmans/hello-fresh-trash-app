@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { STAPLE_SELECT } from '@/hooks/useStaples'
 import { mergeIngredients } from '@/lib/ingredientMerge'
-import { buildWeekPreview } from '@/lib/weekPreview'
+import { buildWeekPreview, toSendRequest } from '@/lib/weekPreview'
 
 // This week's preview (rollout phase 5): a dry run of what the weekly shop would change
 // on the household's AH list. run() gathers the household's staples, the shared shopping
@@ -16,6 +16,11 @@ import { buildWeekPreview } from '@/lib/weekPreview'
 // runs when asked (a button), never on its own. The household's ingredient mappings
 // (useIngredientMappings) are passed in and applied to the last run's inputs, so mapping
 // an ingredient updates the preview straight away without asking AH again.
+//
+// send() (rollout phase 6) sends the preview on screen to the household's AH list through
+// the retailer-send Edge Function, which checks everything again on the server. Only the
+// household owner of a household with send_enabled on may send (canSend); the result is
+// kept until the next run so the screen can show what happened per line.
 
 // Today's date ('YYYY-MM-DD') on the household's calendar.
 function todayIn(timeZone) {
@@ -36,17 +41,20 @@ async function functionMessage(error, fallback) {
 export function useWeekPreview({ recipeSelections, adjustedItems }, mappings = []) {
   const { session, unitPrefs } = useAuth()
   const userId = session?.user?.id
-  const [household, setHousehold] = useState(null) // { id, ahEnabled, timeZone }
+  const [household, setHousehold] = useState(null) // { id, ahEnabled, sendEnabled, role, timeZone }
   const [inputs, setInputs] = useState(null) // what the last run gathered
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState(null) // retailer-send's answer: { status, lines, staplesUpdated }
+  const [sendError, setSendError] = useState(null)
 
   useEffect(() => {
     if (!userId) return
     let cancelled = false
     supabase
       .from('household_members')
-      .select('household_id, households(ah_enabled, time_zone)')
+      .select('household_id, role, households(ah_enabled, send_enabled, time_zone)')
       .eq('user_id', userId)
       .maybeSingle()
       .then(({ data }) => {
@@ -54,6 +62,8 @@ export function useWeekPreview({ recipeSelections, adjustedItems }, mappings = [
         setHousehold({
           id: data.household_id,
           ahEnabled: data.households?.ah_enabled === true,
+          sendEnabled: data.households?.send_enabled === true,
+          role: data.role,
           timeZone: data.households?.time_zone ?? 'Europe/Amsterdam',
         })
       })
@@ -64,6 +74,8 @@ export function useWeekPreview({ recipeSelections, adjustedItems }, mappings = [
     if (!household?.id) return
     setLoading(true)
     setError(null)
+    setSendResult(null)
+    setSendError(null)
     try {
       const ids = recipeSelections.map(r => r.recipe_id)
       const none = Promise.resolve({ data: [], error: null })
@@ -104,5 +116,33 @@ export function useWeekPreview({ recipeSelections, adjustedItems }, mappings = [
     return { ...buildWeekPreview({ ...planInputs, mappings }), skippedLookups, checkedAt }
   }, [inputs, mappings])
 
-  return { available: household?.ahEnabled === true, preview, loading, error, run }
+  const sendPlan = useMemo(() => toSendRequest(preview), [preview])
+
+  // Sends the preview on screen. Returns true when AH was reached (done or partial).
+  const send = useCallback(async () => {
+    if (!sendPlan.request) return false
+    setSending(true)
+    setSendError(null)
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('retailer-send', { body: sendPlan.request })
+      if (fnError) throw new Error(await functionMessage(fnError, 'Could not send to AH. Check your AH list before trying again.'))
+      setSendResult(data)
+      return data?.status !== 'failed'
+    } catch (err) {
+      setSendError(err.message)
+      return false
+    } finally {
+      setSending(false)
+    }
+  }, [sendPlan])
+
+  return {
+    available: household?.ahEnabled === true,
+    preview, loading, error, run,
+    // Sending (phase 6)
+    isOwner: household?.role === 'owner',
+    sendSwitchedOn: household?.sendEnabled === true,
+    canSend: household?.ahEnabled === true && household?.sendEnabled === true && household?.role === 'owner',
+    sendPlan, send, sending, sendResult, sendError,
+  }
 }
