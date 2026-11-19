@@ -14,6 +14,36 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
 const schema = (what: string) => new RetailerError('schema', `Unexpected AH response: ${what}`)
 
+// Product photos: AH sends each in several sizes ({ width, height, url }: 800, 400, 200,
+// 80, 48 px). Thumbnails use the 200 px one (shown at about 40 px, sharp on phone
+// screens), else the nearest larger size, else the largest there is. Only https URLs on
+// AH's own image host are accepted, so an odd response can't make the app load images
+// from anywhere else; the product cache enforces the same rule and length.
+export const IMAGE_HOST = 'static.ah.nl'
+export const IMAGE_URL_MAX = 500
+const THUMBNAIL_WIDTH = 200
+
+function isAhImageUrl(url: string): boolean {
+  if (url.length > IMAGE_URL_MAX) return false
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' && parsed.hostname === IMAGE_HOST
+  } catch {
+    return false
+  }
+}
+
+function pickImageUrl(images: unknown): string | null {
+  if (!Array.isArray(images)) return null
+  const usable = images
+    .filter(isObject)
+    .map((i) => ({ width: num(i.width), url: text(i.url) }))
+    .filter((i): i is { width: number; url: string } => i.width != null && i.width > 0 && i.url != null && isAhImageUrl(i.url))
+    .sort((a, b) => a.width - b.width)
+  if (usable.length === 0) return null
+  return (usable.find((i) => i.width >= THUMBNAIL_WIDTH) ?? usable[usable.length - 1]).url
+}
+
 function listOf(data: unknown, key: string): unknown[] {
   if (!isObject(data) || !Array.isArray(data[key])) throw schema(`no "${key}" list`)
   return data[key]
@@ -53,6 +83,7 @@ export function parseSearchResponse(data: unknown): RetailerProduct[] {
       price: num(p.currentPrice) ?? num(p.priceBeforeBonus),
       orderable: p.isOrderable !== false && p.availableOnline !== false,
       promotion: mechanism ? { mechanism, priceBefore: num(p.priceBeforeBonus) } : null,
+      imageUrl: pickImageUrl(p.images),
     })
   }
   return products

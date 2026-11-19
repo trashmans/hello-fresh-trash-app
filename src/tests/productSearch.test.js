@@ -8,8 +8,9 @@ import {
 import { RetailerError } from '../../supabase/functions/_shared/retailer/types.ts'
 
 const NOW = '2026-11-10T12:00:00.000Z'
+const RICE_IMG = 'https://static.ah.nl/dam/product/AHI_rice?revLabel=1&rendition=200x200_WEBP&fileType=binary'
 const milk = { externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, orderable: true, promotion: null }
-const rice = { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, orderable: true, promotion: { mechanism: '2e GRATIS', priceBefore: 2.99 } }
+const rice = { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, orderable: true, promotion: { mechanism: '2e GRATIS', priceBefore: 2.99 }, imageUrl: RICE_IMG }
 const soldOut = { externalId: 108, title: 'AH Lijnzaad gebroken', salesUnitSize: '250 g', price: 1.89, orderable: false, promotion: null }
 
 describe('checkSearchQuery', () => {
@@ -33,7 +34,7 @@ describe('checkSearchQuery', () => {
 describe('toProductRow', () => {
   it('maps a retailer product to a product-cache row', () => {
     expect(toProductRow('ah', rice, NOW)).toEqual({
-      retailer: 'ah', external_id: 104, title: 'AH Basmati rijst', sales_unit_size: '1 kg', price: 2.99, orderable: true, last_seen_at: NOW,
+      retailer: 'ah', external_id: 104, title: 'AH Basmati rijst', sales_unit_size: '1 kg', price: 2.99, orderable: true, image_url: RICE_IMG, last_seen_at: NOW,
     })
   })
 })
@@ -41,7 +42,7 @@ describe('toProductRow', () => {
 describe('toSearchResult', () => {
   it('keeps what the Staples screen shows, including a national bonus', () => {
     expect(toSearchResult(rice)).toEqual({
-      externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, bonus: '2e GRATIS',
+      externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, bonus: '2e GRATIS', imageUrl: RICE_IMG,
     })
     expect(toSearchResult(milk).bonus).toBeNull()
   })
@@ -167,5 +168,12 @@ describe('searchRetailerProducts with translation', () => {
     await expect(searchRetailerProducts(off, { userId: 'u-1', retailer: 'ah', query: 'milk' })).rejects.toMatchObject({ code: 'forbidden' })
     expect(d.calls.some((c) => c[0] === 'translate')).toBe(false)
     expect(off.calls.some((c) => c[0] === 'translate')).toBe(false)
+  })
+})
+
+describe('product photos in search results and the product cache', () => {
+  it('passes no photo on as null, in the cache row and the search result', () => {
+    expect(toProductRow('ah', milk, NOW).image_url).toBeNull()
+    expect(toSearchResult(milk).imageUrl).toBeNull()
   })
 })

@@ -7,9 +7,10 @@ import { MAX_LOOKUPS, stapleLookup, getWeekSnapshot } from '../../supabase/funct
 import { RetailerError } from '../../supabase/functions/_shared/retailer/types.ts'
 
 const NOW = '2026-11-16T05:00:00.000Z'
+const RICE_IMG = 'https://static.ah.nl/dam/product/AHI_rice?revLabel=1&rendition=200x200_WEBP&fileType=binary'
 const milk = { externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, orderable: true, promotion: null }
 const bananas = { externalId: 103, title: 'AH Bananen tros', salesUnitSize: 'per tros', price: 1.69, orderable: true, promotion: null }
-const rice = { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, orderable: true, promotion: { mechanism: '2e GRATIS', priceBefore: 2.99 } }
+const rice = { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, orderable: true, promotion: { mechanism: '2e GRATIS', priceBefore: 2.99 }, imageUrl: RICE_IMG }
 const soldOut = { externalId: 108, title: 'AH Bananen los', salesUnitSize: 'per stuk', price: 0.4, orderable: false, promotion: null }
 
 // Staple rows as the function reads them (household_staples + the cached product title).
@@ -104,7 +105,7 @@ describe('getWeekSnapshot', () => {
     const d = deps({ staples: [riceStaple], results: { 'AH Basmati rijst': [milk, rice] } })
     const result = await run(d)
     expect(result.products).toEqual({
-      's-rice': { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, mechanism: '2e GRATIS' },
+      's-rice': { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, mechanism: '2e GRATIS', imageUrl: RICE_IMG },
     })
   })
 
@@ -122,7 +123,7 @@ describe('getWeekSnapshot', () => {
   it('resolves a search-term staple to the first orderable product', async () => {
     const d = deps({ staples: [bananaStaple], results: { bananen: [soldOut, bananas, milk] } })
     expect((await run(d)).products).toEqual({
-      's-ban': { externalId: 103, title: 'AH Bananen tros', salesUnitSize: 'per tros', price: 1.69, mechanism: null },
+      's-ban': { externalId: 103, title: 'AH Bananen tros', salesUnitSize: 'per tros', price: 1.69, mechanism: null, imageUrl: null },
     })
   })
 
@@ -163,8 +164,9 @@ describe('getWeekSnapshot', () => {
     await run(d)
     expect(d.saved.map(r => r.external_id)).toEqual([101, 104, 108, 103])
     expect(d.saved[0]).toEqual({
-      retailer: 'ah', external_id: 101, title: 'AH Halfvolle melk', sales_unit_size: '1 l', price: 1.19, orderable: true, last_seen_at: NOW,
+      retailer: 'ah', external_id: 101, title: 'AH Halfvolle melk', sales_unit_size: '1 l', price: 1.19, orderable: true, image_url: null, last_seen_at: NOW,
     })
+    expect(d.saved[1].image_url).toBe(RICE_IMG)
   })
 
   it('still answers when the product cache cannot be updated', async () => {

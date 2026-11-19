@@ -80,12 +80,13 @@ Deno.serve(async (req) => {
       async saveProducts(rows) {
         await sql`
           INSERT INTO public.retailer_products
-            ${sql(rows, 'retailer', 'external_id', 'title', 'sales_unit_size', 'price', 'orderable', 'last_seen_at')}
+            ${sql(rows, 'retailer', 'external_id', 'title', 'sales_unit_size', 'price', 'orderable', 'image_url', 'last_seen_at')}
           ON CONFLICT (retailer, external_id) DO UPDATE SET
             title = excluded.title,
             sales_unit_size = excluded.sales_unit_size,
             price = excluded.price,
             orderable = excluded.orderable,
+            image_url = coalesce(excluded.image_url, public.retailer_products.image_url),
             last_seen_at = excluded.last_seen_at`
       },
       now: () => new Date().toISOString(),
