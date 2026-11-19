@@ -7,13 +7,14 @@ import { useIngredientMappings } from '@/hooks/useIngredientMappings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const COMING = [
-  { title: 'Send to AH', text: 'Adds the week to your AH shopping list. You still pick a time slot and pay in the AH app.' },
+  { title: 'Automatic weekly order', text: 'Optionally, the app prepares your AH list every week by itself and lets you know when it is ready. You still pick a time slot and pay in the AH app.' },
 ]
 
 // Automated ordering tab: the Albert Heijn link, the household's staples and ingredient
-// mappings (rollout phase 4) and this week's preview (phase 5, a dry run). The mappings
-// are loaded here because the preview applies them and the list below manages them. Sending to AH (phase 6)
-// is listed so people know what's coming.
+// mappings (rollout phase 4), this week's preview (phase 5) and sending it to AH (phase 6,
+// inside the preview card). The mappings are loaded here because the preview applies them
+// and the list below manages them. The automatic weekly run (phase 7) is listed so people
+// know what's coming.
 export default function Ordering() {
   const { shoppingList } = useOutletContext()
   const ingredientMappings = useIngredientMappings()

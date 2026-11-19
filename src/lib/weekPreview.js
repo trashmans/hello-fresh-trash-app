@@ -121,6 +121,7 @@ export function recipeTextLines(mergedItems = [], adjustedItems = []) {
  *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, aisle, mappedFrom, imageUrl, quantity }]
  *   atHome         ingredients left off because the household always has them [{ key, text, amount }] (key: the mapping's)
  *   staples        [{ staple_id, name, included, reason, reasonText, packs }] in the order given
+ *   stapleUpdates  the planner's staple fields [{ staple_id, product_id, last_added_on?, covered_until?, skip_next? }]
  *   review         things a person should look at: [{ reason: 'missing_product', staple_id, name }] for a
  *                  staple without a product, [{ reason: 'check_quantity', name, productId }] for a mapped
  *                  ingredient whose amount can't be compared with the pack (one pack was added)
@@ -282,5 +283,47 @@ export function buildWeekPreview({
     review: plan.review.map(r => (r.staple_id != null
       ? { reason: r.reason, staple_id: r.staple_id, name: names.get(r.staple_id) ?? '' }
       : { reason: r.reason, name: r.ingredient, productId: r.productId })),
+    // The planner's staple fields to save after a successful send, each tied to the product
+    // its line is for (null for a skip that is only cleared).
+    stapleUpdates: plan.stapleUpdates.map(({ staple_id, ...fields }) => ({
+      staple_id,
+      product_id: 'last_added_on' in fields || 'covered_until' in fields ? Number(products[staple_id]?.externalId) : null,
+      ...fields,
+    })),
   }
+}
+
+/** Matches the server's limits (supabase/functions/_shared/retailer/sendPlan.ts). */
+export const SEND_LIMITS = { lineQuantity: 20 }
+
+/**
+ * The request for the retailer-send function (rollout phase 6), from a preview.
+ * Every planned line is sent, including lines the AH list already covers: the server
+ * reads the list again and writes only what adds something, and the staples of lines
+ * that are on the list afterwards get their dates saved. A line above the pack limit is
+ * left out (with its staples' dates) and reported in notSent, never lowered quietly.
+ * Returns { request: { weekStart, lines, stapleUpdates } | null, notSent: [{ productId, text, quantity, reason }] }.
+ */
+export function toSendRequest(preview) {
+  if (!preview) return { request: null, notSent: [] }
+
+  const titles = new Map()
+  for (const l of [...(preview.changes ?? []), ...(preview.onListAlready ?? [])]) titles.set(lineKey(l.productId, l.text), l.title)
+
+  const lines = []
+  const notSent = []
+  const leftOut = new Set()
+  for (const line of preview.lines ?? []) {
+    const text = line.productId != null ? (titles.get(lineKey(line.productId, line.text)) || line.text || `AH product ${line.productId}`) : line.text
+    if (line.packs > SEND_LIMITS.lineQuantity) {
+      notSent.push({ productId: line.productId, text, quantity: line.packs, reason: 'too_many' })
+      if (line.productId != null) leftOut.add(line.productId)
+      continue
+    }
+    lines.push({ productId: line.productId, text, quantity: line.packs, sources: [...new Set(line.sources)] })
+  }
+
+  if (lines.length === 0) return { request: null, notSent }
+  const stapleUpdates = (preview.stapleUpdates ?? []).filter(u => u.product_id == null || !leftOut.has(u.product_id))
+  return { request: { weekStart: preview.weekStart, lines, stapleUpdates }, notSent }
 }

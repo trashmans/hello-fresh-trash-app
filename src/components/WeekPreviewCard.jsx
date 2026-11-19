@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import IngredientMapForm from '@/components/IngredientMapForm'
+import SendToAhPanel from '@/components/SendToAhPanel'
 import { useWeekPreview } from '@/hooks/useWeekPreview'
 import { AISLES } from '@/lib/aisles'
 import ProductThumb from '@/components/ProductThumb'
@@ -92,7 +93,8 @@ function ChangeRow({ change, mapping, onMap, onUndo, children }) {
 // what the weekly shop would change on the household's AH list. Never sends anything.
 // Hidden unless the household's ah_enabled switch is on.
 export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
-  const { available, preview, loading, error, run } = useWeekPreview(shoppingList, ingredientMappings.mappings)
+  const weekPreview = useWeekPreview(shoppingList, ingredientMappings.mappings)
+  const { available, preview, loading, error, run, sending, canSend } = weekPreview
   const [mappingFor, setMappingFor] = useState(null) // text of the recipe line being mapped
   if (!available) return null
 
@@ -111,7 +113,7 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="text-lg">This week's preview</CardTitle>
-          <Button size="sm" onClick={run} disabled={loading}>
+          <Button size="sm" onClick={run} disabled={loading || sending}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             {preview ? 'Refresh' : 'Preview'}
           </Button>
@@ -119,7 +121,8 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <p className="text-muted-foreground">
-          A dry run: what would change on your AH list for this week's recipes and the staples that are due. Nothing is sent to AH.
+          What would change on your AH list for this week's recipes and the staples that are due.{' '}
+          {canSend ? 'Nothing is sent until you press Send and confirm.' : 'A dry run: nothing is sent to AH.'}
         </p>
 
         {error && <p className="text-destructive">{error}</p>}
@@ -232,6 +235,8 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
                 {preview.skippedLookups} staple {preview.skippedLookups === 1 ? 'search was' : 'searches were'} left out to keep the number of AH requests low.
               </p>
             )}
+
+            <SendToAhPanel weekPreview={weekPreview} />
           </>
         )}
       </CardContent>
