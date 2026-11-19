@@ -5,11 +5,11 @@ import { useAuth } from '@/context/AuthContext'
 
 // The household's ingredient mappings (public.household_ingredient_mappings, RLS:
 // members only): what to buy at AH for a recipe ingredient, or "always at home".
-// Each row comes with the mapped product's cached title, pack size and price
+// Each row comes with the mapped product's cached title, pack size, price and photo
 // (public.retailer_products). Products are found with the same AH search as staples
 // (the retailer-products Edge Function), which also puts them in the product cache.
 
-export const MAPPING_SELECT = 'ingredient_key, label, pantry, product_external_id, product:retailer_products(title, sales_unit_size, price)'
+export const MAPPING_SELECT = 'ingredient_key, label, pantry, product_external_id, product:retailer_products(title, sales_unit_size, price, image_url)'
 
 const byLabel = (a, b) => a.label.localeCompare(b.label)
 

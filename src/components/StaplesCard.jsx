@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { useStaples } from '@/hooks/useStaples'
 import { STAPLE_LIMITS, describeStaple, toStapleRow } from '@/lib/stapleForm'
 import { groupByAisle } from '@/lib/aisles'
+import ProductThumb from '@/components/ProductThumb'
 
 const euro = (price) => (price == null ? null : `€${Number(price).toFixed(2)}`)
 const EMPTY_FORM = { name: '', productExternalId: null, productLabel: '', searchTerm: '', quantity: 1, cadenceWeeks: 1, stockUp: false, maxWeeksStock: 6 }
@@ -103,6 +104,7 @@ function StapleForm({ initial, onSave, onCancel, searchProducts }) {
             {results.map((p) => (
               <li key={p.externalId}>
                 <button type="button" onClick={() => pick(p)} className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent">
+                  <ProductThumb src={p.imageUrl} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{p.title}</span>
                     <span className="block text-xs text-muted-foreground">{[p.salesUnitSize, euro(p.price)].filter(Boolean).join(' · ')}</span>
@@ -183,6 +185,7 @@ function StapleRow({ staple, onEdit, onUpdate, onRemove }) {
 
   return (
     <li className={`flex flex-wrap items-start gap-3 py-3 ${staple.active === false ? 'opacity-60' : ''}`}>
+      <ProductThumb src={staple.product?.image_url} />
       <div className="min-w-0 flex-1">
         <p className="font-medium">{staple.name}</p>
         <p className="truncate text-xs text-muted-foreground">{product}</p>

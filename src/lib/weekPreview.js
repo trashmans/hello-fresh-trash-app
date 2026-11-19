@@ -103,21 +103,22 @@ export function recipeTextLines(mergedItems = [], adjustedItems = []) {
  * Builds the preview for the week containing runDate ('YYYY-MM-DD').
  *
  * staples       household_staples rows with the cached product joined
- *               (product: { title, sales_unit_size, price } | null), as useStaples loads them
- * liveProducts  { [staple id]: { externalId, title, salesUnitSize, price, mechanism } } —
+ *               (product: { title, sales_unit_size, price, image_url } | null), as useStaples loads them
+ * liveProducts  { [staple id]: { externalId, title, salesUnitSize, price, mechanism, imageUrl } } —
  *               this week's AH answer for staples that need one (stock-up on bonus,
  *               search-term staples). Staples without an entry use their cached product.
  * mergedItems, adjustedItems   the Shopping tab's list (see recipeTextLines)
  * mappings      household_ingredient_mappings rows with the cached product joined:
- *               [{ ingredient_key, label, pantry, product_external_id, product: { title, sales_unit_size } | null }]
+ *               [{ ingredient_key, label, pantry, product_external_id, product: { title, sales_unit_size, image_url } | null }]
  * currentList   the AH list now: [{ productId | null, text, quantity, ticked }]
  *
  * Returns {
  *   weekStart      Monday of the week
  *   lines          target lines [{ productId | null, text | null, packs, sources }]
- *   changes        [{ action: 'add' | 'increase' | 'untick', productId, text, title, detail, aisle, mappedFrom, from, to, sources }]
+ *   changes        [{ action: 'add' | 'increase' | 'untick', productId, text, title, detail, aisle, mappedFrom, imageUrl, from, to, sources }]
+ *                  imageUrl: the product photo (this week's AH answer, else the product cache), null for free text
  *                  mappedFrom: the ingredient mappings behind a product line [{ key, label }], [] for other lines
- *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, aisle, mappedFrom, quantity }]
+ *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, aisle, mappedFrom, imageUrl, quantity }]
  *   atHome         ingredients left off because the household always has them [{ key, text, amount }] (key: the mapping's)
  *   staples        [{ staple_id, name, included, reason, reasonText, packs }] in the order given
  *   review         things a person should look at: [{ reason: 'missing_product', staple_id, name }] for a
@@ -138,7 +139,7 @@ export function buildWeekPreview({
   // Staples → planner rows. Each staple is its own "product id" so a live answer
   // and the cached product can be looked up the same way.
   const products = {}
-  const shown = new Map() // line key → { title, detail, aisle }
+  const shown = new Map() // line key → { title, detail, aisle, imageUrl }
   const names = new Map()
   const plannerStaples = []
 
@@ -149,9 +150,15 @@ export function buildWeekPreview({
     const live = liveProducts?.[staple.id]
     let product = null
     if (live?.externalId != null) {
-      product = { externalId: live.externalId, title: live.title, salesUnitSize: live.salesUnitSize ?? null, mechanism: live.mechanism ?? null }
+      product = {
+        externalId: live.externalId, title: live.title, salesUnitSize: live.salesUnitSize ?? null, mechanism: live.mechanism ?? null,
+        imageUrl: live.imageUrl ?? (Number(staple.product_external_id) === Number(live.externalId) ? staple.product?.image_url : null) ?? null,
+      }
     } else if (staple.product_external_id != null) {
-      product = { externalId: staple.product_external_id, title: staple.product?.title, salesUnitSize: staple.product?.sales_unit_size ?? null, mechanism: null }
+      product = {
+        externalId: staple.product_external_id, title: staple.product?.title, salesUnitSize: staple.product?.sales_unit_size ?? null, mechanism: null,
+        imageUrl: staple.product?.image_url ?? null,
+      }
     }
     if (!product) continue
 
@@ -162,7 +169,10 @@ export function buildWeekPreview({
         title: product.title || staple.name,
         detail: [product.salesUnitSize, product.mechanism].filter(Boolean).join(' · ') || null,
         aisle: shown.get(key)?.aisle ?? aisleFor(staple.name), // first staple with this product decides
+        imageUrl: product.imageUrl ?? shown.get(key)?.imageUrl ?? null,
       })
+    } else if (!shown.get(key).imageUrl && product.imageUrl) {
+      shown.get(key).imageUrl = product.imageUrl
     }
   }
 
@@ -199,11 +209,16 @@ export function buildWeekPreview({
   }
 
   for (const [key, { mapping, text, amounts }] of mappedProducts) {
-    if (shown.has(key)) continue // also a staple: the staple's title and aisle stand
+    const imageUrl = mapping.product?.image_url ?? null
+    if (shown.has(key)) { // also a staple: the staple's title and aisle stand; fill in a missing photo
+      if (!shown.get(key).imageUrl && imageUrl) shown.get(key).imageUrl = imageUrl
+      continue
+    }
     shown.set(key, {
       title: mapping.product?.title || mapping.label || text,
       detail: [mapping.product?.sales_unit_size, amounts.length ? `for ${amounts.join(' + ')}` : null].filter(Boolean).join(' · ') || null,
       aisle: aisleFor(text),
+      imageUrl,
     })
   }
   const mappedFrom = (key) => mappedProducts.get(key)?.from ?? []
@@ -218,14 +233,14 @@ export function buildWeekPreview({
   const plan = planWeek({ runDate, staples: plannerStaples, products, ingredients: plannerIngredients, mappings: plannerMappings })
 
   const recipeLines = toTextLines(unmapped)
-  for (const { text, amount } of recipeLines) shown.set(lineKey(null, text), { title: text, detail: amount, aisle: aisleFor(text) })
+  for (const { text, amount } of recipeLines) shown.set(lineKey(null, text), { title: text, detail: amount, aisle: aisleFor(text), imageUrl: null })
 
   const lines = [
     ...plan.lines,
     ...recipeLines.map(({ text }) => ({ productId: null, text, packs: 1, sources: ['recipe'] })),
   ]
   const lineByKey = new Map(lines.map(line => [lineKey(line.productId, line.text), line]))
-  const describe = (key) => shown.get(key) ?? { title: lineByKey.get(key)?.text ?? 'Unknown product', detail: null, aisle: 'Other' }
+  const describe = (key) => shown.get(key) ?? { title: lineByKey.get(key)?.text ?? 'Unknown product', detail: null, aisle: 'Other', imageUrl: null }
 
   const changes = diffList(lines, currentList ?? []).map(change => {
     const key = lineKey(change.productId, change.text)

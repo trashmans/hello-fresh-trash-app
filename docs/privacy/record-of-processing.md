@@ -38,6 +38,7 @@ Shopping data can reveal sensitive traits by inference (diet, religion, health, 
 | Google (Gemini API) | Processor: recipe PDF parsing; translating staple product searches into Dutch | Uploaded recipe PDFs; staple search words (no user data) | Global |
 | Apple, Google, Mozilla push services | Deliver push messages (**planned**) | Encrypted push payload with no item names | Global |
 | Albert Heijn | Recipient at the user's request | Shopping list lines written to the user's own AH account | Netherlands |
+| Albert Heijn image server (static.ah.nl) | Third party the browser contacts directly | Request metadata (IP address, user agent) when a product photo is shown; no referrer, no app data | Netherlands / AH's CDN |
 
 **To check:** transfer mechanisms (EU-US Data Privacy Framework or Standard Contractual Clauses) for Vercel, Google and the push services.
 

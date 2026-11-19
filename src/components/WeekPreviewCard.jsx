@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import IngredientMapForm from '@/components/IngredientMapForm'
 import { useWeekPreview } from '@/hooks/useWeekPreview'
 import { AISLES } from '@/lib/aisles'
+import ProductThumb from '@/components/ProductThumb'
 
 const ACTION_LABEL = { add: 'Add', increase: 'Increase', untick: 'Untick' }
 const SOURCE_LABEL = { staple: 'Staple', stockup: 'Bonus stock-up', recipe: 'Recipe' }
@@ -56,6 +57,9 @@ function ChangeRow({ change, mapping, onMap, onUndo, children }) {
         <span className="mt-0.5 w-16 shrink-0 rounded-md bg-secondary px-2 py-0.5 text-center text-xs font-medium text-secondary-foreground">
           {ACTION_LABEL[change.action] ?? change.action}
         </span>
+        {change.productId != null
+          ? <ProductThumb src={change.imageUrl} className="h-8 w-8" />
+          : <span className="w-8 shrink-0" aria-hidden="true" />}
         <div className="min-w-0 flex-1">
           <p className="font-medium">{change.title}</p>
           <p className="text-xs text-muted-foreground">
@@ -73,7 +77,7 @@ function ChangeRow({ change, mapping, onMap, onUndo, children }) {
         )}
       </div>
       {onUndo && change.mappedFrom.length > 0 && (
-        <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 pl-[4.75rem] text-xs text-muted-foreground">
+        <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 pl-[7.5rem] text-xs text-muted-foreground">
           {change.mappedFrom.map(m => (
             <span key={m.key}>Mapped from {m.label} · <UndoMapping mapping={m} onUndo={onUndo} /></span>
           ))}

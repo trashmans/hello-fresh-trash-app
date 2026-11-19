@@ -95,7 +95,7 @@ describe('buildWeekPreview', () => {
   it('adds a due pinned staple from the cached product, without a live lookup', () => {
     const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk] })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', aisle: 'Dairy & eggs', mappedFrom: [], from: 0, to: 2, sources: ['staple'] },
+      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', aisle: 'Dairy & eggs', mappedFrom: [], imageUrl: null, from: 0, to: 2, sources: ['staple'] },
     ])
     expect(preview.staples).toEqual([
       { staple_id: 's-milk', name: 'Milk', included: true, reason: 'cadence', reasonText: stapleReasonText('cadence'), packs: 2 },
@@ -148,7 +148,7 @@ describe('buildWeekPreview', () => {
       adjustedItems: [{ key: 'onion|count:', buy_qty: 0 }],
     })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', aisle: 'Pantry', mappedFrom: [], from: 0, to: 1, sources: ['recipe'] },
+      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', aisle: 'Pantry', mappedFrom: [], imageUrl: null, from: 0, to: 1, sources: ['recipe'] },
     ])
   })
 
@@ -181,7 +181,7 @@ describe('buildWeekPreview', () => {
       ['add', 'Garlic', 0, 1],
       ['untick', 'Olive oil', 0, 1],
     ])
-    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', aisle: 'Produce', mappedFrom: [], quantity: 3 }])
+    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', aisle: 'Produce', mappedFrom: [], imageUrl: null, quantity: 3 }])
   })
 
   it('gives no changes when the list already matches (safe to run again)', () => {
@@ -260,7 +260,7 @@ describe('buildWeekPreview with ingredient mappings', () => {
       mappings: [oil],
     })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: 301, text: null, title: 'AH Olijfolie', detail: '1 l · for 90 mL', aisle: 'Pantry', mappedFrom: [{ key: 'olive oil', label: 'Olive oil' }], from: 0, to: 1, sources: ['recipe'] },
+      { action: 'add', productId: 301, text: null, title: 'AH Olijfolie', detail: '1 l · for 90 mL', aisle: 'Pantry', mappedFrom: [{ key: 'olive oil', label: 'Olive oil' }], imageUrl: null, from: 0, to: 1, sources: ['recipe'] },
     ])
     expect(preview.review).toEqual([])
   })
@@ -449,5 +449,79 @@ describe('buildWeekPreview: which mapping a line came from', () => {
       mappings: [{ ingredient_key: 'salt', label: 'Salt', pantry: true, product_external_id: null, product: null }],
     })
     expect(preview.atHome).toEqual([{ key: 'salt', text: 'Salt', amount: '1 tsp + 1' }])
+  })
+})
+
+// Product photos on preview lines (the product cache's image_url, or this week's AH answer).
+describe('buildWeekPreview: product photos', () => {
+  const IMG = (name) => `https://static.ah.nl/dam/product/${name}?rendition=200x200_WEBP`
+  const pinned = (over) => staple({
+    id: 's-milk', name: 'Milk', product_external_id: 101,
+    product: { title: 'AH Halfvolle melk', sales_unit_size: '1 l', price: 1.19, image_url: IMG('milk') },
+    quantity: 2, last_added_on: '2026-11-09', ...over,
+  })
+
+  it("shows a pinned staple's cached photo", () => {
+    expect(buildWeekPreview({ runDate: MONDAY, staples: [pinned()] }).changes[0].imageUrl).toBe(IMG('milk'))
+  })
+
+  it("prefers this week's AH photo over the cached one", () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [pinned()],
+      liveProducts: { 's-milk': { externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, mechanism: null, imageUrl: IMG('milk-new') } },
+    })
+    expect(preview.changes[0].imageUrl).toBe(IMG('milk-new'))
+  })
+
+  it("keeps the cached photo when this week's answer has none", () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [pinned()],
+      liveProducts: { 's-milk': { externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, mechanism: null, imageUrl: null } },
+    })
+    expect(preview.changes[0].imageUrl).toBe(IMG('milk'))
+  })
+
+  it("uses the found product's photo for a search-term staple", () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [bananas],
+      liveProducts: { 's-ban': { ...bananasFound['s-ban'], imageUrl: IMG('bananas') } },
+    })
+    expect(preview.changes[0].imageUrl).toBe(IMG('bananas'))
+  })
+
+  it("shows a mapped ingredient's product photo", () => {
+    const oil = {
+      ingredient_key: 'olive oil', label: 'Olive oil', pantry: false, product_external_id: 301,
+      product: { title: 'AH Olijfolie', sales_unit_size: '1 l', price: 6.99, image_url: IMG('oil') },
+    }
+    const preview = buildWeekPreview({ runDate: MONDAY, mergedItems: [item('olive oil|volume:metric', 'Olive oil', 90, 'mL')], mappings: [oil] })
+    expect(preview.changes[0].imageUrl).toBe(IMG('oil'))
+  })
+
+  it('takes the photo from whichever source has one when a staple and a mapping share a product', () => {
+    const noPhoto = pinned({ product: { title: 'AH Halfvolle melk', sales_unit_size: '1 l', price: 1.19, image_url: null } })
+    const milkMap = {
+      ingredient_key: 'milk', label: 'Milk', pantry: false, product_external_id: 101,
+      product: { title: 'AH Halfvolle melk', sales_unit_size: '1 l', price: 1.19, image_url: IMG('milk') },
+    }
+    const preview = buildWeekPreview({ runDate: MONDAY, staples: [noPhoto], mergedItems: [item('milk|volume:metric', 'Milk', 500, 'mL')], mappings: [milkMap] })
+    expect(preview.changes).toHaveLength(1)
+    expect(preview.changes[0].imageUrl).toBe(IMG('milk'))
+  })
+
+  it('has no photo for free-text lines', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, mergedItems: [item('onion|count:', 'Onion', 2)] })
+    expect(preview.changes[0].imageUrl).toBeNull()
+  })
+
+  it('shows the photo on lines the AH list already covers', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY, staples: [pinned()],
+      currentList: [{ productId: 101, text: 'AH Halfvolle melk', quantity: 2, ticked: false }],
+    })
+    expect(preview.onListAlready[0].imageUrl).toBe(IMG('milk'))
   })
 })
