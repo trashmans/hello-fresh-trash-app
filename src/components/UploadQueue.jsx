@@ -32,7 +32,7 @@ export default function UploadQueue({ queue, summary, isRunning, onClear }) {
   if (queue.length === 0) return null
 
   return (
-    <div role="status" className="fixed bottom-20 md:bottom-4 left-4 right-4 z-50 rounded-lg border border-border bg-card text-card-foreground shadow-lg sm:left-auto sm:w-80">
+    <div role="status" className="fixed bottom-20 lg:bottom-4 left-4 right-4 z-50 rounded-lg border border-border bg-card text-card-foreground shadow-lg sm:left-auto sm:w-80">
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <p className="text-sm font-semibold">
           {isRunning ? 'Uploading…' : 'Uploads'}
