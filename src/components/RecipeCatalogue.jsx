@@ -1,14 +1,15 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { FileText, Trash2, RotateCcw, Loader2, ShoppingCart, RefreshCw, LayoutGrid, List } from 'lucide-react'
+import { FileText, Trash2, RotateCcw, Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { renderPdfCoverBlob } from '@/lib/pdfCover'
 import RecipeTable from '@/components/RecipeTable'
 import RecipeDeleteMenu from '@/components/RecipeDeleteMenu'
+import WeekListButton from '@/components/WeekListButton'
 import { RECIPE_FILTERS, normalizeRecipeFilter, filterRecipes } from '@/lib/recipeFilter'
+import { recipeCardMeta, catalogueHeading, weekListNote } from '@/lib/recipeCard'
 import { STATUS_POLL_MS, isInProgress, inProgressIdsToCheck, mergeStatusUpdates, recipeCardState } from '@/lib/recipeStatus'
 
 const VIEW_MODE_STORAGE_KEY = 'recipeCatalogueViewMode'
@@ -30,66 +31,50 @@ function loadViewMode() {
   }
 }
 
-function UploaderAvatar({ profile }) {
-  const [imgError, setImgError] = useState(false)
-
-  if (!profile) {
-    return (
-      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-semibold">
-        ?
-      </span>
-    )
-  }
-
-  const initial = (profile.display_name ?? '?')[0].toUpperCase()
-
+// Shared frame for the cards that aren't a finished recipe yet (queued,
+// failed, duplicate): the same 4:3 tile as a recipe, dashed, with the
+// message inside and the filename underneath.
+function StatusTile({ tone = 'muted', icon, title, children }) {
+  const frame = tone === 'error'
+    ? 'border-destructive/50 bg-destructive/5 text-destructive'
+    : 'border-input bg-card text-muted-foreground'
   return (
-    <span className="inline-flex items-center gap-1.5">
-      {profile.avatar_url && !imgError ? (
-        <img
-          src={profile.avatar_url}
-          alt={initial}
-          className="h-5 w-5 rounded-full object-cover"
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-          {initial}
-        </span>
-      )}
-      <span className="text-xs text-muted-foreground truncate max-w-[80px]">
-        {profile.display_name ?? 'Unknown'}
-      </span>
-    </span>
+    <article className="flex flex-col gap-3">
+      <div className={`aspect-[4/3] rounded-[18px] border border-dashed flex flex-col items-center justify-center gap-2.5 p-4 text-center ${frame}`}>
+        {icon}
+        <span className="text-sm font-medium">{title}</span>
+      </div>
+      {children}
+    </article>
   )
 }
 
 function PendingCard({ recipe, onDelete, deleting }) {
-  const label = recipe.status === 'processing' ? 'Processing…' : 'Queued…'
+  const label = recipe.status === 'processing' ? 'Reading your recipe…' : 'Queued…'
   return (
-    <Card className="opacity-60">
-      <CardContent className="p-4 flex flex-col gap-2">
-        <div className="w-full aspect-video bg-muted flex items-center justify-center rounded-md mb-2">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-        <p className="text-sm font-medium truncate">{recipe.filename}</p>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        {/* No Cancel for a recipe being re-parsed on someone else's behalf:
-            cancelling deletes the recipe. */}
-        {onDelete && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-xs text-destructive hover:text-destructive mt-1"
-            disabled={deleting}
-            onClick={() => onDelete(recipe)}
-          >
-            <Trash2 className="h-3 w-3 mr-1" />
-            Cancel
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+    <StatusTile
+      icon={<Loader2 className="h-6 w-6 animate-spin text-primary-text" aria-hidden="true" />}
+      title={label}
+    >
+      <div className="flex flex-col gap-1" aria-busy="true">
+        <h3 className="text-[17px] font-semibold leading-snug text-muted-foreground truncate">{recipe.filename}</h3>
+        <p className="text-sm text-muted-foreground">Usually under a minute</p>
+      </div>
+      {/* No Cancel for a recipe being re-parsed on someone else's behalf:
+          cancelling deletes the recipe. */}
+      {onDelete && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start rounded-full text-destructive hover:text-destructive"
+          disabled={deleting}
+          onClick={() => onDelete(recipe)}
+        >
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Cancel
+        </Button>
+      )}
+    </StatusTile>
   )
 }
 
@@ -97,33 +82,29 @@ function RejectedCard({ recipe, existingRecipe, onSelect, onDelete, deleting }) 
   const existingLabel = existingRecipe?.name ?? existingRecipe?.filename ?? 'existing recipe'
 
   return (
-    <Card className="border-destructive/40 opacity-70">
-      <CardContent className="p-4 flex flex-col gap-2">
-        <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center rounded-md mb-2">
-          <FileText className="h-6 w-6 text-destructive" />
-        </div>
-        <p className="text-sm font-medium truncate text-destructive">Already in catalogue</p>
-        <p className="text-xs text-muted-foreground truncate">{recipe.filename}</p>
+    <StatusTile tone="error" icon={<FileText className="h-6 w-6" aria-hidden="true" />} title="Already in the catalogue">
+      <div className="flex flex-col gap-1 min-w-0">
+        <h3 className="text-[17px] font-semibold leading-snug truncate">{recipe.filename}</h3>
         {existingRecipe && (
           <button
-            className="text-xs text-primary-text underline text-left truncate"
+            className="text-sm text-primary-text underline text-left truncate"
             onClick={() => onSelect(existingRecipe)}
           >
             View: {existingLabel}
           </button>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full text-xs text-destructive hover:text-destructive mt-1"
-          disabled={deleting}
-          onClick={() => onDelete(recipe)}
-        >
-          <Trash2 className="h-3 w-3 mr-1" />
-          Delete
-        </Button>
-      </CardContent>
-    </Card>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="self-start rounded-full text-destructive hover:text-destructive"
+        disabled={deleting}
+        onClick={() => onDelete(recipe)}
+      >
+        <Trash2 className="h-3.5 w-3.5 mr-1" />
+        Delete
+      </Button>
+    </StatusTile>
   )
 }
 
@@ -132,46 +113,40 @@ function FailedCard({ recipe, onRetry, onDelete, deleting, retrying }) {
   const maxRetries = !onRetry
 
   return (
-    <Card className="border-destructive/40 opacity-70">
-      <CardContent className="p-4 flex flex-col gap-2">
-        <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center rounded-md mb-2">
-          <FileText className="h-6 w-6 text-destructive" />
-        </div>
-        <p className="text-sm font-medium truncate text-destructive">Processing failed</p>
-        <p className="text-xs text-muted-foreground truncate">{recipe.filename}</p>
-        {maxRetries && (
-          <p className="text-xs text-muted-foreground">Please delete and re-upload</p>
-        )}
-        <div className="flex gap-2 mt-1">
-          {!maxRetries && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 text-xs"
-              disabled={retrying}
-              onClick={() => onRetry(recipe.id)}
-            >
-              {retrying ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3 mr-1" />}
-              Retry
-            </Button>
-          )}
+    <StatusTile tone="error" icon={<FileText className="h-6 w-6" aria-hidden="true" />} title="Couldn't read this recipe">
+      <div className="flex flex-col gap-1 min-w-0">
+        <h3 className="text-[17px] font-semibold leading-snug truncate">{recipe.filename}</h3>
+        {maxRetries && <p className="text-sm text-muted-foreground">Please delete and re-upload</p>}
+      </div>
+      <div className="flex gap-2">
+        {!maxRetries && (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="flex-1 text-xs text-destructive hover:text-destructive"
-            disabled={deleting}
-            onClick={() => onDelete(recipe)}
+            className="rounded-full"
+            disabled={retrying}
+            onClick={() => onRetry(recipe.id)}
           >
-            <Trash2 className="h-3 w-3 mr-1" />
-            Delete
+            {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
+            Retry
           </Button>
-        </div>
-      </CardContent>
-    </Card>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-full text-destructive hover:text-destructive"
+          disabled={deleting}
+          onClick={() => onDelete(recipe)}
+        >
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Delete
+        </Button>
+      </div>
+    </StatusTile>
   )
 }
 
-export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle, ingredientMatches = null }) {
+export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle, ingredientMatches = null, ingredientTerms = [] }) {
   const { session, adminMode } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [profiles, setProfiles] = useState({})
@@ -498,73 +473,73 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
   if (recipes.length === 0) {
     return (
-      <Card className="flex flex-col items-center text-center py-16">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-          <FileText className="h-7 w-7 text-primary-text" />
-        </div>
-        <p className="text-lg font-semibold">No recipes yet</p>
-        <p className="text-sm text-muted-foreground mt-1">Upload your first recipe card to get started — HelloFresh is our favorite, but anything works</p>
-      </Card>
+      <EmptyState
+        icon={<FileText className="h-7 w-7 text-primary-text" />}
+        title="No recipes yet"
+        text="Upload your first recipe card to get started — HelloFresh is our favorite, but anything works"
+      />
     )
   }
 
   if (ingredientMatches && ownerRecipes.length > 0 && displayRecipes.length === 0) {
     return (
-      <Card className="flex flex-col items-center text-center py-16">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-          <FileText className="h-7 w-7 text-muted-foreground" />
-        </div>
-        <p className="text-lg font-semibold">No matches found</p>
-        <p className="text-sm text-muted-foreground mt-1">None of your recipes contain those ingredients</p>
-      </Card>
+      <EmptyState
+        icon={<FileText className="h-7 w-7 text-muted-foreground" />}
+        title="No matches found"
+        text="None of your recipes contain those ingredients"
+      />
     )
   }
 
   const canDelete = (recipe) =>
     recipe.uploaded_by === session?.user?.id || adminMode
 
-  const ownerFilterControl = (
-    <div role="group" aria-label="Show recipes" className="flex flex-wrap items-center gap-1 rounded-md border border-border p-0.5">
-      {RECIPE_FILTERS.map(f => {
-        const unavailable = Boolean(f.needsSocial)
-        const active = ownerFilter === f.key
-        return (
-          <button
-            key={f.key}
-            type="button"
-            disabled={unavailable}
-            aria-pressed={active}
-            title={unavailable ? 'Available once the Social tab is live' : undefined}
-            onClick={() => setOwnerFilter(f.key)}
-            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-              active
-                ? 'bg-secondary text-secondary-foreground'
-                : unavailable
-                  ? 'text-muted-foreground/60 cursor-not-allowed'
-                  : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {f.label}
-          </button>
-        )
-      })}
-    </div>
-  )
+  const pill = (active) =>
+    `h-11 rounded-full border px-[18px] text-[15px] font-medium transition-colors ${
+      active
+        ? 'border-foreground bg-foreground text-background'
+        : 'border-input bg-card text-foreground hover:bg-accent disabled:text-muted-foreground/60 disabled:hover:bg-card disabled:cursor-not-allowed'
+    }`
+
+  const segment = (active) =>
+    `h-9 rounded-full px-4 text-sm font-semibold transition-colors ${
+      active ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+    }`
 
   function getDuplicateId(recipe) {
     const match = (recipe.rejection_reason ?? '').match(/^duplicate:(.+)$/)
     return match?.[1] ?? null
   }
 
+  const inListCount = readyRecipes.filter(r => selectedIds.includes(r.id)).length
+  const listNote = weekListNote(inListCount)
+
   return (
-    <>
-      <div className="flex flex-wrap items-center justify-between mb-4 gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-        {ownerFilterControl}
+    <section className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <div role="group" aria-label="Show recipes" className="flex flex-wrap items-center gap-2">
+          {RECIPE_FILTERS.map(f => {
+            const unavailable = Boolean(f.needsSocial)
+            const active = ownerFilter === f.key
+            return (
+              <button
+                key={f.key}
+                type="button"
+                disabled={unavailable}
+                aria-pressed={active}
+                title={unavailable ? 'Comes with the Social tab' : undefined}
+                onClick={() => setOwnerFilter(f.key)}
+                className={pill(active)}
+              >
+                {f.label}
+              </button>
+            )
+          })}
+        </div>
         {adminMode && recipesMissingCovers.length > 0 ? (
           <Button
             variant="outline"
-            size="sm"
+            className="h-11 rounded-full"
             disabled={backfilling}
             onClick={handleBackfillCovers}
           >
@@ -575,33 +550,33 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
             Generate {recipesMissingCovers.length} missing cover{recipesMissingCovers.length === 1 ? '' : 's'} (admin)
           </Button>
         ) : null}
-        </div>
-        <div className="flex items-center gap-1 rounded-md border border-border p-0.5 shrink-0">
-          <button
-            className={`rounded p-1.5 transition-colors ${viewMode === 'icon' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            onClick={() => setViewMode('icon')}
-            title="Icon view"
-          >
-            <LayoutGrid className="h-4 w-4" />
+        <div className="flex-[1_1_40px]" />
+        <div role="group" aria-label="View" className="flex gap-1 rounded-full border border-border bg-card p-1">
+          <button type="button" aria-pressed={viewMode === 'icon'} onClick={() => setViewMode('icon')} className={segment(viewMode === 'icon')}>
+            Gallery
           </button>
-          <button
-            className={`rounded p-1.5 transition-colors ${viewMode === 'list' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            onClick={() => setViewMode('list')}
-            title="List view"
-          >
-            <List className="h-4 w-4" />
+          <button type="button" aria-pressed={viewMode === 'list'} onClick={() => setViewMode('list')} className={segment(viewMode === 'list')}>
+            List
           </button>
         </div>
       </div>
-      {ownerRecipes.length === 0 && (
-        <Card className="flex flex-col items-center text-center py-12">
-          <p className="text-lg font-semibold">{ownerFilter === 'mine' ? "You haven't uploaded any recipes yet" : 'No recipes here yet'}</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {ownerFilter === 'mine' ? 'Upload a recipe PDF, or switch to All recipes.' : 'Switch to All recipes to see everything.'}
-          </p>
-        </Card>
+
+      {ownerRecipes.length > 0 && (
+        <div className="flex flex-wrap items-baseline justify-between gap-4">
+          <h2 className="text-[28px] font-bold">{catalogueHeading(readyRecipes.length, ingredientTerms)}</h2>
+          {listNote && <span className="text-sm text-muted-foreground">{listNote}</span>}
+        </div>
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+
+      {ownerRecipes.length === 0 && (
+        <EmptyState
+          title={ownerFilter === 'mine' ? "You haven't uploaded any recipes yet" : 'No recipes here yet'}
+          text={ownerFilter === 'mine' ? 'Upload a recipe PDF, or switch to All recipes.' : 'Switch to All recipes to see everything.'}
+        />
+      )}
+
+      <div className="@container">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-6 @2xl:grid-cols-3 @4xl:grid-cols-4 @4xl:gap-6">
         {displayRecipes.map(recipe => {
         const card = recipeCardState(recipe, { userId: session.user.id, adminMode, watchedIds: reparseWatch })
 
@@ -651,71 +626,77 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
         if (card?.kind === 'ready') {
           if (viewMode !== 'icon') return null
           const isSelected = selectedIds.includes(recipe.id)
+          const name = recipe.name ?? recipe.filename
+          const by = profiles[recipe.uploaded_by]?.display_name
+          const meta = recipeCardMeta(recipe)
           return (
-            <Card
-              key={recipe.id}
-              className={`cursor-pointer hover:border-secondary/60 transition-colors relative ${isSelected ? 'border-secondary ring-1 ring-secondary' : ''}`}
-              onClick={() => onSelect(recipe)}
-            >
-              <CardContent className="p-4 flex flex-col gap-2">
-                {onToggle && (
-                  <button
-                    className={`absolute top-2 left-2 z-10 rounded-md p-1.5 shadow-sm transition-colors ${
-                      isSelected
-                        ? 'bg-secondary text-secondary-foreground'
-                        : 'bg-card/90 text-muted-foreground hover:text-secondary'
-                    }`}
-                    onClick={(e) => { e.stopPropagation(); onToggle(recipe) }}
-                    title={isSelected ? 'Remove from shopping list' : 'Add to shopping list'}
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                  </button>
-                )}
-                <div className="w-full aspect-video bg-muted flex items-center justify-center rounded-md mb-2 overflow-hidden">
+            <article key={recipe.id} className="flex min-w-0 flex-col gap-3">
+              <div className="relative rounded-[18px]">
+                <button
+                  type="button"
+                  onClick={() => onSelect(recipe)}
+                  aria-label={`Open ${name}`}
+                  className={`block w-full aspect-[4/3] overflow-hidden rounded-[18px] bg-muted transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+                >
                   {coverUrls[recipe.cover_path] ? (
                     <img
                       src={coverUrls[recipe.cover_path]}
                       alt=""
-                      className="w-full h-full object-cover"
+                      className="h-full w-full object-cover"
                       onError={(e) => { e.currentTarget.style.display = 'none' }}
                     />
                   ) : (
-                    <FileText className="h-8 w-8 text-muted-foreground" />
+                    <span className="flex h-full w-full items-center justify-center">
+                      <FileText className="h-8 w-8 text-muted-foreground" />
+                    </span>
                   )}
-                </div>
-                <p className="text-sm font-medium truncate">{recipe.name ?? recipe.filename}</p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(recipe.created_at).toLocaleDateString()}
-                </p>
-                <UploaderAvatar profile={profiles[recipe.uploaded_by] ?? null} />
-              </CardContent>
-              {adminMode && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={reparsing === recipe.id}
-                  onClick={(e) => handleReparse(recipe.id, e)}
-                  className="absolute bottom-2 right-2 text-muted-foreground hover:text-primary-text"
-                  title="Re-parse recipe (admin)"
-                >
-                  {reparsing === recipe.id
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <RefreshCw className="h-4 w-4" />}
-                </Button>
-              )}
-              {canDelete(recipe) && (
-                <RecipeDeleteMenu
-                  recipe={recipe}
-                  deleting={deleting === recipe.id}
-                  onDelete={(r, e) => handleDelete(r, e)}
-                />
-              )}
-            </Card>
+                </button>
+                {recipe.protein_source && (
+                  <span className="pointer-events-none absolute bottom-2.5 left-2.5 rounded-md bg-secondary px-2 py-1 text-xs font-semibold text-secondary-foreground">
+                    {recipe.protein_source}
+                  </span>
+                )}
+                {adminMode && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={reparsing === recipe.id}
+                    onClick={(e) => handleReparse(recipe.id, e)}
+                    className="absolute bottom-2 right-2 h-8 w-8 bg-card/90 shadow-sm text-muted-foreground hover:text-primary-text"
+                    title="Re-parse recipe (admin)"
+                  >
+                    {reparsing === recipe.id
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <RefreshCw className="h-4 w-4" />}
+                  </Button>
+                )}
+                {canDelete(recipe) && (
+                  <RecipeDeleteMenu
+                    recipe={recipe}
+                    deleting={deleting === recipe.id}
+                    onDelete={(r, e) => handleDelete(r, e)}
+                  />
+                )}
+              </div>
+              <button type="button" onClick={() => onSelect(recipe)} className="flex flex-col gap-1 text-left">
+                <h3 className="text-[17px] font-semibold leading-snug line-clamp-2">{name}</h3>
+                {by && <p className="text-sm text-muted-foreground">by {by}</p>}
+              </button>
+              <div className="mt-auto flex items-center gap-3 text-[13px] text-muted-foreground">
+                <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
+                  {meta.map(part => <span key={part} className="whitespace-nowrap">{part}</span>)}
+                </span>
+                {onToggle && (
+                  <WeekListButton inList={isSelected} onClick={() => onToggle(recipe)} className="ml-auto" />
+                )}
+              </div>
+            </article>
           )
         }
 
         return null
       })}
+      </div>
       </div>
       {viewMode === 'list' && readyRecipes.length > 0 && (
         <div className={nonReadyCount > 0 ? 'mt-4' : ''}>
@@ -735,6 +716,20 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
           />
         </div>
       )}
-    </>
+    </section>
+  )
+}
+
+function EmptyState({ icon, title, text }) {
+  return (
+    <div className="flex flex-col items-center rounded-[28px] border border-border bg-card px-6 py-14 text-center">
+      {icon && (
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+          {icon}
+        </div>
+      )}
+      <p className="text-lg font-semibold">{title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+    </div>
   )
 }

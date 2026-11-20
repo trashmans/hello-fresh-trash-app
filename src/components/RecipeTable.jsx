@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { FileText, ShoppingCart, RefreshCw, Loader2, ArrowUp, ArrowDown, ArrowUpDown, Sparkles } from 'lucide-react'
+import { FileText, RefreshCw, Loader2, ArrowUp, ArrowDown, ArrowUpDown, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import RecipeDeleteMenu from '@/components/RecipeDeleteMenu'
+import WeekListButton from '@/components/WeekListButton'
 import { RECIPE_TABLE_COLUMNS as COLUMNS, sortRecipes, formatRecipeCell, isEstimated } from '@/lib/recipeSort'
 
 // Filled dots in the Difficulty pill (shape as well as colour, so it reads without colour vision).
@@ -39,75 +40,86 @@ export default function RecipeTable({
   )
 
   return (
-    <div className="space-y-2">
-    <div className="overflow-x-auto rounded-md border border-border bg-card">
-      <table className="w-full text-sm">
+    <div className="flex flex-col gap-2.5">
+    <div className="overflow-x-auto rounded-[18px] border border-border bg-card">
+      <table className="w-full min-w-[980px] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border bg-muted text-left">
-            <th className="w-10 px-3 py-2" />
+          <tr className="border-b border-input text-left">
             {COLUMNS.map(column => {
               const isActive = sort.column === column.key
+              const numeric = column.type === 'number'
               return (
-                <th key={column.key} className="px-3 py-2 font-medium whitespace-nowrap">
+                <th
+                  key={column.key}
+                  scope="col"
+                  aria-sort={isActive ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined}
+                  className="p-0 whitespace-nowrap"
+                >
                   <button
-                    className="flex items-center gap-1 hover:text-primary-text transition-colors"
+                    type="button"
+                    className={`flex h-11 items-center gap-1 px-3 text-[13px] font-semibold transition-colors hover:text-foreground ${numeric ? 'ml-auto' : ''} ${isActive ? 'text-primary-text' : 'text-muted-foreground'}`}
                     onClick={() => toggleSort(column.key)}
                   >
-                    {column.label}
+                    {column.key === 'name' ? 'Recipe' : column.label}
                     {isActive ? (
                       sort.direction === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                     ) : (
-                      <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
+                      <ArrowUpDown className="h-3 w-3 opacity-40" />
                     )}
                   </button>
                 </th>
               )
             })}
-            <th className="px-3 py-2 font-medium">Uploaded by</th>
-            <th className="w-24 px-3 py-2" />
+            <th scope="col" className="p-0"><span className="sr-only">This week and actions</span></th>
           </tr>
         </thead>
         <tbody>
           {sortedRecipes.map(recipe => {
             const isSelected = selectedIds.includes(recipe.id)
+            const by = profiles[recipe.uploaded_by]?.display_name
             return (
               <tr
                 key={recipe.id}
-                className={`border-b border-border last:border-0 cursor-pointer hover:bg-accent/60 transition-colors ${isSelected ? 'bg-secondary/15' : 'even:bg-muted/40'}`}
+                className={`border-b border-border last:border-0 cursor-pointer transition-colors hover:bg-accent/60 ${isSelected ? 'bg-primary/10' : ''}`}
                 onClick={() => onSelect(recipe)}
               >
-                <td className="px-3 py-2">
-                  <div className="h-8 w-8 rounded bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                    {coverUrls[recipe.cover_path] ? (
-                      <img
-                        src={coverUrls[recipe.cover_path]}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        onError={(e) => { e.currentTarget.style.display = 'none' }}
-                      />
-                    ) : (
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                </td>
                 {COLUMNS.map(column => {
                   if (column.key === 'name') {
                     return (
-                      <td key={column.key} className="px-3 py-2 whitespace-nowrap">
-                        <span className="font-semibold">{recipe.name ?? recipe.filename}</span>
+                      <td key={column.key} className="p-3 whitespace-nowrap">
+                        <span className="flex items-center gap-3">
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-muted">
+                            {coverUrls[recipe.cover_path] ? (
+                              <img
+                                src={coverUrls[recipe.cover_path]}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                              />
+                            ) : (
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </span>
+                          <span className="flex flex-col gap-0.5">
+                            <span className="text-[15px] font-semibold">{recipe.name ?? recipe.filename}</span>
+                            {by && <span className="text-[13px] text-muted-foreground">by {by}</span>}
+                          </span>
+                        </span>
                       </td>
                     )
                   }
                   const cell = formatRecipeCell(recipe, column)
+                  const numeric = column.type === 'number'
+                  const tdClass = `p-3 whitespace-nowrap ${numeric ? 'text-right tabular-nums' : ''}`
                   if (column.key === 'difficulty' && !cell.empty) {
                     const level = DIFFICULTY_LEVELS[String(cell.text).toLowerCase()] ?? 0
                     return (
-                      <td key={column.key} className="px-3 py-2 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary/15 px-2 py-0.5 text-xs font-medium">
+                      <td key={column.key} className={tdClass}>
+                        <span className="inline-flex items-center gap-1.5">
                           {level > 0 && (
                             <span className="inline-flex gap-0.5" aria-hidden="true">
                               {[1, 2, 3].map(dot => (
-                                <span key={dot} className={`h-1.5 w-1.5 rounded-full ${dot <= level ? 'bg-secondary' : 'bg-secondary/30'}`} />
+                                <span key={dot} className={`h-1.5 w-1.5 rounded-full ${dot <= level ? 'bg-primary' : 'bg-primary/25'}`} />
                               ))}
                             </span>
                           )}
@@ -116,15 +128,15 @@ export default function RecipeTable({
                       </td>
                     )
                   }
-                  if ((column.key === 'cuisine' || column.key === 'protein_source') && !cell.empty) {
+                  if (column.key === 'protein_source' && !cell.empty) {
                     return (
-                      <td key={column.key} className="px-3 py-2 whitespace-nowrap">
-                        <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">{cell.text}</span>
+                      <td key={column.key} className={tdClass}>
+                        <span className="rounded-full bg-secondary/15 px-2.5 py-1 text-[13px] font-semibold text-secondary">{cell.text}</span>
                       </td>
                     )
                   }
                   return (
-                    <td key={column.key} className="px-3 py-2 whitespace-nowrap">
+                    <td key={column.key} className={tdClass}>
                       {cell.estimated ? (
                         <span className="inline-flex items-center gap-1 italic text-muted-foreground" title={ESTIMATE_TOOLTIP}>
                           {cell.text}
@@ -136,29 +148,13 @@ export default function RecipeTable({
                     </td>
                   )
                 })}
-                <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                  {profiles[recipe.uploaded_by]?.display_name ?? 'Unknown'}
-                </td>
-                <td className="px-3 py-2">
+                <td className="p-3">
                   <div className="flex items-center justify-end gap-1">
-                    {onToggle && (
-                      <button
-                        className={`rounded p-1 transition-colors ${
-                          isSelected
-                            ? 'bg-secondary text-secondary-foreground'
-                            : 'text-muted-foreground hover:text-secondary hover:bg-secondary/10'
-                        }`}
-                        onClick={(e) => { e.stopPropagation(); onToggle(recipe) }}
-                        title={isSelected ? 'Remove from shopping list' : 'Add to shopping list'}
-                      >
-                        <ShoppingCart className="h-3.5 w-3.5" />
-                      </button>
-                    )}
                     {adminMode && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-primary-text"
+                        className="h-8 w-8 text-muted-foreground hover:text-primary-text"
                         disabled={reparsing === recipe.id}
                         onClick={(e) => onReparse(recipe.id, e)}
                         title="Re-parse recipe (admin)"
@@ -174,6 +170,9 @@ export default function RecipeTable({
                         onDelete={onDelete}
                       />
                     )}
+                    {onToggle && (
+                      <WeekListButton inList={isSelected} onClick={() => onToggle(recipe)} size="h-10 w-10" />
+                    )}
                   </div>
                 </td>
               </tr>
@@ -183,9 +182,9 @@ export default function RecipeTable({
       </table>
     </div>
     {anyEstimated && (
-      <p className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
+      <p className="flex items-center gap-1 px-1 text-[13px] text-muted-foreground">
         <Sparkles className="h-3 w-3" />
-        <span><span className="italic">~ values</span> are AI estimates from the ingredient list, where the recipe card doesn't print them.</span>
+        <span><span className="italic">~ values</span> are AI estimates from the ingredient list, where the recipe card doesn&apos;t print them. Recipes still being read show up in Gallery.</span>
       </p>
     )}
     </div>
