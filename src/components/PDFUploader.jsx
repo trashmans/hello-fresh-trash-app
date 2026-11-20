@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { FileUp, Loader2 } from 'lucide-react'
+import { Loader2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useUploadQueue } from '@/hooks/useUploadQueue'
 import UploadQueue from '@/components/UploadQueue'
@@ -25,7 +25,13 @@ export default function PDFUploader({ onUploadComplete }) {
         className="hidden"
         onChange={handleFileChange}
       />
-      <Button onClick={() => inputRef.current?.click()} disabled={isRunning} size="lg">
+      <Button
+        onClick={() => inputRef.current?.click()}
+        disabled={isRunning}
+        variant="outline"
+        aria-label={isRunning ? 'Uploading recipes' : 'Upload recipe PDFs'}
+        className="h-11 shrink-0 rounded-full px-3 sm:px-[18px] font-semibold"
+      >
         {isRunning ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -33,8 +39,8 @@ export default function PDFUploader({ onUploadComplete }) {
           </>
         ) : (
           <>
-            <FileUp className="h-4 w-4" />
-            <span className="hidden sm:inline">Upload Recipe PDFs</span>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Upload recipe</span>
           </>
         )}
       </Button>

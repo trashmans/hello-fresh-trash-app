@@ -35,7 +35,7 @@ export default function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className={`cursor-pointer rounded-full w-8 h-8 overflow-hidden transition-opacity hover:opacity-80 focus:outline-none focus:ring-offset-2 ${adminMode ? 'ring-2 ring-primary ring-offset-2' : 'focus:ring-2 focus:ring-primary'}`}>
+        <button aria-label="Account menu: units, admin, settings, sign out" className={`cursor-pointer rounded-full w-11 h-11 shrink-0 overflow-hidden border border-input transition-opacity hover:opacity-80 focus:outline-none focus:ring-offset-2 ${adminMode ? 'ring-2 ring-primary ring-offset-2' : 'focus:ring-2 focus:ring-primary'}`}>
           {avatarUrl && !imgError ? (
             <img
               src={avatarUrl}
@@ -44,7 +44,7 @@ export default function UserMenu() {
               onError={() => setImgError(true)}
             />
           ) : (
-            <span className="w-full h-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-semibold">
+            <span className="w-full h-full bg-muted flex items-center justify-center text-foreground text-sm font-bold">
               {initials}
             </span>
           )}
