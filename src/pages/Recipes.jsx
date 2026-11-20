@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import RecipeCatalogue from '@/components/RecipeCatalogue'
 import RecipePreviewPanel from '@/components/RecipePreviewPanel'
 import { useIngredientSuggestions, useIngredientFilter } from '@/hooks/useIngredientSearch'
@@ -34,32 +34,54 @@ export default function Recipes() {
 
   return (
     <div className="flex h-full">
-      <div className={`p-6 overflow-y-auto transition-all ${selectedRecipe ? 'w-1/2' : 'w-full max-w-4xl mx-auto'}`}>
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold">Recipes</h2>
-          <p className="text-muted-foreground mt-1">
-            Upload a recipe card to build the catalogue — we love HelloFresh, but anything works
-          </p>
-        </div>
-        <div className="mb-4">
-          <IngredientSearchBar
-            query={ingredientQuery}
-            onQueryChange={setIngredientQuery}
-            suggestions={ingredientSuggestions}
-            loading={suggestionsLoading}
-            selected={selectedIngredients}
-            onSelect={handleSelectIngredient}
-            onRemove={handleRemoveIngredient}
+      <div className={`overflow-y-auto transition-all ${selectedRecipe ? 'w-1/2' : 'w-full'}`}>
+        <div className="mx-auto flex max-w-[1200px] flex-col gap-10 lg:gap-12 px-4 py-8 lg:px-6 lg:py-12">
+          <section className="flex flex-col gap-5">
+            <h1 className="max-w-[760px] text-4xl sm:text-5xl lg:text-[56px] font-bold leading-[1.02] tracking-[-0.02em]">
+              What are you cooking tonight?
+            </h1>
+            <div className="max-w-[760px]">
+              <IngredientSearchBar
+                query={ingredientQuery}
+                onQueryChange={setIngredientQuery}
+                suggestions={ingredientSuggestions}
+                loading={suggestionsLoading}
+                selected={selectedIngredients}
+                onSelect={handleSelectIngredient}
+                onRemove={handleRemoveIngredient}
+              />
+            </div>
+          </section>
+
+          <RecipeCatalogue
+            refreshKey={refreshKey}
+            onSelect={setSelectedRecipe}
+            onDelete={handleDelete}
+            selectedIds={shoppingList.selectedIds}
+            onToggle={shoppingList.toggleRecipe}
+            ingredientMatches={ingredientMatches}
+            ingredientTerms={selectedIngredients}
           />
+
+          <section className="flex flex-wrap gap-6 rounded-[28px] border border-border bg-banner p-6 sm:p-10">
+            <div className="flex flex-[999_1_420px] flex-col gap-3.5">
+              <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">Plan once, shop once</p>
+              <h2 className="text-[28px] sm:text-[34px] font-bold leading-[1.1]">Pick this week&apos;s recipes. We build the Albert Heijn list.</h2>
+              <p className="max-w-[560px] text-base leading-relaxed text-muted-foreground">
+                Ingredients are combined across recipes, scaled to your servings and grouped by aisle. Your staples and mapped
+                ingredients go to your AH list as real products — you check the preview before anything is sent.
+              </p>
+            </div>
+            <div className="flex flex-[1_1_260px] flex-col justify-end gap-2.5">
+              <Link to="/shopping" className="flex h-[52px] items-center justify-center rounded-[14px] bg-secondary text-base font-bold text-secondary-foreground hover:opacity-90 transition-opacity">
+                Review this week&apos;s list
+              </Link>
+              <Link to="/ordering" className="flex h-[52px] items-center justify-center rounded-[14px] border border-input text-base font-semibold hover:bg-accent transition-colors">
+                Preview the AH order
+              </Link>
+            </div>
+          </section>
         </div>
-        <RecipeCatalogue
-          refreshKey={refreshKey}
-          onSelect={setSelectedRecipe}
-          onDelete={handleDelete}
-          selectedIds={shoppingList.selectedIds}
-          onToggle={shoppingList.toggleRecipe}
-          ingredientMatches={ingredientMatches}
-        />
       </div>
       {selectedRecipe && (
         <div className="w-1/2 border-l border-border p-6 flex flex-col overflow-hidden">

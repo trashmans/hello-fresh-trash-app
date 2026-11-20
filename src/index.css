@@ -22,6 +22,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-badge: var(--badge);
   --color-badge-foreground: var(--badge-foreground);
+  --color-banner: var(--banner);
   --color-header: var(--header);
   --color-header-foreground: var(--header-foreground);
   --color-header-title: var(--header-title);
@@ -64,6 +65,7 @@
   --destructive-foreground: #FFFFFF;
   --badge: #2E7553;
   --badge-foreground: #FBF6F0;
+  --banner: #F6EADB;
   --header: #FFFFFF;
   --header-foreground: #2A1D15;
   --header-title: #2A1D15;
@@ -92,6 +94,7 @@
   --destructive-foreground: #15100D;
   --badge: #9ED3B4;
   --badge-foreground: #15100D;
+  --banner: #221A15;
   --header: #1E1713;
   --header-foreground: #F5EDE5;
   --header-title: #F5EDE5;
