@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { THEME_STORAGE_KEY, THEME_COLORS, normalizeTheme, toggleTheme, themeColorFor } from '@/lib/theme'
+import { THEME_STORAGE_KEY, THEME_COLORS, normalizeTheme, toggleTheme, themeColorFor, themeToggleLabel } from '@/lib/theme'
 
 describe('THEME_STORAGE_KEY', () => {
   it('is the localStorage key index.html also reads before the app loads', () => {
@@ -33,13 +33,25 @@ describe('toggleTheme', () => {
 })
 
 describe('themeColorFor', () => {
-  it('matches the browser bar to the header: Tuscan rosemary by day, Orchard charcoal by night', () => {
-    expect(THEME_COLORS).toEqual({ light: '#3B5249', dark: '#1C1A16' })
-    expect(themeColorFor('light')).toBe('#3B5249')
-    expect(themeColorFor('dark')).toBe('#1C1A16')
+  it('matches the browser bar to the header: white by day, espresso by night', () => {
+    expect(THEME_COLORS).toEqual({ light: '#FFFFFF', dark: '#1E1713' })
+    expect(themeColorFor('light')).toBe('#FFFFFF')
+    expect(themeColorFor('dark')).toBe('#1E1713')
   })
 
   it('uses the light colour for unknown values', () => {
-    expect(themeColorFor(undefined)).toBe('#3B5249')
+    expect(themeColorFor(undefined)).toBe('#FFFFFF')
+  })
+})
+
+// The Light/Dark button in the header names the theme it switches TO.
+describe('themeToggleLabel', () => {
+  it('offers dark mode while light, and light mode while dark', () => {
+    expect(themeToggleLabel('light')).toEqual({ label: 'Dark mode', ariaLabel: 'Switch to dark mode', next: 'dark' })
+    expect(themeToggleLabel('dark')).toEqual({ label: 'Light mode', ariaLabel: 'Switch to light mode', next: 'light' })
+  })
+
+  it('treats an unknown value as light', () => {
+    expect(themeToggleLabel(undefined)).toEqual(themeToggleLabel('light'))
   })
 })

@@ -1,9 +1,11 @@
 import { Suspense, useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
-import { BookOpen, Loader2, RefreshCw, ShoppingCart, Users } from 'lucide-react'
+import { BookOpen, Loader2, Moon, RefreshCw, ShoppingCart, Sun, Users } from 'lucide-react'
 import UserMenu from '@/components/UserMenu'
 import PDFUploader from '@/components/PDFUploader'
 import { useShoppingList } from '@/hooks/useShoppingList'
+import { useTheme } from '@/hooks/useTheme'
+import { themeToggleLabel } from '@/lib/theme'
 
 // The four main tabs. `short` is the phone tab-bar label, where the full
 // name doesn't fit.
@@ -14,7 +16,7 @@ const TABS = [
   { to: '/social', label: 'Social', short: 'Social', icon: Users },
 ]
 
-// Layout for every signed-in page: header (title, upload, cart, account),
+// Layout for every signed-in page: header (title, Light/Dark button, upload, cart, account),
 // a side menu on desktop, a bottom tab bar on phones, and the page itself.
 // The shopping list lives here so the Recipes tab (adding recipes), the
 // Shopping tab (the list) and the header's cart count share one copy.
@@ -22,6 +24,8 @@ export default function AppShell() {
   const shoppingList = useShoppingList()
   const [refreshKey, setRefreshKey] = useState(0)
   const count = shoppingList.selectedIds.length
+  const { theme, toggle } = useTheme()
+  const themeButton = themeToggleLabel(theme)
 
   return (
     <div className="h-dvh flex flex-col bg-background text-foreground">
@@ -30,6 +34,15 @@ export default function AppShell() {
           Hello Fresh Trash
         </Link>
         <div className="flex items-center gap-3 md:gap-4">
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={themeButton.ariaLabel}
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-input bg-muted px-3 md:px-4 text-sm font-semibold hover:bg-accent transition-colors"
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+            <span className="hidden md:inline">{themeButton.label}</span>
+          </button>
           <PDFUploader onUploadComplete={() => setRefreshKey(k => k + 1)} />
           <Link
             to="/shopping"

@@ -106,7 +106,7 @@ function RejectedCard({ recipe, existingRecipe, onSelect, onDelete, deleting }) 
         <p className="text-xs text-muted-foreground truncate">{recipe.filename}</p>
         {existingRecipe && (
           <button
-            className="text-xs text-primary underline text-left truncate"
+            className="text-xs text-primary-text underline text-left truncate"
             onClick={() => onSelect(existingRecipe)}
           >
             View: {existingLabel}
@@ -500,7 +500,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     return (
       <Card className="flex flex-col items-center text-center py-16">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-          <FileText className="h-7 w-7 text-primary" />
+          <FileText className="h-7 w-7 text-primary-text" />
         </div>
         <p className="text-lg font-semibold">No recipes yet</p>
         <p className="text-sm text-muted-foreground mt-1">Upload your first recipe card to get started — HelloFresh is our favorite, but anything works</p>
@@ -695,7 +695,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
                   size="icon"
                   disabled={reparsing === recipe.id}
                   onClick={(e) => handleReparse(recipe.id, e)}
-                  className="absolute bottom-2 right-2 text-muted-foreground hover:text-primary"
+                  className="absolute bottom-2 right-2 text-muted-foreground hover:text-primary-text"
                   title="Re-parse recipe (admin)"
                 >
                   {reparsing === recipe.id
