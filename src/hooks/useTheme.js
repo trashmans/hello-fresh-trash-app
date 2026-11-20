@@ -9,6 +9,10 @@ function readSavedTheme() {
   }
 }
 
+// Fired on window when the theme changes, so every place that uses this hook
+// (the header button and the Settings card) shows the same choice.
+const THEME_EVENT = 'hft-theme-change'
+
 // Light/dark choice for this device. public/theme-init.js applies the saved
 // choice before React loads; this hook keeps <html class="dark">, the
 // theme-color meta tag and localStorage in step when the user changes it.
@@ -23,7 +27,15 @@ export function useTheme() {
     } catch {
       // Storage blocked: the choice lasts until the page is reloaded.
     }
+    window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: theme }))
   }, [theme])
+
+  useEffect(() => {
+    // setState with the same value is a no-op, so this doesn't loop.
+    const follow = (event) => setThemeState(normalizeTheme(event.detail))
+    window.addEventListener(THEME_EVENT, follow)
+    return () => window.removeEventListener(THEME_EVENT, follow)
+  }, [])
 
   const setTheme = useCallback((value) => setThemeState(normalizeTheme(value)), [])
   const toggle = useCallback(() => setThemeState((current) => toggleTheme(current)), [])

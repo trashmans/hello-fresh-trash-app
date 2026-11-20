@@ -9,6 +9,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -31,66 +32,72 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: 'Inter Variable', Inter, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', system-ui, sans-serif;
 }
 
-/* Light mode (default): Tuscan Garden & Herb. Dark mode (.dark on <html>,
-   chosen in Settings): Crisp Orchard. Text tokens are checked at 4.5:1 or
-   better against the surfaces they sit on, including the 15% tints used for
-   status pills (bg-primary/15 text-primary). Source palettes and the
-   light/dark pairing: the "Hello Fresh Trash: 4-tab wireframes" design canvas. */
+/* Espresso & saffron (the "Hello Fresh Trash — Espresso & saffron redesign" design
+   canvas). Light mode is the default; dark mode is .dark on <html>, chosen with the
+   header's Light/Dark button or in Settings. Saffron (primary) is a fill colour:
+   buttons and active states, always with dark text on it. Where saffron is used as
+   TEXT (links, icons, the link button), use text-primary-text, which is darkened in
+   light mode so it reads at 4.5:1 or better on the page and cards. Sage (secondary)
+   works as text and as a fill in both modes; counts (badge) are sage too. */
 :root {
-  --radius: 0.625rem;
-  --background: #EFE8DC;           /* Warm Oatmeal */
-  --foreground: #1F1F1F;
+  --radius: 0.875rem;              /* buttons and inputs 14px; cards (xl) 18px */
+  --background: #FBF6F0;           /* cream */
+  --foreground: #2A1D15;
   --card: #FFFFFF;
-  --card-foreground: #1F1F1F;
+  --card-foreground: #2A1D15;
   --popover: #FFFFFF;
-  --popover-foreground: #1F1F1F;
-  --primary: #9E4A2B;              /* Terracotta Clay, darkened for white text */
-  --primary-foreground: #FFFFFF;
-  --secondary: #3B5249;            /* Rosemary Green */
-  --secondary-foreground: #FFFFFF;
-  --muted: #E4DCCD;
-  --muted-foreground: #5E574B;
-  --accent: #E4DCCD;
-  --accent-foreground: #1F1F1F;
-  --destructive: #B03427;          /* Sun-Ripened Tomato, darkened */
+  --popover-foreground: #2A1D15;
+  --primary: #F0A04B;              /* saffron */
+  --primary-foreground: #1E140C;
+  --primary-text: #9A4F0C;         /* saffron, darkened for text on light */
+  --secondary: #2E7553;            /* sage, darkened for light mode */
+  --secondary-foreground: #FBF6F0;
+  --muted: #F4ECE3;
+  --muted-foreground: #6B5748;
+  --accent: #F4ECE3;
+  --accent-foreground: #2A1D15;
+  --destructive: #B03427;
   --destructive-foreground: #FFFFFF;
-  --badge: #B03427;                /* tomato badges by day */
-  --badge-foreground: #FFFFFF;
-  --header: #3B5249;               /* rosemary app bar by day */
-  --header-foreground: #FFFFFF;
-  --header-title: #FFFFFF;
-  --border: #D6CCBB;
-  --input: #B8AC97;
-  --ring: #3B5249;
+  --badge: #2E7553;
+  --badge-foreground: #FBF6F0;
+  --header: #FFFFFF;
+  --header-foreground: #2A1D15;
+  --header-title: #2A1D15;
+  --border: #E8DCCF;
+  --input: #D3C2B0;
+  --ring: #9A4F0C;
 }
 
 .dark {
-  --background: #121110;           /* Orchard Charcoal, deep */
-  --foreground: #F3F1EA;
-  --card: #38332B;                 /* raised cards stand out from the page */
-  --card-foreground: #F3F1EA;
-  --popover: #38332B;
-  --popover-foreground: #F3F1EA;
-  --primary: #F3887A;              /* Orchard Apple, lightened for dark text */
-  --primary-foreground: #121110;
-  --secondary: #34C474;            /* Crisp Leaf, lightened */
-  --secondary-foreground: #121110;
-  --muted: #454037;
-  --muted-foreground: #B9B6AC;
-  --accent: #454037;
-  --accent-foreground: #F3F1EA;
+  --background: #15100D;           /* espresso */
+  --foreground: #F5EDE5;
+  --card: #1E1713;
+  --card-foreground: #F5EDE5;
+  --popover: #1E1713;
+  --popover-foreground: #F5EDE5;
+  --primary: #F0A04B;              /* saffron */
+  --primary-foreground: #1E140C;
+  --primary-text: #F0A04B;
+  --secondary: #9ED3B4;            /* sage */
+  --secondary-foreground: #15100D;
+  --muted: #271F1A;
+  --muted-foreground: #C2B2A3;
+  --accent: #271F1A;
+  --accent-foreground: #F5EDE5;
   --destructive: #F78B7C;
-  --destructive-foreground: #121110;
-  --badge: #F39C12;                /* Warm Honey badges by night */
-  --badge-foreground: #121110;
-  --header: #1C1A16;               /* charcoal app bar by night */
-  --header-foreground: #F3F1EA;
-  --header-title: #34C474;         /* Crisp Leaf title */
-  --border: #534E44;
-  --input: #625C51;
-  --ring: #34C474;
+  --destructive-foreground: #15100D;
+  --badge: #9ED3B4;
+  --badge-foreground: #15100D;
+  --header: #1E1713;
+  --header-foreground: #F5EDE5;
+  --header-title: #F5EDE5;
+  --border: #352A23;
+  --input: #4A3B31;
+  --ring: #F0A04B;
 }
 
 /* Page-wide defaults so text that doesn't set its own colour (headings,
@@ -101,5 +108,9 @@
   body {
     background-color: var(--background);
     color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
   }
 }

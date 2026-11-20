@@ -60,7 +60,7 @@ export default function UserMenu() {
         <DropdownMenuSeparator />
         {isAdmin && (
           <DropdownMenuItem className="cursor-pointer gap-2" onClick={toggleAdminMode}>
-            <ShieldCheck className={`h-4 w-4 ${adminMode ? 'text-primary' : 'text-muted-foreground'}`} />
+            <ShieldCheck className={`h-4 w-4 ${adminMode ? 'text-primary-text' : 'text-muted-foreground'}`} />
             <span>Admin mode {adminMode ? 'on' : 'off'}</span>
           </DropdownMenuItem>
         )}

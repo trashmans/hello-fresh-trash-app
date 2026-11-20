@@ -50,7 +50,7 @@ export default function RecipeTable({
               return (
                 <th key={column.key} className="px-3 py-2 font-medium whitespace-nowrap">
                   <button
-                    className="flex items-center gap-1 hover:text-primary transition-colors"
+                    className="flex items-center gap-1 hover:text-primary-text transition-colors"
                     onClick={() => toggleSort(column.key)}
                   >
                     {column.label}
@@ -158,7 +158,7 @@ export default function RecipeTable({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary-text"
                         disabled={reparsing === recipe.id}
                         onClick={(e) => onReparse(recipe.id, e)}
                         title="Re-parse recipe (admin)"

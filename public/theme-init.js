@@ -5,7 +5,7 @@ try {
   if (localStorage.getItem('hft-theme') === 'dark') {
     document.documentElement.classList.add('dark')
     var meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', '#1C1A16')
+    if (meta) meta.setAttribute('content', '#1E1713')
   }
 } catch (e) {
   // Storage blocked (private mode, strict settings): stay in light mode.
