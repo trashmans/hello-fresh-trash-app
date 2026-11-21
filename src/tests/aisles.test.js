@@ -51,6 +51,26 @@ describe('aisleFor', () => {
     })
   }
 
+  it('knows the Dutch onion names AH uses for staples', () => {
+    for (const name of ['AH Gele uien', 'AH Rode uien', 'Ui', 'AH Sjalotten', 'sjalot', 'AH Bosui']) {
+      expect([name, aisleFor(name)]).toEqual([name, 'Produce'])
+    }
+  })
+
+  it('knows the Dutch names for bananas and rice', () => {
+    for (const name of ['AH Biologisch Fairtrade bananen', 'Bio Fairtrade bananen', 'AH Banaan']) {
+      expect([name, aisleFor(name)]).toEqual([name, 'Produce'])
+    }
+    for (const name of ['AH Langkorrel rijst', 'AH Basmati rijst', 'AH Pandan rijst']) {
+      expect([name, aisleFor(name)]).toEqual([name, 'Pantry'])
+    }
+  })
+
+  it('does not read "ui" inside other words as an onion', () => {
+    expect(aisleFor('AH Fruit & nut muesli')).toBe('Pantry')
+    expect(aisleFor('quinoa')).toBe('Pantry')
+  })
+
   it('keeps food that only sounds like a household item where it was', () => {
     expect(aisleFor('ciabatta roll')).toBe('Bakery')
     expect(aisleFor('spring roll wrappers')).toBe('Bakery')

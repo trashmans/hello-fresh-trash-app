@@ -6,6 +6,8 @@
 // "garlic powder" is a spice (not garlic), "mushroom stock concentrate" is
 // pantry (not mushrooms), "basil oil" is pantry (not basil), "green beans"
 // are produce (not tinned beans) and "egg noodles" are pantry (not eggs).
+// Staples picked from AH products carry AH's Dutch names ("AH Gele uien",
+// "AH Langkorrel rijst"), so the common ones have Dutch words too.
 // Anything unmatched goes to Other. Pure: no I/O.
 
 export const AISLES = ['Produce', 'Meat & fish', 'Dairy & eggs', 'Bakery', 'Pantry', 'Herbs & spices', 'Household', 'Other']
@@ -21,10 +23,10 @@ const RULES = [
   ['Produce', /\b(green beans?|snap peas?|sugar snap peas?|bean sprouts|edamame)\b/],
   // Bakery before pantry, so "flour tortillas" isn't flour.
   ['Bakery', /\b(bread|baguettes?|buns?|rolls?|tortillas?|pitas?|naan|flatbreads?|ciabatta|brioche|bagels?|wraps?|croissants?|sourdough)\b/],
-  ['Pantry', /\b(beans?|chickpeas?|lentils?|coconut (milk|cream)|crushed tomato(es)?|diced tomato(es)?|tomato (paste|sauce|puree)|canned|tinned|sauce|paste|oils?|vinegar|honey|sugar|syrup|flour|cornstarch|rice|pasta|noodles?|couscous|quinoa|oats|panko|breadcrumbs?|crisp|pesto|mustard|mayo(nnaise)?|ketchup|sriracha|jam|peanuts?|almonds?|walnuts?|pistachios?|cashews?|pine nuts?|pecans?|sesame seeds?|seeds?|flax(seed)?|linseed|raisins?|wine|gemelli|penne|spaghetti|orzo|farro|bulgur|crackers|croutons)\b/],
+  ['Pantry', /\b(beans?|chickpeas?|lentils?|coconut (milk|cream)|crushed tomato(es)?|diced tomato(es)?|tomato (paste|sauce|puree)|canned|tinned|sauce|paste|oils?|vinegar|honey|sugar|syrup|flour|cornstarch|rice|pasta|noodles?|couscous|quinoa|rijst|oats|panko|breadcrumbs?|crisp|pesto|mustard|mayo(nnaise)?|ketchup|sriracha|jam|peanuts?|almonds?|walnuts?|pistachios?|cashews?|pine nuts?|pecans?|sesame seeds?|seeds?|flax(seed)?|linseed|raisins?|wine|gemelli|penne|spaghetti|orzo|farro|bulgur|crackers|croutons)\b/],
   ['Meat & fish', /\b(chicken|beef|pork|turkey|lamb|steaks?|sausages?|bacon|ham|chorizo|prosciutto|salami|pancetta|mince|veal|duck|salmon|cod|tilapia|haddock|tuna|shrimp|prawns?|scallops?|mussels?|fish|crab)\b/],
   ['Dairy & eggs', /\b(milk|cream|cheese|cheddar|mozzarella|parmesan|parmigiano|feta|ricotta|halloumi|mascarpone|paneer|burrata|gouda|brie|butter|port salut|gruy[eè]re|camembert|emmental|edam|manchego|pecorino|gorgonzola|provolone|yog(h)?urt|eggs?|cr[eè]me fra[iî]che)\b/],
-  ['Produce', /\b(onions?|shallots?|scallions?|leeks?|garlic|ginger|lemons?|limes?|oranges?|apples?|pears?|bananas?|[a-z]*berr(y|ies)|grapes?|tomato(es)?|potato(es)?|carrots?|celery|zucchinis?|courgettes?|squash|pumpkin|cucumbers?|lettuce|romaine|spinach|kale|arugula|rocket|cabbage|slaw|broccoli(ni)?|cauliflower|mushrooms?|peppers?|chil(i|e|ies|es)|jalape(n|ñ)os?|poblanos?|corn|avocados?|parsley|cilantro|coriander|basil|mint|dill|thyme|rosemary|chives|sage|herbs?|asparagus|peas|eggplants?|aubergines?|radish(es)?|beets?|beetroot|fennel|mango(es)?|pineapple|bok choy|watercress|sprouts|salad|greens|leaves)\b/],
+  ['Produce', /\b(onions?|uien|ui|bosui|sjalot(ten)?|banaan|bananen|shallots?|scallions?|leeks?|garlic|ginger|lemons?|limes?|oranges?|apples?|pears?|bananas?|[a-z]*berr(y|ies)|grapes?|tomato(es)?|potato(es)?|carrots?|celery|zucchinis?|courgettes?|squash|pumpkin|cucumbers?|lettuce|romaine|spinach|kale|arugula|rocket|cabbage|slaw|broccoli(ni)?|cauliflower|mushrooms?|peppers?|chil(i|e|ies|es)|jalape(n|ñ)os?|poblanos?|corn|avocados?|parsley|cilantro|coriander|basil|mint|dill|thyme|rosemary|chives|sage|herbs?|asparagus|peas|eggplants?|aubergines?|radish(es)?|beets?|beetroot|fennel|mango(es)?|pineapple|bok choy|watercress|sprouts|salad|greens|leaves)\b/],
 ]
 
 // Lower case, only the part before the first comma ("onion, peeled and
