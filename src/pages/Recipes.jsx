@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
+import { supabase } from '@/lib/supabase'
 import RecipeCatalogue from '@/components/RecipeCatalogue'
 import RecipePreviewPanel from '@/components/RecipePreviewPanel'
 import { useIngredientSuggestions, useIngredientFilter } from '@/hooks/useIngredientSearch'
@@ -25,6 +26,19 @@ export default function Recipes() {
   }
 
   const handleClose = useCallback(() => setSelectedRecipe(null), [])
+
+  // Another tab can open a recipe here: navigate('/recipes', { state: { openRecipeId } }).
+  const location = useLocation()
+  const navigate = useNavigate()
+  const openRecipeId = location.state?.openRecipeId
+  useEffect(() => {
+    if (!openRecipeId) return
+    // The state is cleared straight away (so a reload doesn't reopen it); the fetch still lands.
+    supabase.from('recipes').select('*').eq('id', openRecipeId).maybeSingle().then(({ data }) => {
+      if (data) setSelectedRecipe(data)
+    })
+    navigate(location.pathname, { replace: true, state: null })
+  }, [openRecipeId, navigate, location.pathname])
 
   function handleDelete(recipe) {
     if (selectedRecipe?.id === recipe.id) setSelectedRecipe(null)

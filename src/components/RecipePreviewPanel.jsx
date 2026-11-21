@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, FileText, Minus, Plus, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Check, FileText, Minus, Plus, RotateCcw, Share2 } from 'lucide-react'
+import SharePanel from '@/components/SharePanel'
 import { supabase } from '@/lib/supabase'
 import { useRecipeIngredients } from '@/hooks/useRecipeIngredients'
 import { useRecipeStepImages } from '@/hooks/useRecipeStepImages'
@@ -358,6 +359,7 @@ function useRecipeExtras(recipe) {
 // steps) or the original PDF on the right. Columns stack on narrow screens.
 export default function RecipePreviewPanel({ recipe, onClose, inList = false, onToggle }) {
   const [tab, setTab] = useState('instructions')
+  const [sharing, setSharing] = useState(false)
   const { coverUrl, uploader } = useRecipeExtras(recipe)
   const name = recipe.name ?? recipe.filename
 
@@ -411,18 +413,31 @@ export default function RecipePreviewPanel({ recipe, onClose, inList = false, on
               ))}
             </div>
           )}
-          {onToggle && (
-            <button
-              type="button"
-              aria-pressed={inList}
-              onClick={() => onToggle(recipe)}
-              className={`flex h-[52px] items-center justify-center gap-2 rounded-[14px] text-base font-bold transition-opacity hover:opacity-90 ${
-                inList ? 'bg-secondary text-secondary-foreground' : 'bg-primary text-primary-foreground'
-              }`}
-            >
-              {inList ? <><Check className="h-5 w-5" aria-hidden="true" />In this week&apos;s list</> : <><Plus className="h-5 w-5" aria-hidden="true" />Add to this week</>}
-            </button>
-          )}
+          <div className="flex gap-2.5">
+            {onToggle && (
+              <button
+                type="button"
+                aria-pressed={inList}
+                onClick={() => onToggle(recipe)}
+                className={`flex h-[52px] flex-1 items-center justify-center gap-2 rounded-[14px] text-base font-bold transition-opacity hover:opacity-90 ${
+                  inList ? 'bg-secondary text-secondary-foreground' : 'bg-primary text-primary-foreground'
+                }`}
+              >
+                {inList ? <><Check className="h-5 w-5" aria-hidden="true" />In this week&apos;s list</> : <><Plus className="h-5 w-5" aria-hidden="true" />Add to this week</>}
+              </button>
+            )}
+            {recipe.status === 'ready' && (
+              <button
+                type="button"
+                aria-expanded={sharing}
+                onClick={() => setSharing(s => !s)}
+                className="flex h-[52px] items-center justify-center gap-2 rounded-[14px] border border-input bg-card px-5 text-base font-semibold hover:bg-accent transition-colors"
+              >
+                <Share2 className="h-5 w-5" aria-hidden="true" /> Share
+              </button>
+            )}
+          </div>
+          {sharing && <SharePanel recipe={recipe} onClose={() => setSharing(false)} />}
           <NutritionCard recipe={recipe} />
         </section>
 
