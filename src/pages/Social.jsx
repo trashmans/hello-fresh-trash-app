@@ -1,9 +1,11 @@
-import { useState } from 'react'
-import { Check, Loader2, Mail, UserPlus, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate, useOutletContext } from 'react-router-dom'
+import { Check, FileText, Loader2, Mail, Plus, UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useSocial } from '@/hooks/useSocial'
+import { useSharedWithMe } from '@/hooks/useShares'
 import { INVITE_DAYS, checkInviteEmail, inviteStatus, invitesLeftToday } from '@/lib/social'
 
 const dateLabel = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -58,9 +60,94 @@ function EmailForm({ label, button, icon: Icon, onSubmit, disabled, hint }) {
   )
 }
 
-// Social tab (docs/adr/0008): invite people, add and answer friends. Sharing recipes
-// (Shared with you) comes in the next step. Friends never see a shopping list or AH data.
+// "Shared with you": recipes friends recommended, newest first, with their note.
+// Opening the page marks them as seen; they keep their "New" label until the next visit.
+function SharedWithYou({ shoppingList }) {
+  const navigate = useNavigate()
+  const { shares, coverUrls, loading, markSeen, remove } = useSharedWithMe()
+  const [newIds, setNewIds] = useState(null)
+
+  useEffect(() => {
+    if (loading || newIds !== null) return
+    const unseen = shares.filter(s => !s.seen_at).map(s => s.id)
+    setNewIds(unseen)
+    markSeen(unseen)
+  }, [loading, shares, newIds, markSeen])
+
+  const minutes = (r) => (r.cook_time_minutes ?? 0) + (r.prep_time_minutes ?? 0)
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-[28px]">Shared with you{shares.length ? ` · ${shares.length}` : ''}</CardTitle></CardHeader>
+      <CardContent>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : shares.length === 0 ? (
+          <p className="rounded-[14px] border border-dashed border-input py-8 text-center text-sm text-muted-foreground">
+            Nothing yet. When a friend shares a recipe with you, it shows up here.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {shares.map(s => {
+              const r = s.recipe
+              const inList = shoppingList.selectedIds.includes(r.id)
+              const isNew = newIds?.includes(s.id)
+              return (
+                <li key={s.id} className="flex flex-col gap-3 py-4">
+                  <div className="flex items-center gap-2.5 text-sm">
+                    <Avatar person={s.from} size="h-8 w-8" />
+                    <span><span className="font-semibold">{s.from.display_name}</span> <span className="text-muted-foreground">shared · {dateLabel(s.created_at)}</span></span>
+                    {isNew && <span className="rounded-full bg-badge px-2 py-0.5 text-xs font-bold text-badge-foreground">New</span>}
+                    <button type="button" aria-label={`Remove this share of ${r.name ?? r.filename}`}
+                      onClick={async () => { const m = await remove(s.id); if (m) toast.error(m) }}
+                      className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-destructive">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <button type="button" onClick={() => navigate('/recipes', { state: { openRecipeId: r.id } })}
+                      className="flex min-w-0 flex-[1_1_240px] items-center gap-3 text-left">
+                      <span className="flex h-20 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-muted">
+                        {coverUrls[r.cover_path]
+                          ? <img src={coverUrls[r.cover_path]} alt="" className="h-full w-full object-cover" />
+                          : <FileText className="h-6 w-6 text-muted-foreground" aria-hidden="true" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[17px] font-semibold leading-snug">{r.name ?? r.filename}</span>
+                        <span className="block text-[13px] text-muted-foreground">
+                          {[minutes(r) ? `${minutes(r)} min` : null, r.servings ? `Serves ${r.servings}` : null].filter(Boolean).join(' · ')}
+                        </span>
+                        {s.note && <span className="mt-1 block whitespace-pre-line text-[15px] italic">“{s.note}”</span>}
+                      </span>
+                    </button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="h-10 rounded-full px-4 font-semibold"
+                        onClick={() => navigate('/recipes', { state: { openRecipeId: r.id } })}>
+                        Open
+                      </Button>
+                      <Button
+                        className={`h-10 rounded-full px-4 font-semibold ${inList ? 'bg-secondary text-secondary-foreground hover:bg-secondary/90' : ''}`}
+                        onClick={() => shoppingList.toggleRecipe(r)}
+                        aria-pressed={inList}
+                      >
+                        {inList ? <><Check className="h-4 w-4" /> In this week</> : <><Plus className="h-4 w-4" /> Add to this week</>}
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// Social tab (docs/adr/0008): recipes friends shared with you, invite people, add and
+// answer friends. Friends never see a shopping list or AH data.
 export default function Social() {
+  const { shoppingList } = useOutletContext()
   const social = useSocial()
   const { friends, incoming, outgoing, invites, loading, error } = social
   const now = new Date()
@@ -94,8 +181,8 @@ export default function Social() {
         <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">Cook together</p>
         <h1 className="text-4xl sm:text-[52px] font-bold leading-[1.02] tracking-[-0.02em]">Social</h1>
         <p className="text-base text-muted-foreground">
-          Invite friends and see their recipes under Friends&apos; recipes on the Recipes tab. Friends never see your
-          shopping list or AH order.
+          Share recipes with friends, and see theirs under Friends&apos; recipes on the Recipes tab. Use Share on a
+          recipe&apos;s page. Friends never see your shopping list or AH order.
         </p>
       </div>
 
@@ -103,6 +190,7 @@ export default function Social() {
 
       <div className="flex flex-wrap items-start gap-7">
         <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-7">
+          <SharedWithYou shoppingList={shoppingList} />
           {incoming.length > 0 && (
             <Card>
               <CardHeader><CardTitle className="text-[22px]">Friend requests · {incoming.length}</CardTitle></CardHeader>

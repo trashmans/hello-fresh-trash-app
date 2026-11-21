@@ -6,6 +6,7 @@ import PDFUploader from '@/components/PDFUploader'
 import { useShoppingList } from '@/hooks/useShoppingList'
 import { useTheme } from '@/hooks/useTheme'
 import { themeToggleLabel } from '@/lib/theme'
+import { useUnseenShareCount } from '@/hooks/useShares'
 
 // The four main tabs. `short` is the phone tab-bar label, where the full
 // name doesn't fit.
@@ -26,6 +27,9 @@ export default function AppShell() {
   const count = shoppingList.selectedIds.length
   const { theme, toggle } = useTheme()
   const themeButton = themeToggleLabel(theme)
+  const unseenShares = useUnseenShareCount()
+  // Small count on a tab: unseen shares on Social.
+  const tabBadge = (to) => (to === '/social' && unseenShares > 0 ? unseenShares : 0)
 
   return (
     <div className="h-dvh flex flex-col bg-background text-foreground">
@@ -55,6 +59,11 @@ export default function AppShell() {
                 }
               >
                 {label}
+                {tabBadge(to) > 0 && (
+                  <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-badge px-1 text-xs font-bold text-badge-foreground" aria-label={`${tabBadge(to)} new`}>
+                    {tabBadge(to)}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
@@ -112,8 +121,13 @@ export default function AppShell() {
           >
             {({ isActive }) => (
               <>
-                <span className={`flex h-7 w-12 items-center justify-center rounded-full ${isActive ? 'bg-primary/15' : ''}`}>
+                <span className={`relative flex h-7 w-12 items-center justify-center rounded-full ${isActive ? 'bg-primary/15' : ''}`}>
                   <Icon className="h-5 w-5" aria-hidden="true" />
+                  {tabBadge(to) > 0 && (
+                    <span className="absolute -right-0.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-badge px-1 text-[10px] font-bold text-badge-foreground" aria-label={`${tabBadge(to)} new`}>
+                      {tabBadge(to)}
+                    </span>
+                  )}
                 </span>
                 {short}
               </>
