@@ -69,6 +69,7 @@ function buyItems(mergedItems, adjustedItems) {
       qty: isNumber(qty) ? qty : null,
       unit: item.unit ?? null,
       amount: isNumber(qty) ? `${formatQty(qty)}${item.unit ? ` ${item.unit}` : ''}` : null,
+      recipes: [...new Set((item.contributions ?? []).map(c => c?.recipeName).filter(Boolean))],
     })
   }
 
@@ -205,8 +206,8 @@ export function buildWeekPreview({
     const entry = mappedProducts.get(key)
     if (!entry.from.some(f => f.key === item.key)) entry.from.push({ key: item.key, label: item.text })
     if (item.amount) entry.amounts.push(item.amount)
-    plannerMappings[item.key] = { product_id: productId, pantry: false }
-    plannerIngredients.push({ canonical_name: item.key, name: item.text, quantity: item.qty, unit: item.unit })
+    plannerMappings[item.key] = { product_id: productId, pantry: false, amount_rule: mapping.amount_rule ?? 'auto' }
+    plannerIngredients.push({ canonical_name: item.key, name: item.text, quantity: item.qty, unit: item.unit, recipes: item.recipes })
   }
 
   for (const [key, { mapping, text, amounts }] of mappedProducts) {

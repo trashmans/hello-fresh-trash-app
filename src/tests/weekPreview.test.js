@@ -376,6 +376,35 @@ describe('buildWeekPreview with ingredient mappings', () => {
 })
 
 // Undoing a mapping from the preview: each line says which ingredient mappings put it there.
+// A mapping's amount rule: one pack per recipe that uses the ingredient, or one for the week.
+describe('buildWeekPreview: amount rules', () => {
+  const stockMap = (rule) => ({
+    ingredient_key: 'chicken stock concentrate', label: 'Chicken Stock Concentrate', pantry: false, product_external_id: 601,
+    amount_rule: rule, product: { title: 'AH Kippenbouillon', sales_unit_size: '12 stuks', price: 1 },
+  })
+  const stockItem = (recipes, qty = recipes.length) => ({
+    ...item('chicken stock concentrate|count:packet', 'Chicken Stock Concentrate', qty, 'packet'),
+    contributions: recipes.map(recipeName => ({ recipeName })),
+  })
+
+  it('buys one pack per recipe that uses the ingredient, with no check needed', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, mergedItems: [stockItem(['Bibimbap', 'Risotto'])], mappings: [stockMap('per_recipe')] })
+    expect(preview.changes[0]).toMatchObject({ productId: 601, to: 2 })
+    expect(preview.review).toEqual([])
+  })
+
+  it('buys one pack for the week, with no check needed', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, mergedItems: [stockItem(['Bibimbap', 'Risotto', 'Tacos'])], mappings: [stockMap('per_week')] })
+    expect(preview.changes[0]).toMatchObject({ productId: 601, to: 1 })
+    expect(preview.review).toEqual([])
+  })
+
+  it('still asks for a check under the default rule', () => {
+    const preview = buildWeekPreview({ runDate: MONDAY, mergedItems: [stockItem(['Bibimbap'])], mappings: [stockMap('auto')] })
+    expect(preview.review).toEqual([{ reason: 'check_quantity', name: 'Chicken Stock Concentrate', productId: 601 }])
+  })
+})
+
 describe('buildWeekPreview: which mapping a line came from', () => {
   const mapping = (ingredient_key, label, externalId, title, size) => ({
     ingredient_key, label, pantry: false, product_external_id: externalId,

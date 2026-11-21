@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext'
 // (public.retailer_products). Products are found with the same AH search as staples
 // (the retailer-products Edge Function), which also puts them in the product cache.
 
-export const MAPPING_SELECT = 'ingredient_key, label, pantry, product_external_id, product:retailer_products(title, sales_unit_size, price, image_url)'
+export const MAPPING_SELECT = 'ingredient_key, label, pantry, product_external_id, amount_rule, product:retailer_products(title, sales_unit_size, price, image_url)'
 
 const byLabel = (a, b) => a.label.localeCompare(b.label)
 
@@ -77,6 +77,21 @@ export function useIngredientMappings() {
     return null
   }, [householdId])
 
+  // How much to buy for these mappings (amount_rule: 'auto' | 'per_recipe' | 'per_week').
+  const setRule = useCallback(async (ingredientKeys, rule) => {
+    if (!householdId || ingredientKeys.length === 0) return 'Your household is not loaded yet. Try again.'
+    const { data, error: updateError } = await supabase
+      .from('household_ingredient_mappings')
+      .update({ amount_rule: rule, updated_at: new Date().toISOString() })
+      .eq('household_id', householdId)
+      .in('ingredient_key', ingredientKeys)
+      .select(MAPPING_SELECT)
+    if (updateError) return updateError.message
+    const changed = new Map((data ?? []).map((m) => [m.ingredient_key, m]))
+    setMappings((list) => list.map((m) => changed.get(m.ingredient_key) ?? m))
+    return null
+  }, [householdId])
+
   // → { products, searchedFor } or { error }. One AH token refresh per call, so call it on submit.
   // suggest: true asks for the slower web-search way of finding AH's Dutch name (Suggest AH products).
   const searchProducts = useCallback(async (query, { suggest = false } = {}) => {
@@ -91,5 +106,5 @@ export function useIngredientMappings() {
     return { products: data?.products ?? [], searchedFor: data?.searchedFor ?? [query] }
   }, [])
 
-  return { available: ahEnabled && householdId != null, mappings, error, save, remove, searchProducts }
+  return { available: ahEnabled && householdId != null, mappings, error, save, remove, setRule, searchProducts }
 }

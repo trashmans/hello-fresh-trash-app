@@ -3,10 +3,10 @@ import { Home, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { describeMapping } from '@/lib/ingredientMappings'
+import { AMOUNT_RULE_OPTIONS, describeMapping } from '@/lib/ingredientMappings'
 import ProductThumb from '@/components/ProductThumb'
 
-function MappingRow({ mapping, onRemove }) {
+function MappingRow({ mapping, onRemove, onRule }) {
   const [confirm, setConfirm] = useState(false)
   return (
     <li className="flex flex-wrap items-center gap-3 py-2">
@@ -20,6 +20,16 @@ function MappingRow({ mapping, onRemove }) {
       <div className="min-w-0 flex-1">
         <p className="font-medium">{mapping.label}</p>
         <p className="truncate text-xs text-muted-foreground">{describeMapping(mapping)}</p>
+        {!mapping.pantry && onRule && (
+          <select
+            aria-label={`How much ${mapping.label} to buy`}
+            className="mt-1.5 h-9 max-w-full rounded-lg border border-input bg-card px-2 text-sm text-foreground"
+            value={mapping.amount_rule ?? 'auto'}
+            onChange={async (e) => { const m = await onRule([mapping.ingredient_key], e.target.value); if (m) toast.error(m) }}
+          >
+            {AMOUNT_RULE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
       </div>
       {confirm ? (
         <div className="flex items-center gap-1">
@@ -46,7 +56,7 @@ function MappingRow({ mapping, onRemove }) {
 // always has at home. Mappings are made from the preview's recipe lines; this list is
 // for checking and removing them. Shown only when the household's ah_enabled switch is on.
 export default function MappedIngredientsCard({ ingredientMappings }) {
-  const { available, mappings, error, remove } = ingredientMappings
+  const { available, mappings, error, remove, setRule } = ingredientMappings
   if (!available) return null
 
   return (
@@ -56,7 +66,7 @@ export default function MappedIngredientsCard({ ingredientMappings }) {
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">
-          What your household buys for a recipe ingredient. Mapped ingredients go on the AH list as that product, in whole packs.
+          What your household buys for a recipe ingredient. Mapped ingredients go on the AH list as that product, in whole packs: worked out from the recipe amount, or 1 per recipe, or 1 for the week.
         </p>
         {error && <p className="text-destructive">{error}</p>}
         {mappings.length === 0 ? (
@@ -65,7 +75,7 @@ export default function MappedIngredientsCard({ ingredientMappings }) {
           </p>
         ) : (
           <ul className="divide-y divide-border">
-            {mappings.map((m) => <MappingRow key={m.ingredient_key} mapping={m} onRemove={remove} />)}
+            {mappings.map((m) => <MappingRow key={m.ingredient_key} mapping={m} onRemove={remove} onRule={setRule} />)}
           </ul>
         )}
       </CardContent>

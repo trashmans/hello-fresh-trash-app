@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link2, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { Home, Link2, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,18 @@ function Section({ title, children }) {
       <h3 className="pb-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">{title}</h3>
       {children}
     </div>
+  )
+}
+
+function RuleButton({ onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-9 items-center gap-1.5 rounded-full border border-input bg-card px-3 text-sm font-semibold hover:bg-accent transition-colors"
+    >
+      {children}
+    </button>
   )
 }
 
@@ -120,6 +132,29 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
   }
   const onUndo = ingredientMappings.available ? undoMapping : null
 
+  // The ingredient mappings behind a product line, for the "check the quantity" buttons.
+  function mappedFromProduct(productId) {
+    const line = [...(preview?.changes ?? []), ...(preview?.onListAlready ?? [])].find(l => l.productId === productId)
+    return line?.mappedFrom ?? []
+  }
+
+  // Saved on the mappings, so this ingredient never needs the check again.
+  async function chooseRule(from, rule, name) {
+    const message = await ingredientMappings.setRule(from.map(m => m.key), rule)
+    if (message) toast.error(`Could not save that for ${name}: ${message}`)
+    else toast.success(`${name}: ${rule === 'per_recipe' ? '1 pack per recipe' : '1 pack for the week'} from now on`)
+  }
+
+  async function markAtHome(from, name) {
+    for (const m of from) {
+      const message = await ingredientMappings.save({
+        ingredient_key: m.key, label: m.label, retailer: 'ah', product_external_id: null, pantry: true,
+      })
+      if (message) { toast.error(`Could not save that for ${name}: ${message}`); return }
+    }
+    toast.success(`${name}: always at home`)
+  }
+
   const notIncluded = preview?.staples.filter(s => !s.included && s.reason !== 'missing_product') ?? []
 
   return (
@@ -154,8 +189,19 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
                     <li key={r.staple_id ?? `q:${r.productId}:${r.name}`} className="rounded-[14px] border border-primary/40 bg-primary/10 px-4 py-3">
                       <span className="font-medium">{r.name}:</span>{' '}
                       {r.reason === 'check_quantity'
-                        ? "couldn't work out how many packs the recipes need, so 1 is planned. Check the quantity."
+                        ? "couldn't work out how many packs the recipes need, so 1 is planned. How much should be bought?"
                         : 'no AH product found. Edit the staple and pin a product.'}
+                      {r.reason === 'check_quantity' && ingredientMappings.available && (() => {
+                        const from = mappedFromProduct(r.productId)
+                        if (from.length === 0) return null
+                        return (
+                          <div className="mt-2.5 flex flex-wrap gap-2">
+                            <RuleButton onClick={() => chooseRule(from, 'per_recipe', r.name)}>1 pack per recipe</RuleButton>
+                            <RuleButton onClick={() => chooseRule(from, 'per_week', r.name)}>1 pack for the week</RuleButton>
+                            <RuleButton onClick={() => markAtHome(from, r.name)}><Home className="h-3.5 w-3.5" aria-hidden="true" /> Always at home</RuleButton>
+                          </div>
+                        )
+                      })()}
                     </li>
                   ))}
                 </ul>

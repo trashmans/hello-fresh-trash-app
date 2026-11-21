@@ -138,3 +138,44 @@ describe('planWeek', () => {
     expect(() => planWeek({ runDate: 'monday', staples, products, ingredients, mappings })).toThrow()
   })
 })
+
+// How much to buy for a mapped ingredient (household_ingredient_mappings.amount_rule):
+// 'auto' compares the amount with the pack (above), 'per_recipe' buys one pack for each
+// recipe that uses it, 'per_week' buys one pack whatever the recipes need.
+describe('planWeek: amount rules for mapped ingredients', () => {
+  const stock = { stock: { externalId: 6000, salesUnitSize: '12 stuks', mechanism: null } }
+  const run = (ingredients, rule) => planWeek({
+    runDate: RUN,
+    products: stock,
+    ingredients,
+    mappings: { 'chicken stock': { product_id: 'stock', pantry: false, amount_rule: rule } },
+  })
+  const packet = (recipes) => ({ canonical_name: 'chicken stock', name: 'Chicken Stock Concentrate', quantity: recipes.length, unit: 'packet', recipes })
+
+  it('buys one pack per recipe, without asking for a check', () => {
+    const result = run([packet(['Bibimbap', 'Risotto'])], 'per_recipe')
+    expect(result.lines).toEqual([{ productId: 6000, text: null, packs: 2, sources: ['recipe'] }])
+    expect(result.review).toEqual([])
+  })
+
+  it('counts each recipe once when its ingredient is listed twice', () => {
+    const result = run([packet(['Bibimbap', 'Risotto']), packet(['Risotto', 'Tacos'])], 'per_recipe')
+    expect(result.lines[0].packs).toBe(3)
+  })
+
+  it('buys one pack for the week however many recipes use it', () => {
+    const result = run([packet(['Bibimbap', 'Risotto', 'Tacos'])], 'per_week')
+    expect(result.lines).toEqual([{ productId: 6000, text: null, packs: 1, sources: ['recipe'] }])
+    expect(result.review).toEqual([])
+  })
+
+  it('treats a missing or unknown rule as auto (and still asks for a check when it must)', () => {
+    expect(run([packet(['Bibimbap'])], undefined).review).toEqual([{ reason: 'check_quantity', ingredient: 'Chicken Stock Concentrate', productId: 6000 }])
+    expect(run([packet(['Bibimbap'])], 'weird').review).toHaveLength(1)
+  })
+
+  it('buys one pack per recipe even when the recipe list is unknown', () => {
+    const result = run([{ canonical_name: 'chicken stock', name: 'Chicken Stock Concentrate', quantity: 1, unit: 'packet' }], 'per_recipe')
+    expect(result.lines[0].packs).toBe(1)
+  })
+})
