@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-25
+- Amended: 2026-11-21 (point 3, see Amendments)
 - Deciders: Chris, David
 
 ## Context
@@ -12,7 +13,7 @@ The AH weekly shop touches almost every layer: new schema, a shared shopping lis
 
 1. **Add first, remove later.** New tables and columns are added while the old ones keep working. Old ones are removed in a separate, later PR, once nothing reads them. Every migration includes rollback SQL and loses no data when rolled back.
 2. **Per-household switch.** `households.ah_enabled` (default off, set by an admin) hides every AH screen and stops every AH call for that household. Only one household turns it on until manual sending has run cleanly for at least two weeks.
-3. **Dry run before writing.** The app shows what it would send to AH for at least two weeks before it is allowed to change a real list.
+3. **Dry run before writing.** The app shows what it would send to AH before it is allowed to change a real list, until both deciders agree the preview is right. (Until 21 Nov 2026 this was a fixed two weeks.)
 4. **Small PRs.** One concern per PR, aiming for under about 400 changed lines.
 5. **Privacy first.** The privacy policy section for AH ships in the same release that first stores an AH token.
 
@@ -29,6 +30,10 @@ Phase order:
 | 6 | Manual "Send to AH list" | Switched-on households |
 | 7 | Scheduled weekly run, Sunday prompt, Monday push (separate `automation_enabled` opt-in) | Households that opt in |
 | 8 | Data export, retention purge jobs | Requesters |
+
+## Amendments
+
+- **2026-11-21, point 3 (Chris, David).** The fixed two-week dry run is replaced by agreement between both deciders. The preview had run on production since 15 Nov 2026, and sending had been tested on the preview project, so we switch `send_enabled` on for Chris's household on 21 Nov instead of about 29 Nov. Point 2 is unchanged: other households still wait until manual sending has run cleanly for at least two weeks.
 
 ## Consequences
 
