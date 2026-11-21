@@ -73,7 +73,8 @@ export default function PrivacyPolicy() {
             <p className="mt-2">
               With the link on, your household can also keep a list of <strong>staples</strong>: things you buy
               regularly, how many and how often. To find them, the app searches AH's product range through your link
-              (search words are first sent to Google's Gemini API to put them into Dutch; nothing about you is sent)
+              (search words are first sent to Google's Gemini API to put them into Dutch; when you use "Suggest AH
+              products", Gemini also searches Google for the ingredient name at Albert Heijn; nothing about you is sent)
               and keeps the product details it sees (name, pack size, price, photo link), which contain nothing about you. Product
               photos are loaded by your browser straight from Albert Heijn's image server, which therefore sees your IP
               address, like any website you visit; the app does not tell it which page you are on. Staples

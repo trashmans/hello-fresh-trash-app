@@ -1,6 +1,7 @@
 // Search the household's supermarket (AH) for products, for the Staples screen (rollout phase 4).
 //
 // POST { query: 'crushed tomatoes' } → { products: [{ externalId, title, salesUnitSize, price, bonus }], searchedFor: ['tomatenblokjes', 'crushed tomatoes'] }
+// POST { query, mode: 'suggest' } (Suggest AH products) finds the Dutch name with a Google-grounded Gemini search first.
 //
 // English works: Gemini turns the query into the Dutch words AH uses (_shared/translateSearch.ts),
 // and AH is searched for those first, then for the words as typed.
@@ -18,7 +19,7 @@ import { createSql, pgTokenStore } from '../_shared/retailer/pgStores.ts'
 import { searchRetailerProducts } from '../_shared/retailer/productSearch.ts'
 import { RetailerError } from '../_shared/retailer/types.ts'
 import { masterKeysFromEnv, TokenCryptoError } from '../_shared/tokenCrypto.ts'
-import { translateSearchToDutch } from '../_shared/translateSearch.ts'
+import { findAhNameWithSearch, translateSearchToDutch } from '../_shared/translateSearch.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -54,7 +55,7 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
   if (authError || !user) return json(401, { error: 'unauthorized' })
 
-  let body: { query?: unknown }
+  let body: { query?: unknown; mode?: unknown }
   try { body = await req.json() } catch { return json(400, { error: 'bad_request' }) }
 
   const sql = createSql()
@@ -75,7 +76,15 @@ Deno.serve(async (req) => {
         householdId,
         retailer: RETAILER,
       }, fn),
-      translate: (query) => translateSearchToDutch(query, Deno.env.get('GEMINI_API_KEY')),
+      // Suggest AH products: a web search for AH's own name first, the plain translation if that gives nothing.
+      translate: body.mode === 'suggest'
+        ? async (query) => {
+            const found = await findAhNameWithSearch(query, Deno.env.get('GEMINI_API_KEY'))
+            // Which way the name was found (never the words themselves), to see in the logs.
+            console.log(`retailer-products: suggest via ${found ? 'web search' : 'plain translation'}`)
+            return found ?? translateSearchToDutch(query, Deno.env.get('GEMINI_API_KEY'))
+          }
+        : (query) => translateSearchToDutch(query, Deno.env.get('GEMINI_API_KEY')),
       search: (token, query, size) => adapter.searchProducts(token, query, size),
       async saveProducts(rows) {
         await sql`

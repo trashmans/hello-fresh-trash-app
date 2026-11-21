@@ -109,7 +109,7 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
   const weekPreview = useWeekPreview(shoppingList, ingredientMappings.mappings)
   const { available, preview, loading, error, run, sending, canSend } = weekPreview
   const [mappingFor, setMappingFor] = useState(null) // text of the recipe line being mapped
-  const [suggesting, setSuggesting] = useState(null) // ingredient names being suggested for, or null
+  const [suggesting, setSuggesting] = useState(false)
   if (!available) return null
 
   // Removes one ingredient mapping; the line goes back to free text (or back on the list) at once.
@@ -163,14 +163,14 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
             )}
 
             {ingredientMappings.available && (suggesting ? (
-              <SuggestMappingsPanel names={suggesting} ingredientMappings={ingredientMappings} onClose={() => setSuggesting(null)} />
+              <SuggestMappingsPanel preview={preview} ingredientMappings={ingredientMappings} onClose={() => setSuggesting(false)} />
             ) : unmappedLines(preview).length > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-border bg-banner px-5 py-4">
                 <p className="text-sm">
                   <span className="font-semibold">{unmappedLines(preview).length} recipe ingredient{unmappedLines(preview).length === 1 ? ' is' : 's are'} still text</span>{' '}
                   <span className="text-muted-foreground">and would reach AH without a product.</span>
                 </p>
-                <Button onClick={() => setSuggesting(unmappedLines(preview))} className="h-11 rounded-full px-5 font-semibold">
+                <Button onClick={() => setSuggesting(true)} className="h-11 rounded-full px-5 font-semibold">
                   <Sparkles className="h-4 w-4" /> Suggest AH products
                 </Button>
               </div>

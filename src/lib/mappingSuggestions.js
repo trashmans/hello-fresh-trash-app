@@ -19,10 +19,11 @@ const words = (text) => normalize(text).split(/[^a-z0-9]+/).filter(Boolean)
 /**
  * Recipe ingredients on the preview that are still free text: lines that would be
  * added and lines already on the AH list. Each once (case and spaces ignored), in
- * that order, at most SUGGEST_LIMIT.
+ * that order, at most SUGGEST_LIMIT. skip: names already looked at in an earlier batch,
+ * so the next batch moves on to the rest.
  */
-export function unmappedLines(preview) {
-  const seen = new Set()
+export function unmappedLines(preview, { skip = [] } = {}) {
+  const seen = new Set(skip.map(normalize))
   const out = []
   const add = (text) => {
     const key = normalize(text)

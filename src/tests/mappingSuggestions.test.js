@@ -24,6 +24,13 @@ describe('unmappedLines', () => {
     expect(unmappedLines({ changes: many, onListAlready: [] })).toHaveLength(SUGGEST_LIMIT)
   })
 
+  it('leaves out ingredients already looked at, so the next batch moves on', () => {
+    const many = Array.from({ length: SUGGEST_LIMIT + 3 }, (_, i) => change({ text: `item ${i}` }))
+    const first = unmappedLines({ changes: many, onListAlready: [] })
+    const next = unmappedLines({ changes: many, onListAlready: [] }, { skip: first.map(n => n.toUpperCase()) })
+    expect(next).toEqual(['item 15', 'item 16', 'item 17'])
+  })
+
   it('copes with no preview or empty parts', () => {
     expect(unmappedLines(null)).toEqual([])
     expect(unmappedLines({})).toEqual([])

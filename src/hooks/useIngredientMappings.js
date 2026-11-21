@@ -78,8 +78,9 @@ export function useIngredientMappings() {
   }, [householdId])
 
   // → { products, searchedFor } or { error }. One AH token refresh per call, so call it on submit.
-  const searchProducts = useCallback(async (query) => {
-    const { data, error: fnError } = await supabase.functions.invoke('retailer-products', { body: { query } })
+  // suggest: true asks for the slower web-search way of finding AH's Dutch name (Suggest AH products).
+  const searchProducts = useCallback(async (query, { suggest = false } = {}) => {
+    const { data, error: fnError } = await supabase.functions.invoke('retailer-products', { body: suggest ? { query, mode: 'suggest' } : { query } })
     if (fnError) {
       let message = 'Search failed. Try again.'
       if (fnError instanceof FunctionsHttpError) {
