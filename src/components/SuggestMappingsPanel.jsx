@@ -68,6 +68,8 @@ export default function SuggestMappingsPanel({ preview, ingredientMappings, onCl
 
   const open = items?.filter(i => i.status === 'open') ?? []
   const sureOpen = open.filter(i => i.suggestion?.sure).length
+  // No suggestion at all (nothing found, or the lookup failed): needs a person's decision.
+  const noMatchOpen = open.filter(i => !i.suggestion?.product).length
   const ghostPill = 'h-9 rounded-full px-3 text-sm font-semibold'
 
   return (
@@ -94,6 +96,15 @@ export default function SuggestMappingsPanel({ preview, ingredientMappings, onCl
 
       {items && (
         <>
+          {noMatchOpen > 0 && (
+            <p role="status" className="flex items-start gap-2 rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+              <span>
+                <span className="font-semibold">{noMatchOpen} ingredient{noMatchOpen === 1 ? ' has' : 's have'} no match.</span>{' '}
+                Pick another product, mark it At home, or Skip to leave it as text on your AH list.
+              </span>
+            </p>
+          )}
           {sureOpen > 0 && (
             <Button onClick={acceptAllSure} disabled={busy} className="h-11 rounded-full bg-secondary px-5 font-bold text-secondary-foreground hover:bg-secondary/90">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Accept {sureOpen} good match{sureOpen === 1 ? '' : 'es'}
@@ -102,16 +113,19 @@ export default function SuggestMappingsPanel({ preview, ingredientMappings, onCl
           <ul className="divide-y divide-border rounded-[14px] border border-border bg-card">
             {items.map(item => {
               const p = item.suggestion?.product
+              const noMatch = item.status === 'open' && !p
               return (
-                <li key={item.name} className="px-4 py-3">
+                <li key={item.name} className={`px-4 py-3 ${noMatch ? 'bg-destructive/5' : ''}`}>
                   <div className="flex flex-wrap items-center gap-3">
-                    {p ? <ProductThumb src={p.imageUrl} className="h-10 w-10 rounded-[10px]" /> : <span className="w-10 shrink-0" aria-hidden="true" />}
+                    {p ? <ProductThumb src={p.imageUrl} className="h-10 w-10 rounded-[10px]" />
+                      : noMatch ? <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-destructive/15 text-destructive"><AlertTriangle className="h-4 w-4" aria-hidden="true" /></span>
+                        : <span className="w-10 shrink-0" aria-hidden="true" />}
                     <div className="min-w-0 flex-[1_1_200px]">
                       <p className="text-[15px] font-medium">{item.name}</p>
-                      <p className="text-[13px] text-muted-foreground">
-                        {item.error ? item.error
+                      <p className={`text-[13px] ${noMatch ? 'font-semibold text-destructive' : 'text-muted-foreground'}`}>
+                        {item.error ? `Couldn't look this up: ${item.error}`
                           : p ? <>→ {p.title}{p.salesUnitSize ? ` · ${p.salesUnitSize}` : ''}</>
-                            : 'No AH product found'}
+                            : 'No AH product found — pick one, mark At home, or Skip'}
                         {item.searchedFor && item.searchedFor.toLowerCase() !== item.name.toLowerCase() && (
                           <span className="block text-xs">Searched AH for “{item.searchedFor}”</span>
                         )}
@@ -162,9 +176,14 @@ export default function SuggestMappingsPanel({ preview, ingredientMappings, onCl
             })}
           </ul>
           {nextBatch.length > 0 ? (
-            <Button variant="outline" onClick={lookUpNext} disabled={busy} className="h-11 rounded-full px-5 font-semibold">
-              Look up the next {nextBatch.length} ingredient{nextBatch.length === 1 ? '' : 's'}
-            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="outline" onClick={lookUpNext} disabled={busy || noMatchOpen > 0} className="h-11 rounded-full px-5 font-semibold">
+                Look up the next {nextBatch.length} ingredient{nextBatch.length === 1 ? '' : 's'}
+              </Button>
+              {noMatchOpen > 0 && (
+                <span className="text-sm text-muted-foreground">Deal with the ingredient{noMatchOpen === 1 ? '' : 's'} without a match first.</span>
+              )}
+            </div>
           ) : open.length === 0 && (
             <p className="text-sm text-muted-foreground">All done. Refresh the preview if a line doesn&apos;t show its product yet.</p>
           )}
