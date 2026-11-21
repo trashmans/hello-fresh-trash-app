@@ -44,3 +44,24 @@ export function checkShareNote(raw) {
   }
   return { ok: true, note: note || null }
 }
+
+// What the app says for each code the Social database functions raise.
+const ERROR_MESSAGES = {
+  invalid_email: 'Enter an email address, like name@example.com.',
+  already_user: 'That person already uses the app. Use Add friend instead.',
+  invite_limit: `You can send ${INVITE_DAILY_LIMIT} invites a day. Try again tomorrow.`,
+  not_found: 'There is no one with that email in the app yet. Invite them instead.',
+  self: "You can't add yourself.",
+  not_friends: 'You can only share with your friends.',
+  too_many: 'Too many at once. Try fewer people.',
+  invalid_note: `Keep the note under ${SHARE_NOTE_MAX} characters.`,
+  not_ready: 'That recipe is not ready yet.',
+  not_signed_in: 'Sign in again, then try once more.',
+}
+
+/** A readable message for an error from a Social database function (its message holds the code). */
+export function socialErrorMessage(raw) {
+  const text = typeof raw === 'string' ? raw : ''
+  const code = Object.keys(ERROR_MESSAGES).find((c) => new RegExp(`\\b${c}\\b`).test(text))
+  return code ? ERROR_MESSAGES[code] : 'Something went wrong. Try again.'
+}

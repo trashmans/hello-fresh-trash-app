@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { renderPdfCoverBlob } from '@/lib/pdfCover'
 import RecipeTable from '@/components/RecipeTable'
+import { useFriendIds } from '@/hooks/useSocial'
 import RecipeDeleteMenu from '@/components/RecipeDeleteMenu'
 import WeekListButton from '@/components/WeekListButton'
 import { RECIPE_FILTERS, normalizeRecipeFilter, filterRecipes } from '@/lib/recipeFilter'
@@ -161,6 +162,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   const [backfilling, setBackfilling] = useState(false)
   const [viewMode, setViewModeRaw] = useState(loadViewMode)
   const [ownerFilter, setOwnerFilterRaw] = useState(loadOwnerFilter)
+  const friendIds = useFriendIds()
 
   function setOwnerFilter(filter) {
     setOwnerFilterRaw(filter)
@@ -449,9 +451,8 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
   // ingredientMatches already contains only recipes matching every
   // selected ingredient chip (AND match) — see useIngredientFilter.
-  // The owner filter (all / mine / friends) applies first; friend ids come
-  // with the Social tab, so for now "friends" is disabled and matches nothing.
-  const ownerRecipes = filterRecipes(recipes, ownerFilter, { userId: session.user.id })
+  // The owner filter (all / mine / friends) applies first; friends come from the Social tab.
+  const ownerRecipes = filterRecipes(recipes, ownerFilter, { userId: session.user.id, friendIds })
   const displayRecipes = ingredientMatches
     ? ownerRecipes.filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
     : ownerRecipes
@@ -571,7 +572,9 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
       {ownerRecipes.length === 0 && (
         <EmptyState
           title={ownerFilter === 'mine' ? "You haven't uploaded any recipes yet" : 'No recipes here yet'}
-          text={ownerFilter === 'mine' ? 'Upload a recipe PDF, or switch to All recipes.' : 'Switch to All recipes to see everything.'}
+          text={ownerFilter === 'mine' ? 'Upload a recipe PDF, or switch to All recipes.'
+            : ownerFilter === 'friends' ? (friendIds.length ? "Your friends haven't uploaded recipes yet." : 'Add friends on the Social tab, or switch to All recipes.')
+            : 'Switch to All recipes to see everything.'}
         />
       )}
 

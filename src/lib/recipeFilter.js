@@ -1,11 +1,10 @@
 // Which recipes the Recipes tab shows: everyone's, only mine, or only my
-// friends'. Friends come with the Social tab; until then the friends filter
-// is shown but disabled, and has no friend ids to match. Pure: no I/O.
+// friends' (from the Social tab's friendships). Pure: no I/O.
 
 export const RECIPE_FILTERS = [
   { key: 'all', label: 'All recipes' },
   { key: 'mine', label: 'My recipes' },
-  { key: 'friends', label: "Friends' recipes", needsSocial: true },
+  { key: 'friends', label: "Friends' recipes" },
 ]
 
 const KEYS = new Set(RECIPE_FILTERS.map((f) => f.key))

@@ -14,11 +14,11 @@ const recipes = [
 const ids = (list) => list.map((r) => r.id)
 
 describe('RECIPE_FILTERS', () => {
-  it('offers all, mine and friends, in that order; friends needs the Social tab', () => {
+  it('offers all, mine and friends, in that order, all available now that Social exists', () => {
     expect(RECIPE_FILTERS).toEqual([
       { key: 'all', label: 'All recipes' },
       { key: 'mine', label: 'My recipes' },
-      { key: 'friends', label: "Friends' recipes", needsSocial: true },
+      { key: 'friends', label: "Friends' recipes" },
     ])
   })
 })
@@ -50,7 +50,7 @@ describe('filterRecipes', () => {
     expect(ids(filterRecipes(recipes, 'friends', { userId: ME, friendIds: [FRIEND] }))).toEqual(['r2'])
   })
 
-  it('friends: nothing until there are friends (before the Social tab exists)', () => {
+  it('friends: nothing while you have no friends', () => {
     expect(filterRecipes(recipes, 'friends', { userId: ME })).toEqual([])
     expect(filterRecipes(recipes, 'friends', { userId: ME, friendIds: [] })).toEqual([])
   })
