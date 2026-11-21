@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import RecipeCatalogue from '@/components/RecipeCatalogue'
 import RecipePreviewPanel from '@/components/RecipePreviewPanel'
@@ -24,17 +24,20 @@ export default function Recipes() {
     setSelectedIngredients(prev => prev.filter(t => t !== term))
   }
 
-  function handleClose() {
-    setSelectedRecipe(null)
-  }
+  const handleClose = useCallback(() => setSelectedRecipe(null), [])
 
   function handleDelete(recipe) {
     if (selectedRecipe?.id === recipe.id) setSelectedRecipe(null)
   }
 
+  // The catalogue stays mounted (only hidden) while a recipe is open, so going
+  // back keeps its scroll position, filters and loaded covers.
   return (
-    <div className="flex h-full">
-      <div className={`overflow-y-auto transition-all ${selectedRecipe ? 'w-1/2' : 'w-full'}`}>
+    <div className="relative h-full">
+      <div
+        className={`absolute inset-0 overflow-y-auto ${selectedRecipe ? 'invisible' : ''}`}
+        aria-hidden={selectedRecipe ? true : undefined}
+      >
         <div className="mx-auto flex max-w-[1200px] flex-col gap-10 lg:gap-12 px-4 py-8 lg:px-6 lg:py-12">
           <section className="flex flex-col gap-5">
             <h1 className="max-w-[760px] text-4xl sm:text-5xl lg:text-[56px] font-bold leading-[1.02] tracking-[-0.02em]">
@@ -84,8 +87,14 @@ export default function Recipes() {
         </div>
       </div>
       {selectedRecipe && (
-        <div className="w-1/2 border-l border-border p-6 flex flex-col overflow-hidden">
-          <RecipePreviewPanel recipe={selectedRecipe} onClose={handleClose} />
+        <div className="absolute inset-0 overflow-y-auto">
+          <RecipePreviewPanel
+            key={selectedRecipe.id}
+            recipe={selectedRecipe}
+            onClose={handleClose}
+            inList={shoppingList.selectedIds.includes(selectedRecipe.id)}
+            onToggle={shoppingList.toggleRecipe}
+          />
         </div>
       )}
     </div>

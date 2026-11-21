@@ -1,30 +1,32 @@
 import { useEffect, useState } from 'react'
-import { X, Scale, RotateCcw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ArrowLeft, Check, FileText, Minus, Plus, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useRecipeIngredients } from '@/hooks/useRecipeIngredients'
 import { useRecipeStepImages } from '@/hooks/useRecipeStepImages'
 import { useAuth } from '@/context/AuthContext'
 import { convertIngredientUnit, formatTemperatureText, unitOptionsFor, unitOptionValueFor } from '@/lib/units'
 import { computeScaleFactorFromServings, computeScaleFactorFromIngredient, scaleIngredients, scaleStepText } from '@/lib/scaling'
+import { RECIPE_TABLE_COLUMNS, formatRecipeCell } from '@/lib/recipeSort'
 
-function formatIngredientLine(ingredient, unitPrefs) {
+// Amount ("2 tbsp") and name ("butter, softened") shown in two columns.
+function ingredientParts(ingredient, unitPrefs) {
   const { quantity, unit } = convertIngredientUnit(ingredient.quantity, ingredient.unit, unitPrefs)
-  const parts = []
-  if (quantity != null) parts.push(String(quantity))
-  if (unit) parts.push(unit)
-  parts.push(ingredient.name)
-  let line = parts.join(' ')
-  if (ingredient.preparation) line += `, ${ingredient.preparation}`
-  return line
+  const amount = [quantity != null ? String(quantity) : null, unit || null].filter(Boolean).join(' ')
+  const name = ingredient.preparation ? `${ingredient.name}, ${ingredient.preparation}` : ingredient.name
+  return { amount, name }
 }
+
+const segment = (active) =>
+  `h-9 rounded-full px-4 text-sm font-semibold transition-colors ${
+    active ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+  }`
+
+const fieldClass = 'h-11 rounded-xl border border-input bg-card px-3 text-base text-foreground'
 
 // Scale-by-servings and scale-by-ingredient controls for the ingredients
 // list below. Purely a view-time transform (see src/lib/scaling.js) —
 // never writes anything back to the recipe or the shopping list.
-function ScaleControls({ recipe, ingredients, scaleState, setScaleState }) {
+function ScaleControls({ recipe, ingredients, scaleState, setScaleState, scaleFailed }) {
   const { mode, targetServings, ingredientId, targetQuantity, targetUnit } = scaleState
   const scalableIngredients = ingredients.filter(ing => ing.quantity != null)
   const selectedIngredient = scalableIngredients.find(ing => ing.id === ingredientId) ?? null
@@ -39,93 +41,102 @@ function ScaleControls({ recipe, ingredients, scaleState, setScaleState }) {
     })
   }
 
-  function reset() {
-    setScaleState({ mode: null })
+  function stepServings(delta) {
+    const current = Number(targetServings) || recipe.servings || 1
+    setScaleState({ targetServings: Math.max(1, Math.round(current) + delta) })
   }
 
   const unitOptions = selectedIngredient ? unitOptionsFor(selectedIngredient.unit) : []
   const unitIsFixed = unitOptions.length <= 1
+  const changed = mode === 'ingredient' || (mode === 'servings' && targetServings !== recipe.servings)
 
   return (
-    <div className="mb-4 rounded-md border border-border bg-muted/30 p-3 text-sm">
-      <div className="flex items-center gap-2 mb-2">
-        <Scale className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="font-medium">Scale recipe</span>
-        {mode && (
-          <button
-            className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            onClick={reset}
-          >
-            <RotateCcw className="h-3 w-3" />
-            Reset
-          </button>
-        )}
-      </div>
-
-      <div className="flex gap-2 mb-2">
-        <Button
-          type="button"
-          variant={mode === 'servings' ? 'default' : 'outline'}
-          size="sm"
-          className="text-xs"
-          onClick={() => setScaleState({ mode: 'servings', targetServings: recipe.servings ?? '' })}
-        >
-          By servings
-        </Button>
-        <Button
-          type="button"
-          variant={mode === 'ingredient' ? 'default' : 'outline'}
-          size="sm"
-          className="text-xs"
-          disabled={scalableIngredients.length === 0}
-          onClick={() => selectIngredient(scalableIngredients[0]?.id)}
-        >
-          By ingredient amount
-        </Button>
+    <div className="flex flex-col gap-3.5 rounded-[22px] border border-border bg-banner p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-[22px] font-bold">Scale recipe</h2>
+        <div className="flex items-center gap-2">
+          {changed && (
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setScaleState(recipe.servings ? { mode: 'servings', targetServings: recipe.servings } : { mode: null })}
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              Reset
+            </button>
+          )}
+          <div role="group" aria-label="Scale by" className="flex gap-1 rounded-full border border-border bg-card p-1">
+            <button
+              type="button"
+              aria-pressed={mode === 'servings'}
+              disabled={recipe.servings == null}
+              className={`${segment(mode === 'servings')} disabled:opacity-50`}
+              onClick={() => setScaleState({ mode: 'servings', targetServings: recipe.servings ?? '' })}
+            >
+              By servings
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === 'ingredient'}
+              disabled={scalableIngredients.length === 0}
+              className={`${segment(mode === 'ingredient')} disabled:opacity-50`}
+              onClick={() => selectIngredient(scalableIngredients[0]?.id)}
+            >
+              By ingredient amount
+            </button>
+          </div>
+        </div>
       </div>
 
       {mode === 'servings' && (
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Servings:</span>
-          <Input
-            type="number"
-            min="0"
-            step="0.5"
-            className="h-8 w-20"
-            value={targetServings}
-            onChange={(e) => setScaleState({ ...scaleState, targetServings: e.target.value === '' ? '' : Number(e.target.value) })}
-          />
-          <span className="text-xs text-muted-foreground">(recipe serves {recipe.servings ?? '?'})</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" aria-label="Fewer servings" onClick={() => stepServings(-1)}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-input bg-card hover:bg-accent">
+            <Minus className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <span className="min-w-[120px] text-center font-display text-2xl font-bold" aria-live="polite">
+            {targetServings || '?'} serving{Number(targetServings) === 1 ? '' : 's'}
+          </span>
+          <button type="button" aria-label="More servings" onClick={() => stepServings(1)}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-input bg-card hover:bg-accent">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <span className="text-sm text-muted-foreground">
+            The card is for {recipe.servings}. Amounts in the steps scale too.
+          </span>
         </div>
       )}
 
       {mode === 'ingredient' && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted-foreground">I have:</span>
-          <Input
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">I have</span>
+          <input
             type="number"
             min="0"
             step="any"
-            className="h-8 w-24"
+            aria-label="Amount you have"
+            className={`${fieldClass} w-24`}
             value={targetQuantity}
-            onChange={(e) => setScaleState({ ...scaleState, targetQuantity: e.target.value === '' ? '' : Number(e.target.value) })}
+            onChange={(e) => setScaleState({ targetQuantity: e.target.value === '' ? '' : Number(e.target.value) })}
           />
           {unitIsFixed ? (
-            <span className="text-sm">{targetUnit}</span>
+            <span className="text-base">{targetUnit}</span>
           ) : (
             <select
-              className="h-8 rounded-md border border-input bg-input px-2 text-sm text-foreground"
+              aria-label="Unit"
+              className={fieldClass}
               value={targetUnit}
-              onChange={(e) => setScaleState({ ...scaleState, targetUnit: e.target.value })}
+              onChange={(e) => setScaleState({ targetUnit: e.target.value })}
             >
               {unitOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           )}
-          <span className="text-muted-foreground">of:</span>
+          <span className="text-muted-foreground">of</span>
           <select
-            className="h-8 flex-1 min-w-[8rem] rounded-md border border-input bg-input px-2 text-sm text-foreground"
+            aria-label="Ingredient"
+            className={`${fieldClass} flex-1 min-w-[10rem]`}
             value={ingredientId ?? ''}
             onChange={(e) => selectIngredient(e.target.value)}
           >
@@ -135,26 +146,12 @@ function ScaleControls({ recipe, ingredients, scaleState, setScaleState }) {
           </select>
         </div>
       )}
-    </div>
-  )
-}
 
-function RecipeMeta({ recipe }) {
-  const items = [
-    recipe.prep_time_minutes != null && `Prep ${recipe.prep_time_minutes} min`,
-    recipe.cook_time_minutes != null && `Cook ${recipe.cook_time_minutes} min`,
-    recipe.servings != null && `Serves ${recipe.servings}`,
-    recipe.difficulty,
-    recipe.cuisine,
-  ].filter(Boolean)
-
-  if (items.length === 0) return null
-
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-4">
-      {items.map((item, i) => (
-        <span key={i}>{item}</span>
-      ))}
+      {scaleFailed && (
+        <p className="text-sm text-destructive">
+          Enter a valid amount in a unit compatible with the recipe&apos;s (e.g. lb/kg, cups/mL, or the exact same unit).
+        </p>
+      )}
     </div>
   )
 }
@@ -164,14 +161,15 @@ function InstructionsView({ recipe }) {
   const { ingredients, loading } = useRecipeIngredients(recipe.id)
   const steps = recipe.steps ?? []
   const { stepImageUrls } = useRecipeStepImages(recipe.id, steps.length)
-  const [scaleState, setScaleStateRaw] = useState({ mode: null })
+  const initialScale = () => (recipe.servings ? { mode: 'servings', targetServings: recipe.servings } : { mode: null })
+  const [scaleState, setScaleStateRaw] = useState(initialScale)
 
   // Reset any active scaling when the viewer switches to a different
   // recipe — a scale chosen for one recipe shouldn't silently carry over
   // and misrepresent another.
   useEffect(() => {
-    setScaleStateRaw({ mode: null })
-  }, [recipe.id])
+    setScaleStateRaw(recipe.servings ? { mode: 'servings', targetServings: recipe.servings } : { mode: null })
+  }, [recipe.id, recipe.servings])
 
   function setScaleState(patch) {
     setScaleStateRaw(prev => ({ ...prev, ...patch }))
@@ -188,57 +186,69 @@ function InstructionsView({ recipe }) {
   const displayIngredients = scaleFactor != null ? scaleIngredients(ingredients, scaleFactor) : ingredients
 
   return (
-    <div className="flex-1 overflow-y-auto min-h-0">
-      <RecipeMeta recipe={recipe} />
-
+    <div className="flex flex-col gap-8">
       {!loading && ingredients.length > 0 && (
         <ScaleControls
           recipe={recipe}
           ingredients={ingredients}
           scaleState={scaleState}
           setScaleState={setScaleState}
+          scaleFailed={scaleFailed}
         />
       )}
-      {scaleFailed && (
-        <p className="text-xs text-destructive -mt-2 mb-4">
-          Enter a valid amount in a unit compatible with the recipe's (e.g. lb/kg, cups/mL, or the exact same unit).
-        </p>
-      )}
 
-      <h4 className="font-medium mb-2">Ingredients</h4>
-      {loading && <p className="text-sm text-muted-foreground mb-4">Loading ingredients…</p>}
-      {!loading && ingredients.length === 0 && (
-        <p className="text-sm text-muted-foreground mb-4">No ingredients recorded for this recipe.</p>
-      )}
-      {!loading && ingredients.length > 0 && (
-        <ul className="mb-6 space-y-1 text-sm">
-          {displayIngredients.map(ing => (
-            <li key={ing.id}>{formatIngredientLine(ing, unitPrefs)}</li>
-          ))}
-        </ul>
-      )}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-[28px] font-bold">Ingredients</h2>
+        {loading && <p className="text-sm text-muted-foreground">Loading ingredients…</p>}
+        {!loading && ingredients.length === 0 && (
+          <p className="text-sm text-muted-foreground">No ingredients recorded for this recipe.</p>
+        )}
+        {!loading && ingredients.length > 0 && (
+          <ul className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+            {displayIngredients.map(ing => {
+              const { amount, name } = ingredientParts(ing, unitPrefs)
+              return (
+                <li key={ing.id} className="flex gap-3 border-b border-border py-3 text-[15px]">
+                  <span className="min-w-[72px] font-semibold text-primary-text">{amount}</span>
+                  <span>{name}</span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
 
-      <h4 className="font-medium mb-2">Instructions</h4>
-      {steps.length === 0 && (
-        <p className="text-sm text-muted-foreground">No instructions recorded for this recipe.</p>
-      )}
-      {steps.length > 0 && (
-        <ol className="space-y-4 text-sm list-decimal list-outside pl-5">
-          {steps.map((step, i) => (
-            <li key={i}>
-              {stepImageUrls[i] && (
-                <img
-                  src={stepImageUrls[i]}
-                  alt=""
-                  className="w-full max-w-sm aspect-video object-cover rounded-md mb-2"
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
-                />
-              )}
-              {formatTemperatureText(scaleStepText(step, scaleFactor, unitPrefs), unitPrefs.temperature_unit)}
-            </li>
-          ))}
-        </ol>
-      )}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-[28px] font-bold">Steps</h2>
+        {steps.length === 0 && (
+          <p className="text-sm text-muted-foreground">No instructions recorded for this recipe.</p>
+        )}
+        {steps.length > 0 && (
+          <ol className="flex flex-col gap-5">
+            {steps.map((step, i) => (
+              <li key={i} className="flex flex-wrap items-start gap-5">
+                {stepImageUrls[i] && (
+                  <img
+                    src={stepImageUrls[i]}
+                    alt=""
+                    className="aspect-video w-full object-cover rounded-[14px] sm:w-[200px] sm:flex-[0_0_200px]"
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  />
+                )}
+                <div className="flex min-w-0 flex-[1_1_260px] gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 font-bold text-primary-text" aria-hidden="true">
+                    {i + 1}
+                  </span>
+                  <p className="mt-1 text-base leading-relaxed">
+                    <span className="sr-only">Step {i + 1}: </span>
+                    {formatTemperatureText(scaleStepText(step, scaleFactor, unitPrefs), unitPrefs.temperature_unit)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
     </div>
   )
 }
@@ -269,13 +279,13 @@ function PdfView({ recipe }) {
   }, [recipe])
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex flex-col">
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!error && !url && <p className="text-sm text-muted-foreground">Loading preview…</p>}
       {url && (
         <iframe
           src={url}
-          className="flex-1 w-full rounded border border-border min-h-0"
+          className="h-[75vh] w-full rounded-[18px] border border-border bg-card"
           title={recipe.name ?? recipe.filename}
         />
       )}
@@ -283,30 +293,151 @@ function PdfView({ recipe }) {
   )
 }
 
-export default function RecipePreviewPanel({ recipe, onClose }) {
+const NUTRITION = [
+  { key: 'calories_kcal', label: 'kcal', bare: true },
+  { key: 'protein_g', label: 'protein' },
+  { key: 'fat_g', label: 'fat' },
+  { key: 'fibre_g', label: 'fibre' },
+]
+
+function NutritionCard({ recipe }) {
+  const cells = NUTRITION.map(n => {
+    const column = RECIPE_TABLE_COLUMNS.find(c => c.key === n.key)
+    const cell = formatRecipeCell(recipe, column)
+    // "780 kcal" → "780"; the unit is the label underneath.
+    const text = n.bare && !cell.empty ? cell.text.replace(/\s*kcal$/, '') : cell.text
+    return { ...n, ...cell, text }
+  })
+  if (cells.every(c => c.empty)) return null
+  const anyEstimated = cells.some(c => c.estimated)
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between mb-4 shrink-0">
-        <h3 className="font-semibold truncate">{recipe.name ?? recipe.filename}</h3>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
+    <div className="flex flex-col gap-3 rounded-[18px] border border-border bg-card p-5">
+      <h2 className="font-sans text-[15px] font-semibold">Nutrition per serving</h2>
+      <div className="grid grid-cols-4 gap-3">
+        {cells.map(c => (
+          <div key={c.key}>
+            <p className={`font-display text-[22px] font-bold ${c.empty ? 'text-muted-foreground' : ''}`}>{c.text}</p>
+            <p className="text-[13px] text-muted-foreground">{c.label}</p>
+          </div>
+        ))}
       </div>
+      {anyEstimated && (
+        <p className="text-[13px] text-muted-foreground">~ estimated from the ingredients; the card didn&apos;t print it.</p>
+      )}
+    </div>
+  )
+}
 
-      <Tabs defaultValue="instructions" className="flex-1 min-h-0">
-        <TabsList className="shrink-0">
-          <TabsTrigger value="instructions">Instructions</TabsTrigger>
-          <TabsTrigger value="pdf">Original PDF</TabsTrigger>
-        </TabsList>
+// Signed URL for the cover and the uploader's name, fetched here so the
+// detail page doesn't depend on what the gallery happened to load.
+function useRecipeExtras(recipe) {
+  const [coverUrl, setCoverUrl] = useState(null)
+  const [uploader, setUploader] = useState(null)
 
-        <TabsContent value="instructions" className="flex flex-col min-h-0">
-          <InstructionsView recipe={recipe} />
-        </TabsContent>
+  useEffect(() => {
+    let cancelled = false
+    setCoverUrl(null)
+    setUploader(null)
+    if (recipe.cover_path) {
+      supabase.storage.from('recipe-pdfs').createSignedUrl(recipe.cover_path, 3600)
+        .then(({ data }) => { if (!cancelled && data?.signedUrl) setCoverUrl(data.signedUrl) })
+    }
+    if (recipe.uploaded_by) {
+      supabase.from('profiles').select('display_name').eq('id', recipe.uploaded_by).maybeSingle()
+        .then(({ data }) => { if (!cancelled && data?.display_name) setUploader(data.display_name) })
+    }
+    return () => { cancelled = true }
+  }, [recipe.id, recipe.cover_path, recipe.uploaded_by])
 
-        <TabsContent value="pdf" className="flex flex-col min-h-0">
-          <PdfView recipe={recipe} />
-        </TabsContent>
-      </Tabs>
+  return { coverUrl, uploader }
+}
+
+// Full-page recipe view inside the Recipes tab: cover, facts, nutrition and
+// the add-to-week button on the left; Instructions (scaling, ingredients,
+// steps) or the original PDF on the right. Columns stack on narrow screens.
+export default function RecipePreviewPanel({ recipe, onClose, inList = false, onToggle }) {
+  const [tab, setTab] = useState('instructions')
+  const { coverUrl, uploader } = useRecipeExtras(recipe)
+  const name = recipe.name ?? recipe.filename
+
+  useEffect(() => { setTab('instructions') }, [recipe.id])
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const eyebrow = [recipe.cuisine, recipe.protein_source].filter(Boolean).join(' · ')
+  const facts = [
+    recipe.prep_time_minutes != null && `Prep ${recipe.prep_time_minutes} min`,
+    recipe.cook_time_minutes != null && `Cook ${recipe.cook_time_minutes} min`,
+    recipe.servings != null && `Serves ${recipe.servings}`,
+    recipe.difficulty,
+  ].filter(Boolean)
+
+  return (
+    <div className="mx-auto flex max-w-[1200px] flex-col gap-7 px-4 py-6 lg:px-6 lg:py-8">
+      <button
+        type="button"
+        onClick={onClose}
+        className="inline-flex min-h-11 items-center gap-1.5 self-start text-[15px] font-semibold hover:text-primary-text transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        All recipes
+      </button>
+
+      <div className="flex flex-wrap items-start gap-10">
+        <section className="flex min-w-0 flex-[1_1_380px] flex-col gap-5">
+          <div className="aspect-[4/3] overflow-hidden rounded-[22px] bg-muted">
+            {coverUrl ? (
+              <img src={coverUrl} alt="" className="h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center">
+                <FileText className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            {eyebrow && <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">{eyebrow}</p>}
+            <h1 className="text-[32px] sm:text-[40px] font-bold leading-[1.05] tracking-[-0.01em]">{name}</h1>
+            {uploader && <p className="text-[15px] text-muted-foreground">Uploaded by {uploader}</p>}
+          </div>
+          {facts.length > 0 && (
+            <div className="flex flex-wrap gap-2 text-sm">
+              {facts.map(f => (
+                <span key={f} className="rounded-full border border-border bg-card px-3 py-2">{f}</span>
+              ))}
+            </div>
+          )}
+          {onToggle && (
+            <button
+              type="button"
+              aria-pressed={inList}
+              onClick={() => onToggle(recipe)}
+              className={`flex h-[52px] items-center justify-center gap-2 rounded-[14px] text-base font-bold transition-opacity hover:opacity-90 ${
+                inList ? 'bg-secondary text-secondary-foreground' : 'bg-primary text-primary-foreground'
+              }`}
+            >
+              {inList ? <><Check className="h-5 w-5" aria-hidden="true" />In this week&apos;s list</> : <><Plus className="h-5 w-5" aria-hidden="true" />Add to this week</>}
+            </button>
+          )}
+          <NutritionCard recipe={recipe} />
+        </section>
+
+        <section className="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
+          <div role="tablist" aria-label="Recipe" className="flex gap-1 self-start rounded-full border border-border bg-card p-1">
+            <button role="tab" type="button" aria-selected={tab === 'instructions'} className={segment(tab === 'instructions')} onClick={() => setTab('instructions')}>
+              Instructions
+            </button>
+            <button role="tab" type="button" aria-selected={tab === 'pdf'} className={segment(tab === 'pdf')} onClick={() => setTab('pdf')}>
+              Original PDF
+            </button>
+          </div>
+          {tab === 'instructions' ? <InstructionsView recipe={recipe} /> : <PdfView recipe={recipe} />}
+        </section>
+      </div>
     </div>
   )
 }
