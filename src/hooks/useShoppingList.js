@@ -81,8 +81,6 @@ function reducer(state, action) {
 //   - When the tab gets focus again the list is fetched again and merged, keeping
 //     changes that are not saved yet. (Realtime comes in a follow-up PR.)
 //   - Saves and refetches run one after another through a queue, never interleaved.
-// Until step 3 drops it, each save also copies the list into the caller's
-// public.shopping_lists row, so this step can be rolled back without loss.
 export function useShoppingList() {
   const { session } = useAuth()
   const userId = session?.user?.id
@@ -137,7 +135,6 @@ export function useShoppingList() {
         const failed = results.find(r => r.error)
         if (!failed) {
           baseRef.current = mergeRemote(baseRef.current, target, baseRef.current)
-          mirrorToOwnList(userId, target)
           return
         }
 
@@ -250,23 +247,4 @@ function runOp(op, householdId, userId) {
     default:
       return Promise.resolve({ error: null })
   }
-}
-
-// Rollback safety net until step 3: public.shopping_lists is no longer read, so a
-// failure here is only logged.
-function mirrorToOwnList(userId, list) {
-  supabase
-    .from('shopping_lists')
-    .upsert(
-      {
-        user_id: userId,
-        recipe_selections: list.recipeSelections,
-        adjusted_items: list.adjustedItems,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id' }
-    )
-    .then(({ error }) => {
-      if (error) console.warn('shopping_lists copy failed:', error.message)
-    })
 }
