@@ -14,8 +14,9 @@
 //   staples      staple rows (see staples.js) with product_id
 //   products     { [product_id]: { externalId, salesUnitSize, mechanism } }
 //   ingredients  recipe ingredients already scaled to the chosen servings:
-//                [{ canonical_name, name, quantity, unit }]
-//   mappings     { [canonical name, lowercase]: { product_id, pantry } }
+//                [{ canonical_name, name, quantity, unit, recipes? }] (recipes: names of the recipes using it)
+//   mappings     { [canonical name, lowercase]: { product_id, pantry, amount_rule? } }
+//                (amount_rule: 'auto' | 'per_recipe' | 'per_week', see AMOUNT_RULES)
 //
 // Output
 //   weekStart        Monday of the run week
@@ -75,6 +76,11 @@ function planStaples(staples, products, weekStart) {
   return { lines, updates, decisions, review }
 }
 
+// How much to buy for a mapped ingredient (household_ingredient_mappings.amount_rule):
+// auto compares the recipes' amount with the pack size; per_recipe buys one pack for each
+// recipe that uses it; per_week buys one pack whatever the recipes need. Anything else is auto.
+const AMOUNT_RULES = new Set(['auto', 'per_recipe', 'per_week'])
+
 function planIngredients(ingredients, products, mappings) {
   // One entry per mapped product or per unmapped ingredient name, in first-seen order.
   const entries = new Map()
@@ -98,9 +104,25 @@ function planIngredients(ingredients, products, mappings) {
 
     const entryKey = `p:${mapping.product_id}`
     if (!entries.has(entryKey)) {
-      entries.set(entryKey, { kind: 'product', label, product, total: null, comparable: true })
+      entries.set(entryKey, {
+        kind: 'product', label, product, total: null, comparable: true,
+        hasAuto: false, recipes: new Set(), unknownRecipes: 0, perWeek: false,
+      })
     }
     const entry = entries.get(entryKey)
+    const rule = AMOUNT_RULES.has(mapping.amount_rule) ? mapping.amount_rule : 'auto'
+    if (rule === 'per_recipe') {
+      // Each recipe once; an ingredient that doesn't say which recipes counts as one.
+      if (Array.isArray(ingredient.recipes) && ingredient.recipes.length > 0) {
+        for (const recipe of ingredient.recipes) entry.recipes.add(recipe)
+      } else {
+        entry.unknownRecipes += 1
+      }
+      continue
+    }
+    if (rule === 'per_week') { entry.perWeek = true; continue }
+
+    entry.hasAuto = true
     const amount = ingredientToBase(ingredient.quantity, ingredient.unit)
     if (!entry.comparable) continue
     if (!amount || (entry.total && entry.total.type !== amount.type)) {
@@ -121,14 +143,19 @@ function planIngredients(ingredients, products, mappings) {
       continue
     }
 
-    const pack = parsePackSize(entry.product.salesUnitSize)
-    const packs = entry.comparable && entry.total ? packsNeeded(entry.total, pack) : null
-    if (packs == null) {
-      lines.push({ productId: entry.product.externalId, packs: 1, source: 'recipe' })
-      review.push({ reason: 'check_quantity', ingredient: entry.label, productId: entry.product.externalId })
-    } else if (packs > 0) {
-      lines.push({ productId: entry.product.externalId, packs, source: 'recipe' })
+    let packs = entry.recipes.size + entry.unknownRecipes
+    if (entry.hasAuto) {
+      const pack = parsePackSize(entry.product.salesUnitSize)
+      const autoPacks = entry.comparable && entry.total ? packsNeeded(entry.total, pack) : null
+      if (autoPacks == null) {
+        packs += 1
+        review.push({ reason: 'check_quantity', ingredient: entry.label, productId: entry.product.externalId })
+      } else {
+        packs += autoPacks
+      }
     }
+    if (entry.perWeek) packs = Math.max(packs, 1)
+    if (packs > 0) lines.push({ productId: entry.product.externalId, packs, source: 'recipe' })
   }
 
   return { lines, review }

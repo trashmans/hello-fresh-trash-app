@@ -42,3 +42,10 @@ export function describeMapping(row) {
   if (!row?.product?.title) return `AH product ${row?.product_external_id}`
   return [row.product.title, row.product.sales_unit_size].filter(Boolean).join(' · ')
 }
+
+/** The choices for household_ingredient_mappings.amount_rule, in the order the app shows them. */
+export const AMOUNT_RULE_OPTIONS = [
+  { value: 'auto', label: 'Work it out from the amount' },
+  { value: 'per_recipe', label: '1 pack per recipe' },
+  { value: 'per_week', label: '1 pack for the week' },
+]
