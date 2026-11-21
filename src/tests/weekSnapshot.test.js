@@ -8,6 +8,7 @@ import { RetailerError } from '../../supabase/functions/_shared/retailer/types.t
 
 const NOW = '2026-11-16T05:00:00.000Z'
 const RICE_IMG = 'https://static.ah.nl/dam/product/AHI_rice?revLabel=1&rendition=200x200_WEBP&fileType=binary'
+const MILK_IMG = 'https://static.ah.nl/dam/product/AHI_milk?revLabel=1&rendition=200x200_WEBP&fileType=binary'
 const milk = { externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 1.19, orderable: true, promotion: null }
 const bananas = { externalId: 103, title: 'AH Bananen tros', salesUnitSize: 'per tros', price: 1.69, orderable: true, promotion: null }
 const rice = { externalId: 104, title: 'AH Basmati rijst', salesUnitSize: '1 kg', price: 2.99, orderable: true, promotion: { mechanism: '2e GRATIS', priceBefore: 2.99 }, imageUrl: RICE_IMG }
@@ -15,10 +16,12 @@ const soldOut = { externalId: 108, title: 'AH Bananen los', salesUnitSize: 'per 
 
 // Staple rows as the function reads them (household_staples + the cached product title).
 const staple = (over) => ({
-  id: 's', product_external_id: null, product_title: null, search_term: null,
+  id: 's', product_external_id: null, product_title: null, product_image_url: null, search_term: null,
   perishable: true, max_weeks_stock: null, active: true, ...over,
 })
-const milkStaple = staple({ id: 's-milk', product_external_id: 101, product_title: 'AH Halfvolle melk' })
+const milkStaple = staple({ id: 's-milk', product_external_id: 101, product_title: 'AH Halfvolle melk', product_image_url: MILK_IMG })
+// The same pinned perishable staple before its cached product has a photo.
+const milkNoPhoto = { ...milkStaple, id: 's-milk-new', product_image_url: null }
 const riceStaple = staple({ id: 's-rice', product_external_id: 104, product_title: 'AH Basmati rijst', perishable: false, max_weeks_stock: 8 })
 const bananaStaple = staple({ id: 's-ban', search_term: 'bananen' })
 
@@ -63,6 +66,19 @@ describe('stapleLookup', () => {
 
   it('needs no lookup for a pinned perishable staple (the cached product is enough)', () => {
     expect(stapleLookup(milkStaple)).toBeNull()
+  })
+
+  it('looks up a pinned staple without a cached photo by its product title, for the photo', () => {
+    expect(stapleLookup(milkNoPhoto)).toEqual({ kind: 'photo', query: 'AH Halfvolle melk' })
+  })
+
+  it('keeps a stock-up staple without a photo as a bonus lookup (that search brings the photo too)', () => {
+    expect(stapleLookup({ ...riceStaple, product_image_url: null })).toEqual({ kind: 'pinned', query: 'AH Basmati rijst' })
+  })
+
+  it('needs no photo lookup for a paused staple or one whose title is unknown', () => {
+    expect(stapleLookup({ ...milkNoPhoto, active: false })).toBeNull()
+    expect(stapleLookup({ ...milkNoPhoto, product_title: null })).toBeNull()
   })
 
   it('needs no lookup for a paused staple', () => {
@@ -181,6 +197,29 @@ describe('getWeekSnapshot', () => {
     const d = deps({ staples: [milkStaple] })
     await run(d)
     expect(d.calls.some(c => c[0] === 'saveProducts')).toBe(false)
+  })
+
+  it('runs photo lookups after the lookups the plan needs', async () => {
+    const d = deps({ staples: [milkNoPhoto, bananaStaple], results: { bananen: [bananas] } })
+    await run(d)
+    expect(searches(d)).toEqual(['bananen', 'AH Halfvolle melk'])
+  })
+
+  it(`counts photo lookups toward the ${MAX_LOOKUPS}, leaving them out first`, async () => {
+    const many = Array.from({ length: MAX_LOOKUPS }, (_, i) => staple({ id: `s-${i}`, search_term: `product ${i}` }))
+    const d = deps({ staples: [milkNoPhoto, ...many] })
+    const result = await run(d)
+    expect(searches(d)).toHaveLength(MAX_LOOKUPS)
+    expect(searches(d)).not.toContain('AH Halfvolle melk')
+    expect(result.skippedLookups).toBe(1)
+  })
+
+  it('saves the photo in the product cache but adds nothing to the plan', async () => {
+    const milkWithPhoto = { ...milk, imageUrl: MILK_IMG }
+    const d = deps({ staples: [milkNoPhoto], results: { 'AH Halfvolle melk': [milkWithPhoto] } })
+    const result = await run(d)
+    expect(result.products).toEqual({})
+    expect(d.saved.find(r => r.external_id === 101).image_url).toBe(MILK_IMG)
   })
 
   it('passes on a retailer failure instead of returning half a snapshot', async () => {
