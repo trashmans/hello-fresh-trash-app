@@ -5,14 +5,16 @@ import { Button } from '@/components/ui/button'
 import IngredientMapForm from '@/components/IngredientMapForm'
 import ProductThumb from '@/components/ProductThumb'
 import { toMappingRow } from '@/lib/ingredientMappings'
-import { pickSuggestion } from '@/lib/mappingSuggestions'
+import { pickSuggestion, unmappedLines } from '@/lib/mappingSuggestions'
 
 // "Suggest AH products" on this week's preview: looks up every recipe ingredient that is
 // still free text (one retailer-products search each, one after the other), suggests a
 // product for each (src/lib/mappingSuggestions.js) and lets the household accept, pick
 // another, mark "always at home" or skip. Only accepted suggestions are saved, as normal
 // ingredient mappings, so the preview re-plans with them straight away.
-export default function SuggestMappingsPanel({ names, ingredientMappings, onClose }) {
+export default function SuggestMappingsPanel({ preview, ingredientMappings, onClose }) {
+  const [lookedAt, setLookedAt] = useState([]) // names from earlier batches
+  const [names, setNames] = useState(() => unmappedLines(preview))
   const [items, setItems] = useState(null) // [{ name, suggestion, error, status }]
   const [progress, setProgress] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -20,15 +22,15 @@ export default function SuggestMappingsPanel({ names, ingredientMappings, onClos
 
   const update = (name, patch) => setItems(list => list.map(i => (i.name === name ? { ...i, ...patch } : i)))
 
-  async function lookUp() {
+  async function lookUp(batch = names) {
     setBusy(true)
     setProgress(0)
     const found = []
-    for (const name of names) {
-      const result = await ingredientMappings.searchProducts(name)
+    for (const name of batch) {
+      const result = await ingredientMappings.searchProducts(name, { suggest: true })
       found.push(result.error
         ? { name, suggestion: null, error: result.error, status: 'open' }
-        : { name, suggestion: pickSuggestion(result), error: null, status: 'open' })
+        : { name, suggestion: pickSuggestion(result), searchedFor: result.searchedFor?.[0] ?? null, error: null, status: 'open' })
       setProgress(found.length)
     }
     setItems(found)
@@ -54,6 +56,16 @@ export default function SuggestMappingsPanel({ names, ingredientMappings, onClos
     if (saved) toast.success(`${saved} ingredient${saved === 1 ? '' : 's'} mapped`)
   }
 
+  // The next batch: ingredients still text on the preview that no batch has looked at yet.
+  const seenSoFar = [...lookedAt, ...names]
+  const nextBatch = items ? unmappedLines(preview, { skip: seenSoFar }) : []
+  function lookUpNext() {
+    setLookedAt(seenSoFar)
+    setNames(nextBatch)
+    setItems(null)
+    lookUp(nextBatch)
+  }
+
   const open = items?.filter(i => i.status === 'open') ?? []
   const sureOpen = open.filter(i => i.suggestion?.sure).length
   const ghostPill = 'h-9 rounded-full px-3 text-sm font-semibold'
@@ -64,7 +76,7 @@ export default function SuggestMappingsPanel({ names, ingredientMappings, onClos
         <div>
           <h3 className="flex items-center gap-2 text-lg font-bold"><Sparkles className="h-4 w-4 text-primary-text" aria-hidden="true" /> Suggest AH products</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {names.length} recipe ingredient{names.length === 1 ? ' is' : 's are'} still text on your AH list. Suggestions are only saved when you accept them, and are used for every recipe from then on.
+            {names.length} recipe ingredient{names.length === 1 ? '' : 's'} in this batch {names.length === 1 ? 'is' : 'are'} still text on your AH list. Each is looked up the way you would: a web search for its name at Albert Heijn, then an AH search. Suggestions are only saved when you accept them, and are used for every recipe from then on.
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close suggestions" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:bg-accent">
@@ -73,7 +85,7 @@ export default function SuggestMappingsPanel({ names, ingredientMappings, onClos
       </div>
 
       {!items && (
-        <Button onClick={lookUp} disabled={busy} className="h-11 rounded-full px-5 font-semibold">
+        <Button onClick={() => lookUp()} disabled={busy} className="h-11 rounded-full px-5 font-semibold">
           {busy
             ? <><Loader2 className="h-4 w-4 animate-spin" /> Looking up {Math.min(progress + 1, names.length)} of {names.length}…</>
             : <>Look up {names.length} ingredient{names.length === 1 ? '' : 's'} on AH</>}
@@ -100,6 +112,9 @@ export default function SuggestMappingsPanel({ names, ingredientMappings, onClos
                         {item.error ? item.error
                           : p ? <>→ {p.title}{p.salesUnitSize ? ` · ${p.salesUnitSize}` : ''}</>
                             : 'No AH product found'}
+                        {item.searchedFor && item.searchedFor.toLowerCase() !== item.name.toLowerCase() && (
+                          <span className="block text-xs">Searched AH for “{item.searchedFor}”</span>
+                        )}
                       </p>
                       {item.status === 'open' && p && !item.suggestion.sure && (
                         <p className="mt-0.5 flex items-center gap-1 text-[13px] font-semibold text-primary-text">
@@ -146,7 +161,11 @@ export default function SuggestMappingsPanel({ names, ingredientMappings, onClos
               )
             })}
           </ul>
-          {open.length === 0 && (
+          {nextBatch.length > 0 ? (
+            <Button variant="outline" onClick={lookUpNext} disabled={busy} className="h-11 rounded-full px-5 font-semibold">
+              Look up the next {nextBatch.length} ingredient{nextBatch.length === 1 ? '' : 's'}
+            </Button>
+          ) : open.length === 0 && (
             <p className="text-sm text-muted-foreground">All done. Refresh the preview if a line doesn&apos;t show its product yet.</p>
           )}
         </>
