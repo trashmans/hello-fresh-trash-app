@@ -18,9 +18,9 @@ function Result({ result }) {
   const failed = result.lines.filter(l => l.outcome === 'failed')
 
   return (
-    <div className="space-y-2 rounded-lg border border-border p-3">
-      <p className={`flex items-center gap-2 font-medium ${status.className}`}>
-        <Icon className="h-4 w-4" /> {status.text}
+    <div className="space-y-3 rounded-[18px] border border-border bg-banner p-5">
+      <p className={`flex items-center gap-2 text-base font-semibold ${status.className}`}>
+        <Icon className="h-5 w-5" /> {status.text}
       </p>
       {written.length > 0 && (
         <div>
@@ -69,7 +69,7 @@ export default function SendToAhPanel({ weekPreview }) {
   const tooMany = sendPlan.notSent
 
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+    <div className="space-y-3 rounded-[18px] border border-border bg-banner p-5">
       {sendError && <p className="text-destructive">{sendError}</p>}
       {tooMany.length > 0 && (
         <p className="text-destructive">
@@ -88,16 +88,16 @@ export default function SendToAhPanel({ weekPreview }) {
             Nothing is removed or lowered. You still pick a time slot and pay in the AH app.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={sending || !canSend} onClick={async () => { await send(); setConfirming(false) }}>
+            <Button className="h-11 rounded-full bg-secondary px-5 font-bold text-secondary-foreground hover:bg-secondary/90" disabled={sending || !canSend} onClick={async () => { await send(); setConfirming(false) }}>
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send now
             </Button>
-            <Button size="sm" variant="ghost" disabled={sending} onClick={() => setConfirming(false)}>Cancel</Button>
+            <Button variant="outline" className="h-11 rounded-full px-5 font-semibold" disabled={sending} onClick={() => setConfirming(false)}>Cancel</Button>
           </div>
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-muted-foreground">Happy with this? Send it to your AH list.</p>
-          <Button size="sm" disabled={loading || !canSend} onClick={() => setConfirming(true)}>
+          <p className="text-base">Happy with this? Send it to your AH list.</p>
+          <Button className="h-[52px] rounded-[14px] bg-secondary px-6 text-base font-bold text-secondary-foreground hover:bg-secondary/90" disabled={loading || !canSend} onClick={() => setConfirming(true)}>
             <Send className="h-4 w-4" /> Send to AH list
           </Button>
         </div>

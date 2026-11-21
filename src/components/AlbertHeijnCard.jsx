@@ -50,7 +50,7 @@ export default function AlbertHeijnCard() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-lg">Albert Heijn</CardTitle>
+          <CardTitle className="text-[22px]">Albert Heijn</CardTitle>
           {!loading && <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TONES[view.state]}`}>{view.title}</span>}
         </div>
       </CardHeader>

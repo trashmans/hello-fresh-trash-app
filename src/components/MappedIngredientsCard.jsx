@@ -52,7 +52,7 @@ export default function MappedIngredientsCard({ ingredientMappings }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Mapped ingredients{mappings.length > 0 ? ` · ${mappings.length}` : ''}</CardTitle>
+        <CardTitle className="text-[22px]">Mapped ingredients{mappings.length > 0 ? ` · ${mappings.length}` : ''}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">
