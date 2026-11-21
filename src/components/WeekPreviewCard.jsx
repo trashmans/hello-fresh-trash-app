@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { Link2, Loader2, RefreshCw } from 'lucide-react'
+import { Link2, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import IngredientMapForm from '@/components/IngredientMapForm'
 import SendToAhPanel from '@/components/SendToAhPanel'
+import SuggestMappingsPanel from '@/components/SuggestMappingsPanel'
+import { unmappedLines } from '@/lib/mappingSuggestions'
 import { useWeekPreview } from '@/hooks/useWeekPreview'
 import { AISLES } from '@/lib/aisles'
 import ProductThumb from '@/components/ProductThumb'
@@ -107,6 +109,7 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
   const weekPreview = useWeekPreview(shoppingList, ingredientMappings.mappings)
   const { available, preview, loading, error, run, sending, canSend } = weekPreview
   const [mappingFor, setMappingFor] = useState(null) // text of the recipe line being mapped
+  const [suggesting, setSuggesting] = useState(null) // ingredient names being suggested for, or null
   if (!available) return null
 
   // Removes one ingredient mapping; the line goes back to free text (or back on the list) at once.
@@ -158,6 +161,20 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
                 </ul>
               </Section>
             )}
+
+            {ingredientMappings.available && (suggesting ? (
+              <SuggestMappingsPanel names={suggesting} ingredientMappings={ingredientMappings} onClose={() => setSuggesting(null)} />
+            ) : unmappedLines(preview).length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-border bg-banner px-5 py-4">
+                <p className="text-sm">
+                  <span className="font-semibold">{unmappedLines(preview).length} recipe ingredient{unmappedLines(preview).length === 1 ? ' is' : 's are'} still text</span>{' '}
+                  <span className="text-muted-foreground">and would reach AH without a product.</span>
+                </p>
+                <Button onClick={() => setSuggesting(unmappedLines(preview))} className="h-11 rounded-full px-5 font-semibold">
+                  <Sparkles className="h-4 w-4" /> Suggest AH products
+                </Button>
+              </div>
+            ))}
 
             <Section title={`Would change · ${preview.changes.length}`}>
               {preview.changes.length === 0 ? (
