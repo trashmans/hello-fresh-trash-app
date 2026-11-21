@@ -9,7 +9,8 @@
 //
 // `products` holds this week's answer for the staples that need one: search-term staples
 // (first orderable product) and pinned staples that can stock up on bonus (this week's
-// bonus label). The staples are read here from the caller's household, never taken from
+// bonus label). Pinned staples whose cached product has no photo are searched once too,
+// only to put the photo in the product cache. The staples are read here from the caller's household, never taken from
 // the request. The browser combines the snapshot with the planner (src/lib/weekPreview.js).
 //
 // Uses the household's linked account (token refreshed single-flight, never stored or
@@ -72,7 +73,7 @@ Deno.serve(async (req) => {
       },
       async getStaples(householdId) {
         const rows = await sql`
-          SELECT s.id, s.product_external_id, p.title AS product_title, s.search_term,
+          SELECT s.id, s.product_external_id, p.title AS product_title, p.image_url AS product_image_url, s.search_term,
                  s.perishable, s.max_weeks_stock, s.active
           FROM public.household_staples s
           LEFT JOIN public.retailer_products p
@@ -83,6 +84,7 @@ Deno.serve(async (req) => {
           id: r.id,
           product_external_id: r.product_external_id == null ? null : Number(r.product_external_id),
           product_title: r.product_title,
+          product_image_url: r.product_image_url ?? null,
           search_term: r.search_term,
           perishable: r.perishable === true,
           max_weeks_stock: r.max_weeks_stock,

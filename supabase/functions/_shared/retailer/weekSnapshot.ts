@@ -9,7 +9,10 @@
 //          limit) → a search by the cached product title, matched by product id, to
 //          learn this week's bonus. The adapter has no "product by id" call.
 //      Pinned perishable staples and paused staples need nothing live: the browser
-//      uses their cached product.
+//      uses their cached product. Only when that cached product has no photo yet is a
+//      pinned staple searched by its title once, matched by product id, so the photo
+//      lands in the cache. Photo lookups come after the ones the plan needs (they are the
+//      first left out at MAX_LOOKUPS) and add nothing to the plan.
 // The staples are read here, on the server, so a caller can't make the function search
 // for arbitrary things. Every product seen goes into the product cache
 // (public.retailer_products), like a Staples-screen search. Nothing is written to the
@@ -33,13 +36,15 @@ export interface SnapshotStaple {
   id: string
   product_external_id: number | null
   product_title: string | null
+  /** The cached product's photo, or null when it has none yet. */
+  product_image_url: string | null
   search_term: string | null
   perishable: boolean
   max_weeks_stock: number | null
   active: boolean
 }
 
-export type StapleLookup = { kind: 'search' | 'pinned'; query: string }
+export type StapleLookup = { kind: 'search' | 'pinned' | 'photo'; query: string }
 
 /** What to search for to get this week's answer for a staple, or null if none is needed (or possible). */
 export function stapleLookup(staple: SnapshotStaple): StapleLookup | null {
@@ -49,9 +54,10 @@ export function stapleLookup(staple: SnapshotStaple): StapleLookup | null {
     return check.ok ? { kind: 'search', query: check.query } : null
   }
   const canStockUp = !staple.perishable && (staple.max_weeks_stock ?? 0) > 0
-  if (!canStockUp) return null
+  if (!canStockUp && staple.product_image_url) return null
   const check = checkSearchQuery(staple.product_title)
-  return check.ok ? { kind: 'pinned', query: check.query } : null
+  if (!check.ok) return null
+  return { kind: canStockUp ? 'pinned' : 'photo', query: check.query }
 }
 
 /** This week's product for one staple, in the shape buildWeekPreview() takes as liveProducts. */
@@ -107,13 +113,19 @@ export async function getWeekSnapshot(
     throw new RetailerError('forbidden', 'Supermarket features are not switched on for your household')
   }
 
-  // One search per different query, in staple order.
+  // One search per different query, in staple order: the plan's lookups first, then
+  // the photo-only ones, so photos never push a plan lookup past MAX_LOOKUPS.
   const staples = await deps.getStaples(household.householdId)
   const wanted: { staple: SnapshotStaple; lookup: StapleLookup; key: string }[] = []
   const queries = new Map<string, string>() // lower-case query → query as first written
-  for (const staple of staples) {
-    const lookup = stapleLookup(staple)
-    if (!lookup) continue
+  const lookups = staples
+    .map((staple) => ({ staple, lookup: stapleLookup(staple) }))
+    .filter((w): w is { staple: SnapshotStaple; lookup: StapleLookup } => w.lookup !== null)
+  const ordered = [
+    ...lookups.filter((w) => w.lookup.kind !== 'photo'),
+    ...lookups.filter((w) => w.lookup.kind === 'photo'),
+  ]
+  for (const { staple, lookup } of ordered) {
     const key = lookup.query.toLowerCase()
     if (!queries.has(key)) queries.set(key, lookup.query)
     wanted.push({ staple, lookup, key })
@@ -130,6 +142,7 @@ export async function getWeekSnapshot(
 
   const products: Record<string, LiveProduct> = {}
   for (const { staple, lookup, key } of wanted) {
+    if (lookup.kind === 'photo') continue // only for the product cache below
     const results = found.get(key)
     if (!results) continue
     const match = lookup.kind === 'pinned'
