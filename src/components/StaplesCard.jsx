@@ -229,7 +229,7 @@ export default function StaplesCard() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-lg">Staples{staples.length > 0 ? ` · ${active} active` : ''}</CardTitle>
+          <CardTitle className="text-[22px]">Staples{staples.length > 0 ? ` · ${active} active` : ''}</CardTitle>
           {available && editing === null && (
             <Button size="sm" onClick={() => setEditing('new')}><Plus className="h-4 w-4" /> Add staple</Button>
           )}

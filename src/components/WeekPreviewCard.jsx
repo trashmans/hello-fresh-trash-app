@@ -21,15 +21,28 @@ const byAisle = (items) =>
   AISLES.map(aisle => ({ aisle, items: items.filter(i => i.aisle === aisle) })).filter(group => group.items.length > 0)
 
 function AisleHeading({ children }) {
-  return <h4 className="pt-3 pb-1 text-xs font-semibold text-muted-foreground">{children}</h4>
+  return <h4 className="pb-1 pt-4 text-[15px] font-semibold">{children}</h4>
 }
 
 function Section({ title, children }) {
   return (
     <div>
-      <h3 className="pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <h3 className="pb-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">{title}</h3>
       {children}
     </div>
+  )
+}
+
+function MapButton({ title, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Map ${title} to an AH product`}
+      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-input px-3 text-sm font-semibold hover:bg-accent transition-colors"
+    >
+      <Link2 className="h-3.5 w-3.5" aria-hidden="true" /> Map
+    </button>
   )
 }
 
@@ -41,7 +54,7 @@ function UndoMapping({ mapping, onUndo, children = 'Undo mapping' }) {
   return (
     <button
       type="button"
-      className="underline underline-offset-2 hover:text-foreground"
+      className="font-semibold text-primary-text underline underline-offset-2 hover:opacity-80"
       onClick={() => onUndo(mapping)}
       aria-label={`Undo the mapping for ${mapping.label}`}
     >
@@ -53,32 +66,30 @@ function UndoMapping({ mapping, onUndo, children = 'Undo mapping' }) {
 function ChangeRow({ change, mapping, onMap, onUndo, children }) {
   const sources = [...new Set(change.sources)]
   return (
-    <li className="py-2">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 w-16 shrink-0 rounded-md bg-secondary px-2 py-0.5 text-center text-xs font-medium text-secondary-foreground">
+    <li className="py-3">
+      <div className="flex items-center gap-3">
+        <span className="flex h-7 w-[76px] shrink-0 items-center justify-center rounded-lg bg-primary/15 text-xs font-bold text-primary-text">
           {ACTION_LABEL[change.action] ?? change.action}
         </span>
         {change.productId != null
-          ? <ProductThumb src={change.imageUrl} className="h-8 w-8" />
-          : <span className="w-8 shrink-0" aria-hidden="true" />}
+          ? <ProductThumb src={change.imageUrl} className="h-10 w-10 rounded-[10px]" />
+          : <span className="w-10 shrink-0" aria-hidden="true" />}
         <div className="min-w-0 flex-1">
-          <p className="font-medium">{change.title}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[15px] font-medium">{change.title}</p>
+          <p className="text-[13px] text-muted-foreground">
             {[change.detail, ...sources.map(s => SOURCE_LABEL[s] ?? s)].filter(Boolean).join(' · ')}
             {change.action === 'untick' && ' · ticked off on your AH list now'}
           </p>
         </div>
-        <span className="shrink-0 tabular-nums text-sm">
+        <span className="shrink-0 font-semibold tabular-nums">
           {change.action === 'increase' ? `${change.from} → ${change.to}` : `× ${change.to}`}
         </span>
         {onMap && !mapping && (
-          <Button size="sm" variant="ghost" className="h-7 shrink-0 px-2 text-xs" onClick={onMap} aria-label={`Map ${change.title} to an AH product`}>
-            <Link2 className="h-3.5 w-3.5" /> Map
-          </Button>
+          <MapButton title={change.title} onClick={onMap} />
         )}
       </div>
       {onUndo && change.mappedFrom.length > 0 && (
-        <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 pl-[7.5rem] text-xs text-muted-foreground">
+        <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 pl-0 sm:pl-[8.5rem] text-[13px] text-muted-foreground">
           {change.mappedFrom.map(m => (
             <span key={m.key}>Mapped from {m.label} · <UndoMapping mapping={m} onUndo={onUndo} /></span>
           ))}
@@ -112,14 +123,14 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-lg">This week's preview</CardTitle>
-          <Button size="sm" onClick={run} disabled={loading || sending}>
+          <CardTitle className="text-[28px]">This week&apos;s preview</CardTitle>
+          <Button variant="outline" className="h-11 rounded-full px-4 font-semibold" onClick={run} disabled={loading || sending}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             {preview ? 'Refresh' : 'Preview'}
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
+      <CardContent className="space-y-6 text-sm">
         <p className="text-muted-foreground">
           What would change on your AH list for this week's recipes and the staples that are due.{' '}
           {canSend ? 'Nothing is sent until you press Send and confirm.' : 'A dry run: nothing is sent to AH.'}
@@ -137,7 +148,7 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
               <Section title="Needs a look">
                 <ul className="space-y-1">
                   {preview.review.map(r => (
-                    <li key={r.staple_id ?? `q:${r.productId}:${r.name}`} className="rounded-md border border-destructive/40 px-3 py-2">
+                    <li key={r.staple_id ?? `q:${r.productId}:${r.name}`} className="rounded-[14px] border border-primary/40 bg-primary/10 px-4 py-3">
                       <span className="font-medium">{r.name}:</span>{' '}
                       {r.reason === 'check_quantity'
                         ? "couldn't work out how many packs the recipes need, so 1 is planned. Check the quantity."
@@ -150,7 +161,7 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
 
             <Section title={`Would change · ${preview.changes.length}`}>
               {preview.changes.length === 0 ? (
-                <p className="rounded-md border border-dashed border-border py-4 text-center text-muted-foreground">
+                <p className="rounded-[14px] border border-dashed border-input py-6 text-center text-muted-foreground">
                   Nothing to change. Your AH list already covers this week.
                 </p>
               ) : (
@@ -185,20 +196,45 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
 
             {preview.onListAlready.length > 0 && (
               <Section title={`Already on your AH list · ${preview.onListAlready.length}`}>
-                {byAisle(preview.onListAlready).map(({ aisle, items }) => (
-                  <p key={aisle} className="text-muted-foreground">
-                    <span className="font-medium text-foreground">{aisle}:</span>{' '}
-                    {items.map((l, i) => (
-                      <span key={l.productId ?? `t:${l.text}`}>
-                        {i > 0 && ', '}
-                        {l.title} × {l.quantity}
-                        {onUndo && l.mappedFrom.map(m => (
-                          <span key={m.key}> (<UndoMapping mapping={m} onUndo={onUndo}>undo mapping from {m.label}</UndoMapping>)</span>
-                        ))}
-                      </span>
-                    ))}
-                  </p>
-                ))}
+                <ul className="divide-y divide-border">
+                  {preview.onListAlready.map(l => {
+                    const key = l.productId ?? `t:${l.text}`
+                    // A recipe ingredient that is still free text on the AH list can be mapped too.
+                    const mappable = l.productId == null && Boolean(l.text) && ingredientMappings.available
+                    return (
+                      <li key={key} className="py-2.5">
+                        <div className="flex items-center gap-3">
+                          {l.productId != null
+                            ? <ProductThumb src={l.imageUrl} className="h-10 w-10 rounded-[10px]" />
+                            : <span className="w-10 shrink-0" aria-hidden="true" />}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[15px]">{l.title}</p>
+                            {onUndo && l.mappedFrom.length > 0 && (
+                              <p className="text-[13px] text-muted-foreground">
+                                {l.mappedFrom.map(m => (
+                                  <span key={m.key} className="mr-3">Mapped from {m.label} · <UndoMapping mapping={m} onUndo={onUndo} /></span>
+                                ))}
+                              </p>
+                            )}
+                          </div>
+                          <span className="shrink-0 text-muted-foreground tabular-nums">× {l.quantity}</span>
+                          {mappable && mappingFor !== `list:${l.text}` && (
+                            <MapButton title={l.title} onClick={() => setMappingFor(`list:${l.text}`)} />
+                          )}
+                        </div>
+                        {mappable && mappingFor === `list:${l.text}` && (
+                          <IngredientMapForm
+                            name={l.text}
+                            searchProducts={ingredientMappings.searchProducts}
+                            onSave={ingredientMappings.save}
+                            onUndo={undoMapping}
+                            onDone={() => setMappingFor(null)}
+                          />
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
               </Section>
             )}
 
