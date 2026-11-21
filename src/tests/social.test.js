@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   INVITE_DAILY_LIMIT, INVITE_DAYS, SHARE_NOTE_MAX,
-  checkInviteEmail, inviteStatus, invitesLeftToday, checkShareNote,
+  checkInviteEmail, inviteStatus, invitesLeftToday, checkShareNote, socialErrorMessage,
 } from '@/lib/social'
 
 // The rules the Social tab shows before calling the database functions, which enforce
@@ -89,5 +89,27 @@ describe('checkShareNote', () => {
     const tooLong = checkShareNote('a'.repeat(SHARE_NOTE_MAX + 1))
     expect(tooLong.ok).toBe(false)
     expect(tooLong.message).toMatch(/280/)
+  })
+})
+
+describe('socialErrorMessage', () => {
+  // The database functions raise short codes; the app shows its own words.
+  it('explains each code the Social functions raise', () => {
+    expect(socialErrorMessage('already_user')).toMatch(/already uses the app.*Add friend/i)
+    expect(socialErrorMessage('invite_limit')).toMatch(/5 invites/)
+    expect(socialErrorMessage('not_found')).toMatch(/no one.*invite/i)
+    expect(socialErrorMessage('self')).toMatch(/yourself/i)
+    expect(socialErrorMessage('invalid_email')).toMatch(/email/i)
+    expect(socialErrorMessage('not_friends')).toMatch(/friends/i)
+    expect(socialErrorMessage('too_many')).toMatch(/too many/i)
+  })
+
+  it('finds the code inside a longer database message', () => {
+    expect(socialErrorMessage('ERROR: invite_limit')).toBe(socialErrorMessage('invite_limit'))
+  })
+
+  it('falls back to a general message', () => {
+    expect(socialErrorMessage('something odd')).toMatch(/went wrong/i)
+    expect(socialErrorMessage(undefined)).toMatch(/went wrong/i)
   })
 })
