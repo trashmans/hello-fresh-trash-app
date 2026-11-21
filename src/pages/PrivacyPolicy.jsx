@@ -53,6 +53,18 @@ export default function PrivacyPolicy() {
           </section>
 
           <section>
+            <h2 className="font-semibold text-base mb-2">Friends and sharing</h2>
+            <p>
+              You can invite someone by email. We store their email address, who invited them and when, so they can
+              sign in; an invite that isn't used within 30 days, or that you take back, is deleted. When they sign in,
+              you become friends. You can also ask someone who already uses the app to be your friend, and remove a
+              friend at any time. Friends can share a recipe with you, with a short note; a share includes only the
+              recipe and its PDF, never your shopping list, staples or Albert Heijn data. Shares are deleted when the
+              sender or recipient deletes them or their account.
+            </p>
+          </section>
+
+          <section>
             <h2 className="font-semibold text-base mb-2">Albert Heijn link (optional)</h2>
             <p>
               If Albert Heijn linking is switched on for your household, you can choose to link your AH account on
@@ -95,7 +107,8 @@ export default function PrivacyPolicy() {
               Your data is retained for as long as your account is active. If you request
               deletion, your account and all associated data will be removed within 30 days.
               An Albert Heijn login token is kept only until you unlink, and is deleted together
-              with your household. The log of AH link events is kept for 12 months.
+              with your household. The log of AH link events is kept for 12 months. Unused invites are deleted
+              once they expire (30 days) or are taken back.
             </p>
           </section>
 
