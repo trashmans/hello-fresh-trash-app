@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, FileText, ShoppingCart, X, RotateCcw, Minus, Plus, Copy, Trash2, Scale } from 'lucide-react'
+import { ArrowRight, Check, FileText, X, RotateCcw, Minus, Plus, Copy, Trash2, Scale, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -74,10 +74,11 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
   if (!open) {
     return (
       <button
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        type="button"
+        className="flex min-h-11 items-center gap-1 text-sm font-semibold hover:text-primary-text transition-colors"
         onClick={openForm}
       >
-        <Scale className="h-3 w-3" />
+        <Scale className="h-3.5 w-3.5" />
         Scale by ingredient
       </button>
     )
@@ -89,7 +90,7 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
         type="number"
         min="0"
         step="any"
-        className="h-7 w-16 text-xs"
+        className="h-9 w-16 text-sm"
         value={quantity}
         onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
       />
@@ -97,7 +98,7 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
         <span className="text-xs">{unit}</span>
       ) : (
         <select
-          className="h-7 rounded-md border border-input bg-input px-1 text-xs text-foreground"
+          className="h-9 rounded-lg border border-input bg-card px-2 text-sm text-foreground"
           value={unit}
           onChange={(e) => setUnit(e.target.value)}
         >
@@ -107,7 +108,7 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
         </select>
       )}
       <select
-        className="h-7 max-w-[7rem] rounded-md border border-input bg-input px-1 text-xs text-foreground"
+        className="h-9 max-w-[8rem] rounded-lg border border-input bg-card px-2 text-sm text-foreground"
         value={ingredientId ?? ''}
         onChange={(e) => selectIngredient(e.target.value)}
       >
@@ -115,11 +116,11 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
           <option key={ing.id} value={ing.id}>{ing.name}</option>
         ))}
       </select>
-      <Button type="button" size="sm" className="h-7 text-xs px-2" onClick={apply}>
+      <Button type="button" size="sm" className="h-9 rounded-full px-3" onClick={apply}>
         Apply
       </Button>
-      <button className="text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>
-        <X className="h-3 w-3" />
+      <button type="button" aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>
+        <X className="h-4 w-4" />
       </button>
     </div>
   )
@@ -244,77 +245,65 @@ export default function ShoppingListPanel({ shoppingList }) {
   const checkedItems = sortedItems.filter(item => isChecked(item))
   const openCount = sortedItems.length - checkedItems.length
 
+  const mini = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-input bg-card text-foreground hover:bg-accent transition-colors'
+
   function renderRecipe({ recipe_id, servings }) {
     const recipe = recipesMap[recipe_id]
     const dbServings = recipe?.servings ?? null
     const baseServings = dbServings ?? servings
     const isChanged = dbServings !== null && servings !== dbServings
+    const name = recipe?.name ?? '…'
 
     return (
-      <div key={recipe_id} className="flex flex-col gap-1.5">
+      <article key={recipe_id} className="flex flex-col gap-3 rounded-[18px] border border-border bg-card p-3.5">
         <div className="flex items-center gap-3">
-          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
             {recipe?.cover_path && coverUrls[recipe.cover_path] ? (
               <img src={coverUrls[recipe.cover_path]} alt="" className="h-full w-full object-cover" />
             ) : (
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <FileText className="h-5 w-5 text-muted-foreground" />
             )}
           </div>
-          <span className="flex-1 text-sm font-medium truncate min-w-0">
-            {recipe?.name ?? '…'}
-          </span>
-          <div className="flex flex-col items-center shrink-0">
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setServings(recipe_id, servings - 1)}
-              >
-                <Minus className="h-3 w-3" />
-              </Button>
-              <span className="w-10 text-center text-sm font-medium tabular-nums">
-                {formatServings(servings)}
-              </span>
-              {isChanged && (
-                <button
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setServings(recipe_id, baseServings)}
-                  title="Reset to default"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                </button>
-              )}
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setServings(recipe_id, servings + 1)}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </div>
-            {dbServings !== null && (
-              <span className="text-xs text-muted-foreground mt-0.5">
-                default: {dbServings}
-              </span>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+          <span className="min-w-0 flex-1 text-base font-semibold leading-snug">{name}</span>
+          <button
+            type="button"
+            aria-label={`Remove ${name} from this week`}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-destructive transition-colors"
             onClick={() => removeRecipe(recipe_id)}
           >
-            <X className="h-3 w-3" />
-          </Button>
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <IngredientScaleControl
-          ingredients={ingredientsMap[recipe_id] ?? []}
-          baseServings={baseServings}
-          onApply={(newServings) => setServings(recipe_id, newServings)}
-        />
-      </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button type="button" className={mini} aria-label={`Fewer servings of ${name}`} onClick={() => setServings(recipe_id, servings - 1)}>
+            <Minus className="h-4 w-4" />
+          </button>
+          <span className="min-w-[92px] text-center font-semibold tabular-nums" aria-live="polite">
+            {formatServings(servings)} {Number(servings) === 1 ? 'serving' : 'servings'}
+          </span>
+          <button type="button" className={mini} aria-label={`More servings of ${name}`} onClick={() => setServings(recipe_id, servings + 1)}>
+            <Plus className="h-4 w-4" />
+          </button>
+          {isChanged && (
+            <button
+              type="button"
+              className="flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setServings(recipe_id, baseServings)}
+              title={`Reset to ${dbServings}`}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Card: {dbServings}
+            </button>
+          )}
+          <div className="ml-auto">
+            <IngredientScaleControl
+              ingredients={ingredientsMap[recipe_id] ?? []}
+              baseServings={baseServings}
+              onApply={(newServings) => setServings(recipe_id, newServings)}
+            />
+          </div>
+        </div>
+      </article>
     )
   }
 
@@ -322,181 +311,197 @@ export default function ShoppingListPanel({ shoppingList }) {
     const buyQty = getBuyQty(item)
     const checked = isChecked(item)
     const isEditing = editingKey === item.key
+    const label = `${item.name}${item.preparation ? `, ${item.preparation}` : ''}`
+    const qtyText = item.computedQty !== null ? `${formatQty(buyQty)}${item.unit ? ` ${item.unit}` : ''}` : null
+
+    if (checked) {
+      return (
+        <div key={item.key} className="flex items-center gap-3.5 border-t border-border py-2">
+          <button
+            type="button"
+            aria-pressed="true"
+            aria-label={`Need ${label} after all`}
+            onClick={() => handleCheckToggle(item)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 border-secondary bg-secondary text-secondary-foreground"
+          >
+            <Check className="h-4 w-4" />
+          </button>
+          <span className="flex-1 text-[15px] text-muted-foreground line-through">{label}</span>
+          {item.computedQty !== null && (
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {formatQty(item.computedQty)}{item.unit ? ` ${item.unit}` : ''}
+            </span>
+          )}
+        </div>
+      )
+    }
 
     return (
-      <div
-        key={item.key}
-        className={`flex items-start gap-3 py-1.5 transition-opacity ${checked ? 'opacity-40' : ''}`}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={() => handleCheckToggle(item)}
-          className="h-4 w-4 shrink-0 cursor-pointer accent-primary mt-0.5"
+      <div key={item.key} className="flex items-center gap-3.5 border-t border-border py-2.5">
+        <button
+          type="button"
+          aria-pressed="false"
+          aria-label={`Already have ${label}`}
+          onClick={() => handleCheckToggle(item)}
+          className="h-7 w-7 shrink-0 rounded-lg border-2 border-input hover:border-secondary transition-colors"
         />
 
-        <div className="flex-1 min-w-0">
-          <span className={`block text-sm ${checked ? 'line-through text-muted-foreground' : ''}`}>
-            {item.name}
-            {item.preparation ? `, ${item.preparation}` : ''}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {[...new Set(item.contributions.map(c => c.recipeName))].join(', ')}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-base font-medium">{label}</span>
+          <span className="truncate text-[13px] text-muted-foreground">
+            for {[...new Set(item.contributions.map(c => c.recipeName))].join(', ')}
           </span>
         </div>
 
-        {item.computedQty !== null && (
+        {qtyText && (
           isEditing ? (
-            <div className="flex items-center gap-1 shrink-0">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => handleQtyStep(item, -1)}
-              >
-                <Minus className="h-3 w-3" />
-              </Button>
-              <span className="w-8 text-center text-sm tabular-nums">
-                {formatQty(buyQty)}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-6 w-6"
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button type="button" className={mini} aria-label={`Less ${item.name}`} onClick={() => handleQtyStep(item, -1)}>
+                <Minus className="h-4 w-4" />
+              </button>
+              <span className="min-w-10 text-center font-semibold text-primary-text tabular-nums">{formatQty(buyQty)}</span>
+              <button
+                type="button"
+                className={`${mini} disabled:opacity-40 disabled:hover:bg-card`}
+                aria-label={`More ${item.name}`}
+                disabled={buyQty >= item.computedQty}
+                title={buyQty >= item.computedQty ? 'Already the full amount the recipes need' : undefined}
                 onClick={() => handleQtyStep(item, 1)}
               >
-                <Plus className="h-3 w-3" />
-              </Button>
+                <Plus className="h-4 w-4" />
+              </button>
               <button
-                className="text-xs text-muted-foreground hover:text-foreground ml-1"
+                type="button"
+                className="min-h-11 px-2 text-sm font-semibold text-primary-text hover:underline"
                 onClick={() => setEditingKey(null)}
               >
-                done
+                Done
               </button>
             </div>
           ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className={`text-sm shrink-0 tabular-nums transition-colors ${
-                    checked
-                      ? 'text-muted-foreground line-through cursor-default'
-                      : 'text-muted-foreground hover:text-foreground cursor-pointer'
-                  }`}
-                  onClick={() => { if (!checked) setEditingKey(item.key) }}
-                >
-                  {formatQty(buyQty)}{item.unit ? ` ${item.unit}` : ''}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <div className="text-xs space-y-1 max-w-48">
-                  {item.contributions.map((c, i) => (
-                    <div key={i} className="flex items-baseline gap-1">
-                      <span className="font-medium tabular-nums">
-                        {c.scaledQty !== null ? formatQty(c.scaledQty) : '?'}
-                        {item.unit ? ` ${item.unit}` : ''}
-                      </span>
-                      <span className="text-muted-foreground">· {c.recipeName}</span>
-                      {c.scaleFactor !== 1 && (
-                        <span className="text-muted-foreground/70">
-                          ({formatQty(c.baseQty)} ×{parseFloat(c.scaleFactor.toFixed(2))})
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0} className="min-w-[70px] shrink-0 cursor-default text-right font-semibold text-primary-text tabular-nums">
+                    {qtyText}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <div className="text-xs space-y-1 max-w-48">
+                    {item.contributions.map((c, i) => (
+                      <div key={i} className="flex items-baseline gap-1">
+                        <span className="font-medium tabular-nums">
+                          {c.scaledQty !== null ? formatQty(c.scaledQty) : '?'}
+                          {item.unit ? ` ${item.unit}` : ''}
                         </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+                        <span className="text-muted-foreground">· {c.recipeName}</span>
+                        {c.scaleFactor !== 1 && (
+                          <span className="text-muted-foreground/70">
+                            ({formatQty(c.baseQty)} ×{parseFloat(c.scaleFactor.toFixed(2))})
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+              <button
+                type="button"
+                className={mini}
+                aria-label={`Change how much ${item.name} to buy`}
+                onClick={() => setEditingKey(item.key)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </>
           )
         )}
       </div>
     )
   }
 
+  const hasRecipes = recipeSelections.length > 0
+
   return (
-    <div className="mx-auto w-full max-w-6xl grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+    <div className="flex flex-wrap items-start gap-8">
       {/* Left (top on phones) — this week's recipes, with servings */}
-      <section aria-label="This week's recipes" className="rounded-xl border border-border bg-card text-card-foreground overflow-hidden">
-        <div className="px-6 pt-5 pb-4 border-b border-border flex items-baseline justify-between gap-3">
-          <h2 className="text-lg font-semibold">
-            This week · {recipeSelections.length} {recipeSelections.length === 1 ? 'recipe' : 'recipes'}
-          </h2>
-          <Link to="/recipes" className="text-sm font-medium text-secondary hover:underline">Add more</Link>
+      <section aria-label="This week's recipes" className="flex min-w-0 flex-[1_1_340px] flex-col gap-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-2xl font-bold">Recipes · {recipeSelections.length}</h2>
+          <Link to="/recipes" className="text-sm font-semibold text-primary-text hover:underline">Add more</Link>
         </div>
-        {recipeSelections.length === 0 ? (
-          <p className="px-6 py-8 text-center text-sm text-muted-foreground">
-            Pick recipes with the cart button on the Recipes tab.
-          </p>
-        ) : (
-          <div className="px-6 py-4 space-y-4">
-            {recipeSelections.map(renderRecipe)}
+        {!hasRecipes ? (
+          <div className="rounded-[18px] border border-dashed border-input bg-card px-6 py-10 text-center text-sm text-muted-foreground">
+            Pick recipes with the basket button on the Recipes tab.
           </div>
+        ) : (
+          recipeSelections.map(renderRecipe)
         )}
       </section>
 
       {/* Right (below on phones) — the merged list, grouped by aisle */}
-      <section aria-label="Shopping list" className="rounded-xl border border-border bg-card text-card-foreground overflow-hidden flex flex-col">
-        <div className="px-6 pt-5 pb-4 border-b border-border">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <ShoppingCart className="h-5 w-5" />
-            Shopping list{recipeSelections.length > 0 ? ` · ${openCount} ${openCount === 1 ? 'item' : 'items'}` : ''}
+      <section aria-label="Shopping list" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h2 className="flex-[1_1_auto] text-2xl font-bold">
+            Shopping list{hasRecipes ? ` · ${openCount} to buy` : ''}
           </h2>
-          {recipeSelections.length > 0 && (
-            <p className="mt-1 text-sm text-muted-foreground">Tick what you already have; ticked items aren't copied.</p>
+          {hasRecipes && (
+            <>
+              <button
+                type="button"
+                onClick={handleCopyForReminders}
+                className="flex h-11 items-center gap-1.5 rounded-full border border-input px-4 text-sm font-semibold hover:bg-accent transition-colors"
+              >
+                <Copy className="h-4 w-4" />
+                Copy for Reminders
+              </button>
+              <Link
+                to="/ordering"
+                className="flex h-11 items-center gap-1.5 rounded-full bg-secondary px-[18px] text-sm font-bold text-secondary-foreground hover:opacity-90 transition-opacity"
+              >
+                Send to AH
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </>
           )}
         </div>
+        {hasRecipes && (
+          <p className="-mt-2 text-sm text-muted-foreground">Tick what you already have; ticked items aren&apos;t copied or sent.</p>
+        )}
 
         <TooltipProvider>
-          <div className="px-6 pb-4">
-            {recipeSelections.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">Your list is empty.</p>
-            )}
-            {groupedItems.map(({ aisle, items }) => (
-              <div key={aisle}>
-                <h3 className="pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{aisle}</h3>
-                <div className="space-y-1">{items.map(renderItem)}</div>
+          {!hasRecipes && (
+            <div className="rounded-[18px] border border-dashed border-input bg-card px-6 py-10 text-center text-sm text-muted-foreground">
+              Your list is empty.
+            </div>
+          )}
+          {groupedItems.map(({ aisle, items }) => (
+            <div key={aisle} className="flex flex-col rounded-[18px] border border-border bg-card px-[18px] py-1.5">
+              <h3 className="pb-1.5 pt-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">{aisle}</h3>
+              {items.map(renderItem)}
+            </div>
+          ))}
+          {checkedItems.length > 0 && (
+            <div className="flex flex-col rounded-[18px] border border-dashed border-input bg-card px-[18px] pb-3 pt-1.5">
+              <div className="flex items-center gap-2.5 pb-1.5 pt-2.5">
+                <h3 className="flex-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Already have · {checkedItems.length}
+                </h3>
+                {hasChecked && (
+                  <button
+                    type="button"
+                    onClick={clearChecked}
+                    className="flex h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold text-primary-text hover:bg-accent transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Clear ticked
+                  </button>
+                )}
               </div>
-            ))}
-            {checkedItems.length > 0 && (
-              <div>
-                <h3 className="pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Already have</h3>
-                <div className="space-y-1">{checkedItems.map(renderItem)}</div>
-              </div>
-            )}
-          </div>
+              {checkedItems.map(renderItem)}
+            </div>
+          )}
         </TooltipProvider>
-
-        {/* Footer — list actions */}
-        {recipeSelections.length > 0 && (
-          <div className="px-6 py-4 border-t border-border flex flex-wrap gap-2 shrink-0">
-            {hasChecked && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={clearChecked}
-              >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Clear checked
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={handleCopyForReminders}
-            >
-              <Copy className="h-3 w-3 mr-1" />
-              Copy for Reminders
-            </Button>
-            <Button variant="default" size="sm" className="flex-1" asChild>
-              <Link to="/ordering">
-                Send to AH
-                <ArrowRight className="h-3 w-3" />
-              </Link>
-            </Button>
-          </div>
-        )}
       </section>
     </div>
   )
