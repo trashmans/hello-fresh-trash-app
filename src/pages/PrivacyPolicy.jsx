@@ -41,6 +41,11 @@ export default function PrivacyPolicy() {
               recipe (its name, ingredients, steps and nutrition), the PDF is sent to Google's Gemini API. Where a card
               doesn't print nutrition values, Gemini estimates them from the ingredients; estimates are marked as such.
             </p>
+            <p className="mt-2">
+              You can also add a recipe by pasting a link. Our server (not your browser) then fetches that page, and
+              its recipe or text is sent to Gemini to read it; the recipe site sees our server, not you. The page's main
+              photo is stored as the recipe's cover, and the recipe links back to the original page.
+            </p>
           </section>
 
           <section>

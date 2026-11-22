@@ -12,6 +12,7 @@ Short records of decisions that are expensive to reverse. One file per decision,
 | [0006](0006-one-account-per-retailer.md) | One account per retailer per household | Accepted |
 | [0007](0007-access-tokens-never-stored.md) | Retailer access tokens are never stored | Accepted |
 | [0008](0008-social-on-shared-catalogue.md) | Social is built on the shared recipe catalogue | Accepted |
+| [0009](0009-recipes-from-links.md) | Recipes can be imported from a web link | Accepted |
 
 Design context: the AH Weekly Shop high-level design and the API spike findings in `spike/ah-api/FINDINGS.md`.
 
