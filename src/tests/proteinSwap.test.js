@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SWAP_MODES, swapModesFor, applySwap } from '@/lib/proteinSwap'
+import { SWAP_MODES, swapModesFor, applySwap, swapIngredientsMap } from '@/lib/proteinSwap'
 
 // A recipe's ingredients as the app loads them (amounts for the recipe's own servings).
 const ing = (id, name, quantity, unit = null, extra = {}) => ({
@@ -144,5 +144,31 @@ describe('applySwap', () => {
     const copy = JSON.parse(JSON.stringify(recipe))
     applySwap({ ...recipe, swap: toVeg, mode: 'half' })
     expect(recipe).toEqual(copy)
+  })
+})
+
+describe('swapIngredientsMap', () => {
+  // The Shopping tab and the AH preview merge ingredients per recipe; a swapped pick's
+  // ingredients go through applySwap first.
+  const map = { r1: recipe.ingredients, r2: [ing('9', 'Rice', 150, 'g')] }
+
+  it('swaps the ingredients of picks that have a swap, leaves the others alone', () => {
+    const out = swapIngredientsMap(
+      [{ recipe_id: 'r1', servings: 2, swap_id: 's1', swap_mode: 'all' }, { recipe_id: 'r2', servings: 2 }],
+      map,
+      { s1: toVeg },
+    )
+    expect(names(out.r1)).toEqual(['Halloumi 400', 'Vegetable stock 500', 'Onion 1', 'Soy sauce 1'])
+    expect(out.r2).toBe(map.r2)
+  })
+
+  it('uses the original when the swap is not loaded (yet)', () => {
+    const out = swapIngredientsMap([{ recipe_id: 'r1', servings: 2, swap_id: 'gone', swap_mode: 'half' }], map, {})
+    expect(out.r1).toBe(map.r1)
+  })
+
+  it('does not change the map it was given', () => {
+    swapIngredientsMap([{ recipe_id: 'r1', servings: 2, swap_id: 's1', swap_mode: 'half' }], map, { s1: toVeg })
+    expect(map.r1).toBe(recipe.ingredients)
   })
 })

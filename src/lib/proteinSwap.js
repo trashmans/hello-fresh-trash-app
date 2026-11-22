@@ -80,3 +80,16 @@ export function applySwap({ ingredients, steps, swap, mode }) {
   const swappedSteps = half ? pick(swap.steps_half, swap.steps_all, steps) : pick(swap.steps_all, steps)
   return { ingredients: list, steps: swappedSteps ?? steps }
 }
+
+// Applies each pick's protein swap to its recipe's ingredients, for the
+// shopping list and the AH preview. Picks without a swap, or whose swap is
+// not loaded (yet), keep the original ingredients. Returns a new map.
+export function swapIngredientsMap(selections, ingredientsMap, swapsById) {
+  const out = { ...ingredientsMap }
+  for (const s of selections ?? []) {
+    const swap = s?.swap_id ? swapsById?.[s.swap_id] : null
+    if (!swap || !out[s.recipe_id]) continue
+    out[s.recipe_id] = applySwap({ ingredients: out[s.recipe_id], steps: [], swap, mode: s.swap_mode }).ingredients
+  }
+  return out
+}

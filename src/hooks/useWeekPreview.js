@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { STAPLE_SELECT } from '@/hooks/useStaples'
 import { mergeIngredients } from '@/lib/ingredientMerge'
+import { swapIngredientsMap } from '@/lib/proteinSwap'
 import { buildWeekPreview, toSendRequest } from '@/lib/weekPreview'
 
 // This week's preview (rollout phase 5): a dry run of what the weekly shop would change
@@ -79,25 +80,28 @@ export function useWeekPreview({ recipeSelections, adjustedItems }, mappings = [
     try {
       const ids = recipeSelections.map(r => r.recipe_id)
       const none = Promise.resolve({ data: [], error: null })
-      const [staples, recipes, ingredients, week] = await Promise.all([
+      const swapIds = [...new Set(recipeSelections.map(r => r.swap_id).filter(Boolean))]
+      const [staples, recipes, ingredients, week, swaps] = await Promise.all([
         supabase.from('household_staples').select(STAPLE_SELECT).eq('household_id', household.id).order('name'),
         ids.length ? supabase.from('recipes').select('id, name, servings').in('id', ids) : none,
         ids.length ? supabase.from('ingredients').select('*').in('recipe_id', ids) : none,
         supabase.functions.invoke('retailer-week', { body: {} }),
+        swapIds.length ? supabase.from('recipe_swaps').select('*').in('id', swapIds) : none,
       ])
       if (week.error) throw new Error(await functionMessage(week.error, 'Could not reach AH. Try again.'))
-      const failed = [staples, recipes, ingredients].find(r => r.error)
+      const failed = [staples, recipes, ingredients, swaps].find(r => r.error)
       if (failed) throw new Error(failed.error.message)
 
       const ingredientsMap = {}
       for (const ing of ingredients.data ?? []) (ingredientsMap[ing.recipe_id] ??= []).push(ing)
       const recipesMap = Object.fromEntries((recipes.data ?? []).map(r => [r.id, r]))
+      const swapsById = Object.fromEntries((swaps.data ?? []).map(s => [s.id, s]))
 
       setInputs({
         runDate: todayIn(household.timeZone),
         staples: staples.data ?? [],
         liveProducts: week.data?.products ?? {},
-        mergedItems: mergeIngredients(recipeSelections, ingredientsMap, recipesMap, unitPrefs),
+        mergedItems: mergeIngredients(recipeSelections, swapIngredientsMap(recipeSelections, ingredientsMap, swapsById), recipesMap, unitPrefs),
         adjustedItems,
         currentList: week.data?.list ?? [],
         skippedLookups: week.data?.skippedLookups ?? 0,

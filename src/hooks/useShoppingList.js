@@ -20,7 +20,9 @@ function reducer(state, action) {
         ...state,
         recipeSelections: [
           ...state.recipeSelections,
-          { recipe_id: action.recipe.id, servings: action.recipe.servings ?? 2 },
+          action.swap?.swap_id
+            ? { recipe_id: action.recipe.id, servings: action.recipe.servings ?? 2, swap_id: action.swap.swap_id, swap_mode: action.swap.swap_mode }
+            : { recipe_id: action.recipe.id, servings: action.recipe.servings ?? 2 },
         ],
       }
     }
@@ -44,6 +46,17 @@ function reducer(state, action) {
             ? { ...r, servings: Math.max(0.1, action.servings) }
             : r
         ),
+      }
+
+    // Protein swap for a pick (docs/adr/0010): null swapId goes back to the original.
+    case 'SET_SWAP':
+      return {
+        ...state,
+        recipeSelections: state.recipeSelections.map(r => {
+          if (r.recipe_id !== action.recipeId) return r
+          const base = { recipe_id: r.recipe_id, servings: r.servings }
+          return action.swapId ? { ...base, swap_id: action.swapId, swap_mode: action.mode } : base
+        }),
       }
 
     case 'SET_ADJUSTED_QTY': {
@@ -195,6 +208,8 @@ export function useShoppingList() {
     toggleRecipe,
     removeRecipe: (recipeId) => dispatch({ type: 'REMOVE_RECIPE', recipeId }),
     setServings: (recipeId, servings) => dispatch({ type: 'SET_SERVINGS', recipeId, servings }),
+    setSwap: (recipeId, swapId, mode) => dispatch({ type: 'SET_SWAP', recipeId, swapId, mode }),
+    addRecipeWithSwap: (recipe, swapId, mode) => dispatch({ type: 'ADD_RECIPE', recipe, swap: swapId ? { swap_id: swapId, swap_mode: mode } : null }),
     setAdjustedQty: (key, buyQty, computedQty) =>
       dispatch({ type: 'SET_ADJUSTED_QTY', key, buyQty, computedQty }),
     clearChecked: () => dispatch({ type: 'CLEAR_CHECKED' }),
@@ -206,7 +221,7 @@ async function fetchHouseholdList(householdId) {
   const [picks, adjustments] = await Promise.all([
     supabase
       .from('household_recipe_picks')
-      .select('recipe_id, servings, added_at')
+      .select('recipe_id, servings, swap_id, swap_mode, added_at')
       .eq('household_id', householdId),
     supabase
       .from('household_list_adjustments')
@@ -227,12 +242,18 @@ function runOp(op, householdId, userId) {
     case 'addPick':
       // If the other member already added it, keep their row.
       return picks().upsert(
-        { household_id: householdId, recipe_id: op.recipe_id, servings: op.servings, added_by: userId },
+        { household_id: householdId, recipe_id: op.recipe_id, servings: op.servings, added_by: userId,
+          ...(op.swap_id ? { swap_id: op.swap_id, swap_mode: op.swap_mode } : {}) },
         { onConflict: 'household_id,recipe_id', ignoreDuplicates: true }
       )
     case 'setPickServings':
       return picks()
         .update({ servings: op.servings, updated_at: now })
+        .eq('household_id', householdId)
+        .eq('recipe_id', op.recipe_id)
+    case 'setPickSwap':
+      return picks()
+        .update({ swap_id: op.swap_id, swap_mode: op.swap_mode, updated_at: now })
         .eq('household_id', householdId)
         .eq('recipe_id', op.recipe_id)
     case 'removePick':

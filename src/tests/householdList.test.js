@@ -226,3 +226,52 @@ describe('mergeRemote', () => {
     expect({ base, local, remote }).toEqual(copy)
   })
 })
+
+// Protein swaps (docs/adr/0010): a pick can carry the swap chosen for it this week
+// (swap_id + swap_mode 'all' | 'half'), shared with the household like servings.
+describe('picks with a protein swap', () => {
+  const swapped = (recipe_id, swap_id = 's1', swap_mode = 'half', servings = 2) => ({ recipe_id, servings, swap_id, swap_mode })
+
+  it('reads the swap from the household rows', () => {
+    const rows = [
+      { recipe_id: 'r1', servings: 2, swap_id: 's1', swap_mode: 'all', added_at: '2026-11-10T10:00:00Z' },
+      { recipe_id: 'r2', servings: 2, swap_id: null, swap_mode: null, added_at: '2026-11-11T10:00:00Z' },
+      { recipe_id: 'r3', servings: 2, swap_id: null, swap_mode: 'half', added_at: '2026-11-12T10:00:00Z' },
+    ]
+    expect(toListState(rows, []).recipeSelections).toEqual([swapped('r1', 's1', 'all'), pick('r2'), pick('r3')])
+  })
+
+  it('saves a new swap, a changed swap and going back to the original as one write each', () => {
+    expect(diffListState(state([pick('r1')]), state([swapped('r1')]))).toEqual([
+      { type: 'setPickSwap', recipe_id: 'r1', swap_id: 's1', swap_mode: 'half' },
+    ])
+    expect(diffListState(state([swapped('r1')]), state([swapped('r1', 's1', 'all')]))).toEqual([
+      { type: 'setPickSwap', recipe_id: 'r1', swap_id: 's1', swap_mode: 'all' },
+    ])
+    expect(diffListState(state([swapped('r1')]), state([pick('r1')]))).toEqual([
+      { type: 'setPickSwap', recipe_id: 'r1', swap_id: null, swap_mode: null },
+    ])
+  })
+
+  it('adds a recipe with its swap in one write', () => {
+    expect(diffListState(state(), state([swapped('r1')]))).toEqual([
+      { type: 'addPick', recipe_id: 'r1', servings: 2, swap_id: 's1', swap_mode: 'half' },
+    ])
+  })
+
+  it('treats a swap without a valid mode as the original', () => {
+    expect(diffListState(state([pick('r1')]), state([{ recipe_id: 'r1', servings: 2, swap_id: 's1', swap_mode: 'most' }]))).toEqual([])
+  })
+
+  it('keeps my unsaved swap next to their servings change, and not on a recipe they removed', () => {
+    const base = state([pick('r1'), pick('r2')])
+    const local = state([swapped('r1'), swapped('r2')])
+    const remote = state([pick('r1', 4)])
+    expect(mergeRemote(base, local, remote).recipeSelections).toEqual([swapped('r1', 's1', 'half', 4)])
+  })
+
+  it('takes their swap when I changed nothing', () => {
+    const base = state([pick('r1')])
+    expect(mergeRemote(base, base, state([swapped('r1')])).recipeSelections).toEqual([swapped('r1')])
+  })
+})
