@@ -14,7 +14,7 @@ Rows marked **Planned** belong to the AH weekly shop feature and apply once it s
 | Activity | Data subjects | Personal data | Purpose | Lawful basis | Retention |
 |---|---|---|---|---|---|
 | Sign-in and access control | Invited users | Name, email, profile picture URL (from Google), allowlist entry | Identify users, restrict access to invitees | Contract (providing the app) | While the account is active; deleted within 30 days of a deletion request |
-| Recipe catalogue | Invited users | Uploader name shown on recipes, uploaded PDFs | Shared recipe catalogue with attribution | Contract | While the account is active; failed uploads deleted after 48 hours |
+| Recipe catalogue | Invited users | Uploader name shown on recipes, uploaded PDFs; links to recipe pages and their stored cover photos | Shared recipe catalogue with attribution | Contract | While the account is active; failed uploads deleted after 48 hours |
 | Shopping list and display preferences | Invited users | Recipe selections, adjusted quantities, unit preferences | Build a shopping list from chosen recipes | Contract | While the account is active |
 | Invites, friends and recipe shares | Invited people (before and after they sign in); users | Invitee email, who invited them, created / expiry / used / revoked dates; friend requests and friendships (two user IDs and a date); shared recipe, sender, recipient, optional note (280 characters), seen date | Let users invite people and recommend recipes to friends (docs/adr/0008) | Contract (users); legitimate interest (the invitee's email, so the person who knows them can let them in) | Unused invites deleted once expired (30 days) or revoked; the rest while both accounts exist |
 | Households | Household members | Household name, membership, role; the household's recipe picks and list adjustments | Share shopping data within a household | Contract | While the household exists |
@@ -38,7 +38,7 @@ Shopping data can reveal sensitive traits by inference (diet, religion, health, 
 | Supabase | Processor: database, auth, storage, Edge Functions | All app data | EU: West EU (Ireland), both production and preview |
 | Vercel | Processor: frontend hosting | Request metadata (IP, user agent) | Global edge network |
 | Google | Sign-in provider | Name, email, picture at sign-in | Global |
-| Google (Gemini API) | Processor: recipe PDF parsing; translating staple product searches into Dutch; finding AH's product name for an ingredient with Google Search grounding (Suggest AH products) | Uploaded recipe PDFs; staple search words and ingredient names (no user data) | Global |
+| Google (Gemini API) | Processor: recipe PDF and web-page parsing (page text, or the link via url_context); translating staple product searches into Dutch; finding AH's product name for an ingredient with Google Search grounding (Suggest AH products) | Uploaded recipe PDFs; staple search words and ingredient names (no user data) | Global |
 | Apple, Google, Mozilla push services | Deliver push messages (**planned**) | Encrypted push payload with no item names | Global |
 | Albert Heijn | Recipient at the user's request | Shopping list lines written to the user's own AH account | Netherlands |
 | Albert Heijn image server (static.ah.nl) | Third party the browser contacts directly | Request metadata (IP address, user agent) when a product photo is shown; no referrer, no app data | Netherlands / AH's CDN |

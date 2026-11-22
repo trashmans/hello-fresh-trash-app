@@ -1,4 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { extractRecipeData, linkFilename, pageImage, pageText, recipeSourceText } from '../_shared/recipeLink.ts'
+import { LinkError, safeFetch } from '../_shared/safeFetch.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -215,106 +217,9 @@ async function computeIngredientFingerprint(ingredients: Ingredient[]): Promise<
   return sha256Hex(sorted.join('|'))
 }
 
-Deno.serve(async (req) => {
-  const executionId = crypto.randomUUID().slice(0, 8)
-  console.log(`[${executionId}] invoked method=${req.method}`)
 
-  let body: { record?: { id?: string } }
-  try {
-    body = await req.json()
-  } catch {
-    console.log(`[${executionId}] bad request — could not parse body`)
-    return new Response('Bad Request', { status: 400 })
-  }
-
-  const recipeId = body?.record?.id
-  console.log(`[${executionId}] recipeId=${recipeId}`)
-  if (!recipeId) {
-    console.log(`[${executionId}] missing recipe id in body`)
-    return new Response('Missing recipe id', { status: 400 })
-  }
-
-  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
-
-  // Atomic claim — prevents double-processing on concurrent webhook deliveries
-  const { data: claimed, error: claimError } = await supabase
-    .from('recipes')
-    .update({ status: 'processing', processing_started_at: new Date().toISOString() })
-    .eq('id', recipeId)
-    .eq('status', 'pending')
-    .select('id, storage_path, retry_count')
-    .maybeSingle()
-
-  if (claimError) console.log(`[${executionId}] claim error: ${claimError.message}`)
-  if (!claimed) {
-    console.log(`[${executionId}] claim failed — already processing or not pending`)
-    return new Response('Already processing or not pending', { status: 200 })
-  }
-  console.log(`[${executionId}] claimed recipe storage_path=${claimed.storage_path}`)
-
-  async function setFailed(reason: string, incrementRetry = true) {
-    console.log(`[${executionId}] setFailed reason=${reason}`)
-    const update: Record<string, unknown> = {
-      status: 'failed',
-      rejection_reason: reason,
-      processing_completed_at: new Date().toISOString(),
-    }
-    if (incrementRetry) {
-      update.retry_count = (claimed.retry_count ?? 0) + 1
-    }
-    await supabase.from('recipes').update(update).eq('id', recipeId)
-  }
-
-  async function setRejected(existingId: string) {
-    console.log(`[${executionId}] setRejected duplicate of ${existingId}`)
-    await supabase.from('recipes').update({
-      status: 'rejected',
-      rejection_reason: `duplicate:${existingId}`,
-      processing_completed_at: new Date().toISOString(),
-    }).eq('id', recipeId)
-  }
-
-  try {
-    console.log(`[${executionId}] downloading PDF from storage`)
-    const { data: fileBlob, error: downloadError } = await supabase.storage
-      .from('recipe-pdfs')
-      .download(claimed.storage_path)
-
-    if (downloadError || !fileBlob) {
-      console.log(`[${executionId}] download failed: ${downloadError?.message}`)
-      await setFailed('storage_download_failed')
-      return new Response('OK', { status: 200 })
-    }
-
-    const pdfBytes = new Uint8Array(await fileBlob.arrayBuffer())
-    console.log(`[${executionId}] PDF downloaded bytes=${pdfBytes.length}`)
-
-    if (pdfBytes.length > 10 * 1024 * 1024) {
-      await setFailed('invalid_file', false)
-      return new Response('OK', { status: 200 })
-    }
-    if (
-      pdfBytes[0] !== 0x25 || pdfBytes[1] !== 0x50 ||
-      pdfBytes[2] !== 0x44 || pdfBytes[3] !== 0x46
-    ) {
-      await setFailed('invalid_file', false)
-      return new Response('OK', { status: 200 })
-    }
-
-    console.log(`[${executionId}] calling Gemini`)
-    const base64Pdf = uint8ToBase64(pdfBytes)
-
-    const geminiPayload = {
-      contents: [{
-        parts: [
-          {
-            inline_data: {
-              mime_type: 'application/pdf',
-              data: base64Pdf,
-            },
-          },
-          {
-            text: `This PDF may be written in any language. Extract the recipe and translate every text field into English, regardless of the PDF's original language — the only exception is "source_name", which should be kept exactly as written if it is a brand or publisher name (e.g. HelloFresh stays HelloFresh, do not translate it). Return a JSON object with exactly these fields:
+// The extraction instructions, the same for PDFs and web pages.
+const EXTRACTION_PROMPT = `This PDF may be written in any language. Extract the recipe and translate every text field into English, regardless of the PDF's original language — the only exception is "source_name", which should be kept exactly as written if it is a brand or publisher name (e.g. HelloFresh stays HelloFresh, do not translate it). Return a JSON object with exactly these fields:
 {
   "name": "primary recipe title only, in English — the main heading (e.g. 'Korean Beef Bibimbap'), NOT the subtitle or ingredient description that follows. Title case, not all caps.",
   "source_name": "brand or publisher if identifiable (e.g. HelloFresh), null otherwise — keep as written, do not translate",
@@ -370,18 +275,176 @@ TEMPERATURES: Whenever a step mentions an oven or cooking temperature, wrap the 
 - A step originally in Celsius, after translating to English: "Preheat the oven to 220°C." → "Preheat the oven to {{temp:220C}}."
 - Do not wrap non-temperature numbers such as cook times, quantities, or oven rack positions — only actual temperature values.
 
-Return only valid JSON. No markdown fences, no explanation.`,
-          },
-        ],
-      }],
-      generationConfig: {
-        response_mime_type: 'application/json',
-        // thinkingConfig is added per model by callGemini() (lowest level each
-        // model allows — extraction needs little reasoning).
-      },
+Return only valid JSON. No markdown fences, no explanation.`
+
+// Put before the instructions when the recipe comes from a link (docs/adr/0009).
+const LINK_PROMPT_PREFIX = `This recipe comes from a web page, not a PDF. Wherever the instructions below say "the PDF" or "the card", read "the web page". Use only the recipe itself: ignore reader comments, adverts, and other recipes linked on the page.
+
+`
+
+// Gemini replies with JSON; when the reply can't be forced into JSON mode (reading a page
+// with url_context), take the outermost {...} and drop any markdown fence around it.
+function jsonPart(text: string): string {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  return start >= 0 && end > start ? text.slice(start, end + 1) : text
+}
+
+const PAGE_TYPES = ['text/html', 'application/xhtml+xml']
+const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+
+Deno.serve(async (req) => {
+  const executionId = crypto.randomUUID().slice(0, 8)
+  console.log(`[${executionId}] invoked method=${req.method}`)
+
+  let body: { record?: { id?: string } }
+  try {
+    body = await req.json()
+  } catch {
+    console.log(`[${executionId}] bad request — could not parse body`)
+    return new Response('Bad Request', { status: 400 })
+  }
+
+  const recipeId = body?.record?.id
+  console.log(`[${executionId}] recipeId=${recipeId}`)
+  if (!recipeId) {
+    console.log(`[${executionId}] missing recipe id in body`)
+    return new Response('Missing recipe id', { status: 400 })
+  }
+
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+
+  // Atomic claim — prevents double-processing on concurrent webhook deliveries
+  const { data: claimed, error: claimError } = await supabase
+    .from('recipes')
+    .update({ status: 'processing', processing_started_at: new Date().toISOString() })
+    .eq('id', recipeId)
+    .eq('status', 'pending')
+    .select('id, storage_path, source_url, uploaded_by, retry_count')
+    .maybeSingle()
+
+  if (claimError) console.log(`[${executionId}] claim error: ${claimError.message}`)
+  if (!claimed) {
+    console.log(`[${executionId}] claim failed — already processing or not pending`)
+    return new Response('Already processing or not pending', { status: 200 })
+  }
+  console.log(`[${executionId}] claimed recipe ${claimed.storage_path ? `storage_path=${claimed.storage_path}` : `link=${linkFilename(claimed.source_url ?? '')}`}`)
+
+  async function setFailed(reason: string, incrementRetry = true) {
+    console.log(`[${executionId}] setFailed reason=${reason}`)
+    const update: Record<string, unknown> = {
+      status: 'failed',
+      rejection_reason: reason,
+      processing_completed_at: new Date().toISOString(),
+    }
+    if (incrementRetry) {
+      update.retry_count = (claimed.retry_count ?? 0) + 1
+    }
+    await supabase.from('recipes').update(update).eq('id', recipeId)
+  }
+
+  async function setRejected(existingId: string) {
+    console.log(`[${executionId}] setRejected duplicate of ${existingId}`)
+    await supabase.from('recipes').update({
+      status: 'rejected',
+      rejection_reason: `duplicate:${existingId}`,
+      processing_completed_at: new Date().toISOString(),
+    }).eq('id', recipeId)
+  }
+
+  try {
+    const log = (msg: string) => console.log(`[${executionId}] ${msg}`)
+    // What Gemini reads: the PDF, or for a link the page's recipe text (or, when the page
+    // has almost no text without a browser, the link itself through Gemini's url_context).
+    let sourceParts: Record<string, unknown>[] = []
+    let promptPrefix = ''
+    let readUrl: string | null = null
+    let pageUrl: string | null = null
+    let imageRaw: string | null = null
+
+    if (claimed.storage_path) {
+      console.log(`[${executionId}] downloading PDF from storage`)
+      const { data: fileBlob, error: downloadError } = await supabase.storage
+        .from('recipe-pdfs')
+        .download(claimed.storage_path)
+
+      if (downloadError || !fileBlob) {
+        console.log(`[${executionId}] download failed: ${downloadError?.message}`)
+        await setFailed('storage_download_failed')
+        return new Response('OK', { status: 200 })
+      }
+
+      const pdfBytes = new Uint8Array(await fileBlob.arrayBuffer())
+      console.log(`[${executionId}] PDF downloaded bytes=${pdfBytes.length}`)
+
+      if (pdfBytes.length > 10 * 1024 * 1024) {
+        await setFailed('invalid_file', false)
+        return new Response('OK', { status: 200 })
+      }
+      if (
+        pdfBytes[0] !== 0x25 || pdfBytes[1] !== 0x50 ||
+        pdfBytes[2] !== 0x44 || pdfBytes[3] !== 0x46
+      ) {
+        await setFailed('invalid_file', false)
+        return new Response('OK', { status: 200 })
+      }
+      sourceParts = [{ inline_data: { mime_type: 'application/pdf', data: uint8ToBase64(pdfBytes) } }]
+    } else if (claimed.source_url) {
+      const { data: linkDupe } = await supabase
+        .from('recipes')
+        .select('id')
+        .eq('source_url', claimed.source_url)
+        .in('status', ['processing', 'ready'])
+        .neq('id', recipeId)
+        .limit(1)
+        .maybeSingle()
+      if (linkDupe) {
+        await setRejected(linkDupe.id)
+        return new Response('OK', { status: 200 })
+      }
+
+      let page
+      try {
+        page = await safeFetch(claimed.source_url, { accept: 'text/html,application/xhtml+xml', types: PAGE_TYPES, maxBytes: 3 * 1024 * 1024 })
+      } catch (err) {
+        const code = err instanceof LinkError ? err.code : 'fetch_failed'
+        log(`link fetch failed: ${code}`)
+        await setFailed(`link_${code}`)
+        return new Response('OK', { status: 200 })
+      }
+      pageUrl = page.url
+      const html = new TextDecoder().decode(page.bytes)
+      const data = extractRecipeData(html)
+      const text = data ? recipeSourceText(data, page.url) : pageText(html)
+      log(`link page read: recipe data ${data ? 'found' : 'not found'}, ${text.length} characters`)
+      imageRaw = data?.image ?? pageImage(html)
+      promptPrefix = LINK_PROMPT_PREFIX
+      if (!data && text.length < 300) {
+        readUrl = page.url
+      } else {
+        sourceParts = [{ text }]
+      }
+    } else {
+      await setFailed('no_source', false)
+      return new Response('OK', { status: 200 })
     }
 
-    const log = (msg: string) => console.log(`[${executionId}] ${msg}`)
+    console.log(`[${executionId}] calling Gemini`)
+    const geminiPayload = readUrl
+      ? {
+          // Gemini fetches the page itself; JSON mode can't be combined with tools.
+          contents: [{ parts: [{ text: `${promptPrefix}Read the recipe at ${readUrl}\n\n${EXTRACTION_PROMPT}` }] }],
+          tools: [{ url_context: {} }],
+          generationConfig: {},
+        }
+      : {
+          contents: [{ parts: [...sourceParts, { text: promptPrefix + EXTRACTION_PROMPT }] }],
+          generationConfig: {
+            response_mime_type: 'application/json',
+            // thinkingConfig is added per model by callGemini() (lowest level each
+            // model allows — extraction needs little reasoning).
+          },
+        }
     const geminiStarted = Date.now()
     const used: { model?: GeminiModel } = {}
     let geminiRes = await callGemini(geminiPayload, log, { used })
@@ -417,7 +480,7 @@ Return only valid JSON. No markdown fences, no explanation.`,
 
     let parsed: ParsedRecipe
     try {
-      parsed = JSON.parse(rawText)
+      parsed = JSON.parse(jsonPart(rawText))
     } catch {
       console.log(`[${executionId}] Gemini returned invalid JSON`)
       await setFailed('gemini_invalid_json')
@@ -480,6 +543,22 @@ Return only valid JSON. No markdown fences, no explanation.`,
     const nutrition = mergeNutrition(parsed)
     console.log(`[${executionId}] nutrition estimated=${nutrition.estimated.join(',') || 'none'}`)
 
+    // A link recipe's cover: the page's main photo, stored once like a PDF's cover.
+    let coverPath: string | null = null
+    if (imageRaw && pageUrl) {
+      try {
+        const img = await safeFetch(new URL(imageRaw, pageUrl).href, {
+          accept: 'image/webp,image/png,image/jpeg', types: Object.keys(IMAGE_TYPES), maxBytes: 5 * 1024 * 1024,
+        })
+        const path = `covers/${claimed.uploaded_by ?? 'unknown'}/${crypto.randomUUID()}.${IMAGE_TYPES[img.type]}`
+        const { error: coverError } = await supabase.storage.from('recipe-pdfs').upload(path, img.bytes, { contentType: img.type })
+        if (coverError) log(`cover not stored: ${coverError.message}`)
+        else coverPath = path
+      } catch (err) {
+        log(`cover not stored: ${err instanceof LinkError ? err.code : (err as Error).message}`)
+      }
+    }
+
     console.log(`[${executionId}] updating recipe to ready`)
     const { error: updateError } = await supabase.from('recipes').update({
       name: parsed.name,
@@ -495,6 +574,7 @@ Return only valid JSON. No markdown fences, no explanation.`,
       tags: parsed.tags ?? [],
       steps: parsed.steps ?? [],
       ingredient_fingerprint: fingerprint,
+      ...(coverPath ? { cover_path: coverPath } : {}),
       status: 'ready',
       processing_completed_at: new Date().toISOString(),
     }).eq('id', recipeId)
