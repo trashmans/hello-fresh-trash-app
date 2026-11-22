@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Check, ExternalLink, FileText, Minus, Plus, RotateCcw, Share2 } from 'lucide-react'
 import SharePanel from '@/components/SharePanel'
+import SwapProteinSection from '@/components/SwapProteinSection'
+import { useSwapsById } from '@/hooks/useRecipeSwaps'
+import { applySwap, swapModesFor } from '@/lib/proteinSwap'
 import { supabase } from '@/lib/supabase'
 import { useRecipeIngredients } from '@/hooks/useRecipeIngredients'
 import { useRecipeStepImages } from '@/hooks/useRecipeStepImages'
@@ -157,11 +160,21 @@ function ScaleControls({ recipe, ingredients, scaleState, setScaleState, scaleFa
   )
 }
 
-function InstructionsView({ recipe }) {
+// swap: { row, mode } when a protein swap is chosen — applied before any scaling.
+function InstructionsView({ recipe, swap = null }) {
   const { unitPrefs } = useAuth()
-  const { ingredients, loading } = useRecipeIngredients(recipe.id)
-  const steps = recipe.steps ?? []
-  const { stepImageUrls } = useRecipeStepImages(recipe.id, steps.length)
+  const { ingredients: originalIngredients, loading } = useRecipeIngredients(recipe.id)
+  const originalSteps = recipe.steps ?? []
+  const { stepImageUrls } = useRecipeStepImages(recipe.id, originalSteps.length)
+  const swapped = useMemo(
+    () => applySwap({ ingredients: originalIngredients, steps: originalSteps, swap: swap?.row ?? null, mode: swap?.mode }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [originalIngredients, recipe.steps, swap?.row, swap?.mode]
+  )
+  const ingredients = swapped.ingredients
+  const steps = swapped.steps ?? []
+  // The step photos belong to the original steps; keep them only if the steps still line up.
+  const showStepImages = steps === originalSteps || steps.length === originalSteps.length
   const initialScale = () => (recipe.servings ? { mode: 'servings', targetServings: recipe.servings } : { mode: null })
   const [scaleState, setScaleStateRaw] = useState(initialScale)
 
@@ -211,7 +224,11 @@ function InstructionsView({ recipe }) {
               return (
                 <li key={ing.id} className="flex gap-3 border-b border-border py-3 text-[15px]">
                   <span className="min-w-[72px] font-semibold text-primary-text">{amount}</span>
-                  <span>{name}</span>
+                  <span>
+                    {name}
+                    {ing.swap === 'added' && <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-[12px] font-semibold text-primary-text">swap</span>}
+                    {ing.swap === 'halved' && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[12px] font-semibold text-muted-foreground">half</span>}
+                  </span>
                 </li>
               )
             })}
@@ -228,7 +245,7 @@ function InstructionsView({ recipe }) {
           <ol className="flex flex-col gap-5">
             {steps.map((step, i) => (
               <li key={i} className="flex flex-wrap items-start gap-5">
-                {stepImageUrls[i] && (
+                {showStepImages && stepImageUrls[i] && (
                   <img
                     src={stepImageUrls[i]}
                     alt=""
@@ -301,7 +318,7 @@ const NUTRITION = [
   { key: 'fibre_g', label: 'fibre' },
 ]
 
-function NutritionCard({ recipe }) {
+function NutritionCard({ recipe, swapped = false }) {
   const cells = NUTRITION.map(n => {
     const column = RECIPE_TABLE_COLUMNS.find(c => c.key === n.key)
     const cell = formatRecipeCell(recipe, column)
@@ -326,6 +343,7 @@ function NutritionCard({ recipe }) {
       {anyEstimated && (
         <p className="text-[13px] text-muted-foreground">~ estimated from the ingredients; the card didn&apos;t print it.</p>
       )}
+      {swapped && <p className="text-[13px] text-muted-foreground">For the original recipe, without the protein swap.</p>}
     </div>
   )
 }
@@ -357,8 +375,34 @@ function useRecipeExtras(recipe) {
 // Full-page recipe view inside the Recipes tab: cover, facts, nutrition and
 // the add-to-week button on the left; Instructions (scaling, ingredients,
 // steps) or the original PDF on the right. Columns stack on narrow screens.
-export default function RecipePreviewPanel({ recipe, onClose, inList = false, onToggle }) {
+// pick: this recipe's selection in this week's list (with swap_id / swap_mode), if any.
+export default function RecipePreviewPanel({ recipe, onClose, inList = false, onToggle, pick = null, onSetSwap, onAddWithSwap }) {
   const [tab, setTab] = useState('instructions')
+  const swapModes = recipe.status === 'ready' ? swapModesFor(recipe) : null
+  const pickChoice = useMemo(
+    () => (pick?.swap_id ? { mode: pick.swap_mode, swapId: pick.swap_id } : { mode: 'original', swapId: null }),
+    [pick?.swap_id, pick?.swap_mode]
+  )
+  const [choice, setChoice] = useState(pickChoice)
+  const [rowsById, setRowsById] = useState({})
+  // The household's saved swap wins whenever it changes (another member may have changed it).
+  useEffect(() => { if (inList) setChoice(pickChoice) }, [inList, pickChoice])
+  const fetched = useSwapsById(choice.swapId && !rowsById[choice.swapId] ? [choice.swapId] : [])
+  const swapRow = choice.mode !== 'original' && choice.swapId ? (rowsById[choice.swapId] ?? fetched[choice.swapId] ?? null) : null
+  const activeSwap = swapRow ? { row: swapRow, mode: choice.mode } : null
+
+  const handleSwapChange = useCallback((next, row) => {
+    if (row) setRowsById(prev => ({ ...prev, [row.id]: row }))
+    setChoice(next)
+    if (!inList || !onSetSwap) return
+    if (next.mode === 'original') onSetSwap(recipe.id, null, null)
+    else if (next.swapId) onSetSwap(recipe.id, next.swapId, next.mode)
+  }, [inList, onSetSwap, recipe.id])
+
+  function handleToggle() {
+    if (!inList && activeSwap && onAddWithSwap) onAddWithSwap(recipe, swapRow.id, choice.mode)
+    else onToggle(recipe)
+  }
   const [sharing, setSharing] = useState(false)
   const { coverUrl, uploader } = useRecipeExtras(recipe)
   const name = recipe.name ?? recipe.filename
@@ -425,7 +469,7 @@ export default function RecipePreviewPanel({ recipe, onClose, inList = false, on
               <button
                 type="button"
                 aria-pressed={inList}
-                onClick={() => onToggle(recipe)}
+                onClick={handleToggle}
                 className={`flex h-[52px] flex-1 items-center justify-center gap-2 rounded-[14px] text-base font-bold transition-opacity hover:opacity-90 ${
                   inList ? 'bg-secondary text-secondary-foreground' : 'bg-primary text-primary-foreground'
                 }`}
@@ -445,7 +489,10 @@ export default function RecipePreviewPanel({ recipe, onClose, inList = false, on
             )}
           </div>
           {sharing && <SharePanel recipe={recipe} onClose={() => setSharing(false)} />}
-          <NutritionCard recipe={recipe} />
+          {swapModes && (
+            <SwapProteinSection recipe={recipe} modes={swapModes} choice={choice} onChange={handleSwapChange} inList={inList} />
+          )}
+          <NutritionCard recipe={recipe} swapped={activeSwap != null} />
         </section>
 
         <section className="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
@@ -469,7 +516,7 @@ export default function RecipePreviewPanel({ recipe, onClose, inList = false, on
               Original page on {sourceHost} <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
           )}
-          {tab === 'pdf' && recipe.storage_path ? <PdfView recipe={recipe} /> : <InstructionsView recipe={recipe} />}
+          {tab === 'pdf' && recipe.storage_path ? <PdfView recipe={recipe} /> : <InstructionsView recipe={recipe} swap={activeSwap} />}
         </section>
       </div>
     </div>

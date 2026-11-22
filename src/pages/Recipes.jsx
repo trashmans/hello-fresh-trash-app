@@ -75,6 +75,7 @@ export default function Recipes() {
             onSelect={setSelectedRecipe}
             onDelete={handleDelete}
             selectedIds={shoppingList.selectedIds}
+            swappedIds={shoppingList.recipeSelections.filter(r => r.swap_id).map(r => r.recipe_id)}
             onToggle={shoppingList.toggleRecipe}
             ingredientMatches={ingredientMatches}
             ingredientTerms={selectedIngredients}
@@ -108,6 +109,9 @@ export default function Recipes() {
             onClose={handleClose}
             inList={shoppingList.selectedIds.includes(selectedRecipe.id)}
             onToggle={shoppingList.toggleRecipe}
+            pick={shoppingList.recipeSelections.find(r => r.recipe_id === selectedRecipe.id) ?? null}
+            onSetSwap={shoppingList.setSwap}
+            onAddWithSwap={shoppingList.addRecipeWithSwap}
           />
         </div>
       )}

@@ -147,7 +147,7 @@ function FailedCard({ recipe, onRetry, onDelete, deleting, retrying }) {
   )
 }
 
-export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], onToggle, ingredientMatches = null, ingredientTerms = [] }) {
+export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, selectedIds = [], swappedIds = [], onToggle, ingredientMatches = null, ingredientTerms = [] }) {
   const { session, adminMode } = useAuth()
   const [recipes, setRecipes] = useState([])
   const [profiles, setProfiles] = useState({})
@@ -703,6 +703,9 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
               <button type="button" onClick={() => onSelect(recipe)} className="flex flex-col gap-1 text-left">
                 <h3 className="text-[17px] font-semibold leading-snug line-clamp-2">{name}</h3>
                 {by && <p className="text-sm text-muted-foreground">by {by}</p>}
+                {isSelected && swappedIds.includes(recipe.id) && (
+                  <span className="self-start rounded-full bg-primary/15 px-2 py-0.5 text-[12px] font-semibold text-primary-text">Swapped protein</span>
+                )}
               </button>
               <div className="mt-auto flex items-center gap-3 text-[13px] text-muted-foreground">
                 <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">

@@ -12,6 +12,8 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { mergeIngredients } from '@/lib/ingredientMerge'
+import { SWAP_MODES, swapIngredientsMap } from '@/lib/proteinSwap'
+import { useSwapsById } from '@/hooks/useRecipeSwaps'
 import { groupByAisle } from '@/lib/aisles'
 import { computeScaleFactorFromIngredient } from '@/lib/scaling'
 import { unitOptionsFor, unitOptionValueFor } from '@/lib/units'
@@ -178,9 +180,15 @@ export default function ShoppingListPanel({ shoppingList }) {
     [recipes]
   )
 
+  const swapsById = useSwapsById(recipeSelections.map(r => r.swap_id))
+  const swappedIngredientsMap = useMemo(
+    () => swapIngredientsMap(recipeSelections, ingredientsMap, swapsById),
+    [recipeSelections, ingredientsMap, swapsById]
+  )
+
   const mergedItems = useMemo(
-    () => mergeIngredients(recipeSelections, ingredientsMap, recipesMap, unitPrefs),
-    [recipeSelections, ingredientsMap, recipesMap, unitPrefs]
+    () => mergeIngredients(recipeSelections, swappedIngredientsMap, recipesMap, unitPrefs),
+    [recipeSelections, swappedIngredientsMap, recipesMap, unitPrefs]
   )
 
   const adjustedMap = useMemo(
@@ -247,7 +255,8 @@ export default function ShoppingListPanel({ shoppingList }) {
 
   const mini = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-input bg-card text-foreground hover:bg-accent transition-colors'
 
-  function renderRecipe({ recipe_id, servings }) {
+  function renderRecipe({ recipe_id, servings, swap_id, swap_mode }) {
+    const swap = swap_id ? swapsById[swap_id] : null
     const recipe = recipesMap[recipe_id]
     const dbServings = recipe?.servings ?? null
     const baseServings = dbServings ?? servings
@@ -264,7 +273,14 @@ export default function ShoppingListPanel({ shoppingList }) {
               <FileText className="h-5 w-5 text-muted-foreground" />
             )}
           </div>
-          <span className="min-w-0 flex-1 text-base font-semibold leading-snug">{name}</span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-base font-semibold leading-snug">{name}</span>
+            {swap && (
+              <span className="text-[13px] text-muted-foreground">
+                {SWAP_MODES[swap.direction]?.[swap_mode] ?? 'Swapped'}: {swap.title}
+              </span>
+            )}
+          </span>
           <button
             type="button"
             aria-label={`Remove ${name} from this week`}
