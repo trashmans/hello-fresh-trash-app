@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, FileText, Minus, Plus, RotateCcw, Share2 } from 'lucide-react'
+import { ArrowLeft, Check, ExternalLink, FileText, Minus, Plus, RotateCcw, Share2 } from 'lucide-react'
 import SharePanel from '@/components/SharePanel'
 import { supabase } from '@/lib/supabase'
 import { useRecipeIngredients } from '@/hooks/useRecipeIngredients'
@@ -362,6 +362,9 @@ export default function RecipePreviewPanel({ recipe, onClose, inList = false, on
   const [sharing, setSharing] = useState(false)
   const { coverUrl, uploader } = useRecipeExtras(recipe)
   const name = recipe.name ?? recipe.filename
+  // Link recipes (docs/adr/0009): the site they came from, e.g. "budgetbytes.com".
+  let sourceHost = null
+  try { sourceHost = recipe.source_url ? new URL(recipe.source_url).hostname.replace(/^www\./, '') : null } catch { /* no host */ }
 
   useEffect(() => { setTab('instructions') }, [recipe.id])
 
@@ -404,7 +407,11 @@ export default function RecipePreviewPanel({ recipe, onClose, inList = false, on
           <div className="flex flex-col gap-2">
             {eyebrow && <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">{eyebrow}</p>}
             <h1 className="text-[32px] sm:text-[40px] font-bold leading-[1.05] tracking-[-0.01em]">{name}</h1>
-            {uploader && <p className="text-[15px] text-muted-foreground">Uploaded by {uploader}</p>}
+            {(uploader || sourceHost) && (
+              <p className="text-[15px] text-muted-foreground">
+                {[sourceHost ? `From ${sourceHost}` : null, uploader ? `added by ${uploader}` : null].filter(Boolean).join(' · ').replace(/^added/, 'Added')}
+              </p>
+            )}
           </div>
           {facts.length > 0 && (
             <div className="flex flex-wrap gap-2 text-sm">
@@ -446,11 +453,23 @@ export default function RecipePreviewPanel({ recipe, onClose, inList = false, on
             <button role="tab" type="button" aria-selected={tab === 'instructions'} className={segment(tab === 'instructions')} onClick={() => setTab('instructions')}>
               Instructions
             </button>
-            <button role="tab" type="button" aria-selected={tab === 'pdf'} className={segment(tab === 'pdf')} onClick={() => setTab('pdf')}>
-              Original PDF
-            </button>
+            {recipe.storage_path && (
+              <button role="tab" type="button" aria-selected={tab === 'pdf'} className={segment(tab === 'pdf')} onClick={() => setTab('pdf')}>
+                Original PDF
+              </button>
+            )}
           </div>
-          {tab === 'instructions' ? <InstructionsView recipe={recipe} /> : <PdfView recipe={recipe} />}
+          {recipe.source_url && (
+            <a
+              href={recipe.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="-mt-2 inline-flex items-center gap-1.5 self-start text-sm font-semibold text-primary-text underline underline-offset-2"
+            >
+              Original page on {sourceHost} <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
+          )}
+          {tab === 'pdf' && recipe.storage_path ? <PdfView recipe={recipe} /> : <InstructionsView recipe={recipe} />}
         </section>
       </div>
     </div>

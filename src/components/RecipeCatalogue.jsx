@@ -239,6 +239,24 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     fetchRecipes()
   }, [fetchRecipes, refreshKey])
 
+  // Covers that arrive after the list was loaded (a link recipe's photo is stored by
+  // parse-recipe when it finishes, and reaches us through Realtime or the status check)
+  // get their signed URL here, so the thumbnail shows without reloading the page.
+  const missingCoverKey = useMemo(
+    () => [...new Set(recipes.map(r => r.cover_path).filter(p => p && !coverUrls[p]))].sort().join('|'),
+    [recipes, coverUrls]
+  )
+  useEffect(() => {
+    if (!missingCoverKey) return undefined
+    let cancelled = false
+    supabase.storage.from('recipe-pdfs').createSignedUrls(missingCoverKey.split('|'), 3600).then(({ data }) => {
+      if (cancelled || !data) return
+      const signed = Object.fromEntries(data.filter(x => x.signedUrl).map(x => [x.path, x.signedUrl]))
+      if (Object.keys(signed).length) setCoverUrls(prev => ({ ...prev, ...signed }))
+    })
+    return () => { cancelled = true }
+  }, [missingCoverKey])
+
   // Realtime subscription for the current user's recipe status changes.
   // The channel name is unique per mount: React StrictMode (development) mounts,
   // unmounts and remounts immediately, and re-using a fixed name could attach the
@@ -399,7 +417,8 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     }
   }
 
-  const recipesMissingCovers = recipes.filter(r => r.status === 'ready' && !r.cover_path)
+  // Only PDF recipes: a cover is rendered from the PDF (link recipes get the page's photo, or none).
+  const recipesMissingCovers = recipes.filter(r => r.status === 'ready' && !r.cover_path && r.storage_path)
 
   async function handleBackfillCovers() {
     const targets = recipesMissingCovers
