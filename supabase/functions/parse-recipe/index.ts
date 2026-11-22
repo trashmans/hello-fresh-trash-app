@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
     const geminiPayload = readUrl
       ? {
           // Gemini fetches the page itself; JSON mode can't be combined with tools.
-          contents: [{ parts: [{ text: `${promptPrefix}Read the recipe at ${readUrl}\n\n${EXTRACTION_PROMPT}\n\nAlso add one more field to the JSON: "image_url": the full https address of the recipe's main photo on that page, or null.` }] }],
+          contents: [{ parts: [{ text: `${promptPrefix}Read the recipe at ${readUrl}\n\n${EXTRACTION_PROMPT}\n\nAlso add one more field to the JSON: "image_url": copied character for character from the page's <meta property=\"og:image\"> content (or, if there is none, the image address in its schema.org Recipe data). Never build, shorten or guess an address; use null if you can't copy one exactly.` }] }],
           tools: [{ url_context: {} }],
           generationConfig: {},
         }
@@ -571,7 +571,9 @@ Deno.serve(async (req) => {
         if (coverError) log(`cover not stored: ${coverError.message}`)
         else coverPath = path
       } catch (err) {
-        log(`cover not stored: ${err instanceof LinkError ? err.code : (err as Error).message}`)
+        let host = '?'
+        try { host = new URL(imageRaw, pageUrl).hostname } catch { /* keep ? */ }
+        log(`cover not stored: ${err instanceof LinkError ? err.code : (err as Error).message} (image host ${host}${readUrl ? ', address from Gemini' : ''})`)
       }
     }
 
