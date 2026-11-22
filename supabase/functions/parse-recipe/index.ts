@@ -403,26 +403,36 @@ Deno.serve(async (req) => {
         return new Response('OK', { status: 200 })
       }
 
+      promptPrefix = LINK_PROMPT_PREFIX
       let page
       try {
         page = await safeFetch(claimed.source_url, { accept: 'text/html,application/xhtml+xml', types: PAGE_TYPES, maxBytes: 3 * 1024 * 1024 })
       } catch (err) {
         const code = err instanceof LinkError ? err.code : 'fetch_failed'
-        log(`link fetch failed: ${code}`)
-        await setFailed(`link_${code}`)
-        return new Response('OK', { status: 200 })
+        // Many large recipe sites refuse requests from servers (403, 429, 503…) but let
+        // Google read them: then Gemini reads the link itself. A link that failed our
+        // safety checks (bad_url, dns, private_address) is never handed on.
+        if (/^http_\d+$/.test(code) || code === 'timeout' || code === 'wrong_type') {
+          log(`link fetch refused (${code}), Gemini reads the link instead`)
+          readUrl = claimed.source_url
+        } else {
+          log(`link fetch failed: ${code}`)
+          await setFailed(`link_${code}`)
+          return new Response('OK', { status: 200 })
+        }
       }
-      pageUrl = page.url
-      const html = new TextDecoder().decode(page.bytes)
-      const data = extractRecipeData(html)
-      const text = data ? recipeSourceText(data, page.url) : pageText(html)
-      log(`link page read: recipe data ${data ? 'found' : 'not found'}, ${text.length} characters`)
-      imageRaw = data?.image ?? pageImage(html)
-      promptPrefix = LINK_PROMPT_PREFIX
-      if (!data && text.length < 300) {
-        readUrl = page.url
-      } else {
-        sourceParts = [{ text }]
+      if (page) {
+        pageUrl = page.url
+        const html = new TextDecoder().decode(page.bytes)
+        const data = extractRecipeData(html)
+        const text = data ? recipeSourceText(data, page.url) : pageText(html)
+        log(`link page read: recipe data ${data ? 'found' : 'not found'}, ${text.length} characters`)
+        imageRaw = data?.image ?? pageImage(html)
+        if (!data && text.length < 300) {
+          readUrl = page.url
+        } else {
+          sourceParts = [{ text }]
+        }
       }
     } else {
       await setFailed('no_source', false)
@@ -433,7 +443,7 @@ Deno.serve(async (req) => {
     const geminiPayload = readUrl
       ? {
           // Gemini fetches the page itself; JSON mode can't be combined with tools.
-          contents: [{ parts: [{ text: `${promptPrefix}Read the recipe at ${readUrl}\n\n${EXTRACTION_PROMPT}` }] }],
+          contents: [{ parts: [{ text: `${promptPrefix}Read the recipe at ${readUrl}\n\n${EXTRACTION_PROMPT}\n\nAlso add one more field to the JSON: "image_url": the full https address of the recipe's main photo on that page, or null.` }] }],
           tools: [{ url_context: {} }],
           generationConfig: {},
         }
@@ -494,6 +504,12 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[${executionId}] parsed name="${parsed.name}" ingredients=${parsed.ingredients.length}`)
+    // When Gemini read the link itself, its reply names the photo (we never saw the page).
+    const reportedImage = (parsed as { image_url?: unknown }).image_url
+    if (readUrl && !imageRaw && typeof reportedImage === 'string' && reportedImage.startsWith('https://')) {
+      imageRaw = reportedImage
+      pageUrl = pageUrl ?? readUrl
+    }
 
     const fingerprint = await computeIngredientFingerprint(parsed.ingredients)
 
