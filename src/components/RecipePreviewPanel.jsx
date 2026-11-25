@@ -160,12 +160,41 @@ function ScaleControls({ recipe, ingredients, scaleState, setScaleState, scaleFa
   )
 }
 
+// "Photos from the page" (link recipes, docs/adr/0009): photos from the post whose
+// step photos aren't tied to steps. Each opens full size in a new tab.
+function PagePhotos({ paths }) {
+  const [urls, setUrls] = useState([])
+  const key = (paths ?? []).join('|')
+  useEffect(() => {
+    let cancelled = false
+    setUrls([])
+    if (!key) return undefined
+    supabase.storage.from('recipe-pdfs').createSignedUrls(key.split('|'), 3600).then(({ data }) => {
+      if (!cancelled) setUrls((data ?? []).map(d => d.signedUrl).filter(Boolean))
+    })
+    return () => { cancelled = true }
+  }, [key])
+  if (urls.length === 0) return null
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-[22px] font-bold">Photos from the page</h2>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {urls.map((url, i) => (
+          <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0" aria-label={`Open photo ${i + 1} of ${urls.length}`}>
+            <img src={url} alt="" loading="lazy" className="h-36 w-auto rounded-[14px] object-cover sm:h-44" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+          </a>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 // swap: { row, mode } when a protein swap is chosen — applied before any scaling.
 function InstructionsView({ recipe, swap = null }) {
   const { unitPrefs } = useAuth()
   const { ingredients: originalIngredients, loading } = useRecipeIngredients(recipe.id)
   const originalSteps = recipe.steps ?? []
-  const { stepImageUrls } = useRecipeStepImages(recipe.id, originalSteps.length)
+  const { stepImageUrls } = useRecipeStepImages(recipe.id, originalSteps.length, { allowGaps: Boolean(recipe.source_url) })
   const swapped = useMemo(
     () => applySwap({ ingredients: originalIngredients, steps: originalSteps, swap: swap?.row ?? null, mode: swap?.mode }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -267,6 +296,8 @@ function InstructionsView({ recipe, swap = null }) {
           </ol>
         )}
       </section>
+
+      {recipe.source_url && <PagePhotos paths={recipe.page_images} />}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { extractRecipeData, linkFilename, pageImage, pageText, recipeSourceText } from '../_shared/recipeLink.ts'
+import { extractRecipeData, helloFreshStepImages, linkFilename, pagePhotos, pageImage, pageText, recipeSourceText } from '../_shared/recipeLink.ts'
 import { LinkError, safeFetch } from '../_shared/safeFetch.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -292,6 +292,10 @@ function jsonPart(text: string): string {
 
 const PAGE_TYPES = ['text/html', 'application/xhtml+xml']
 const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+// Link recipes' step photos and "Photos from the page": at most this long in all, 2 MB each.
+const LINK_PHOTOS_BUDGET_MS = 25_000
+const LINK_PHOTO_MAX_BYTES = 2 * 1024 * 1024
+const MAX_STEP_PHOTOS = 20
 
 Deno.serve(async (req) => {
   const executionId = crypto.randomUUID().slice(0, 8)
@@ -361,6 +365,10 @@ Deno.serve(async (req) => {
     let readUrl: string | null = null
     let pageUrl: string | null = null
     let imageRaw: string | null = null
+    // Link recipes: a photo per step (lined up with the steps; null where a step has none),
+    // or else the photos in the post, shown as "Photos from the page".
+    let stepPhotoUrls: (string | null)[] | null = null
+    let pagePhotoUrls: string[] = []
 
     if (claimed.storage_path) {
       console.log(`[${executionId}] downloading PDF from storage`)
@@ -428,6 +436,20 @@ Deno.serve(async (req) => {
         const text = data ? recipeSourceText(data, page.url) : pageText(html)
         log(`link page read: recipe data ${data ? 'found' : 'not found'}, ${text.length} characters`)
         imageRaw = data?.image ?? pageImage(html)
+        const hfPhotos = helloFreshStepImages(html, page.url)
+        const ldPhotos = data?.stepImages.some(Boolean) ? data.stepImages : null
+        stepPhotoUrls = hfPhotos ?? ldPhotos
+        // The photos must line up with the steps Gemini reads (and at most MAX_STEP_PHOTOS).
+        if (stepPhotoUrls && (stepPhotoUrls.length !== (data?.steps.length ?? 0) || stepPhotoUrls.length > MAX_STEP_PHOTOS)) {
+          log(`step photos dropped: ${stepPhotoUrls.length} photos for ${data?.steps.length ?? 0} steps`)
+          stepPhotoUrls = null
+        }
+        if (stepPhotoUrls) {
+          promptPrefix += `This recipe has ${stepPhotoUrls.length} numbered steps, each with its own photo: give exactly ${stepPhotoUrls.length} steps, one per source step, in the same order. Do not merge or split steps.\n\n`
+        } else {
+          pagePhotoUrls = pagePhotos(html, page.url, imageRaw ? [new URL(imageRaw, page.url).href] : [])
+        }
+        log(`link photos: ${stepPhotoUrls ? `${stepPhotoUrls.filter(Boolean).length} step photos (${hfPhotos ? 'HelloFresh' : 'Recipe data'})` : `${pagePhotoUrls.length} page photos`}`)
         if (!data && text.length < 300) {
           readUrl = page.url
         } else {
@@ -577,6 +599,55 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Link recipes: step photos (only when Gemini kept the same steps) or page photos.
+    // A reparse replaces the ones stored before. Failures only cost the photos.
+    let linkPhotos: { stepRows: { step_index: number; storage_path: string }[]; pagePaths: string[]; old: string[] } | null = null
+    if (claimed.source_url && pageUrl) {
+      const deadline = Date.now() + LINK_PHOTOS_BUDGET_MS
+      const store = async (url: string): Promise<string | null> => {
+        const timeoutMs = Math.min(8_000, deadline - Date.now())
+        if (timeoutMs < 1_000) return null
+        try {
+          const img = await safeFetch(url, { accept: 'image/webp,image/png,image/jpeg', types: Object.keys(IMAGE_TYPES), maxBytes: LINK_PHOTO_MAX_BYTES, timeoutMs })
+          const path = `steps/${claimed.uploaded_by ?? 'unknown'}/${crypto.randomUUID()}.${IMAGE_TYPES[img.type]}`
+          const { error } = await supabase.storage.from('recipe-pdfs').upload(path, img.bytes, { contentType: img.type })
+          if (error) { log(`photo not stored: ${error.message}`); return null }
+          return path
+        } catch (err) {
+          log(`photo not stored: ${err instanceof LinkError ? err.code : (err as Error).message}`)
+          return null
+        }
+      }
+      // A few at a time, in order.
+      const storeAll = async (urls: (string | null)[]): Promise<(string | null)[]> => {
+        const out: (string | null)[] = new Array(urls.length).fill(null)
+        let next = 0
+        const worker = async () => {
+          while (next < urls.length) { const i = next++; if (urls[i]) out[i] = await store(urls[i] as string) }
+        }
+        await Promise.all([worker(), worker(), worker(), worker()])
+        return out
+      }
+
+      let stepUrls = stepPhotoUrls
+      if (stepUrls && (parsed.steps ?? []).length !== stepUrls.length) {
+        log(`step photos dropped: Gemini gave ${(parsed.steps ?? []).length} steps for ${stepUrls.length} photos`)
+        stepUrls = null
+      }
+      const stepPaths = stepUrls ? await storeAll(stepUrls) : []
+      const pagePaths = (stepUrls ? [] : (await storeAll(pagePhotoUrls))).filter((p): p is string => Boolean(p))
+      const [{ data: oldSteps }, { data: oldRecipe }] = await Promise.all([
+        supabase.from('recipe_step_images').select('storage_path').eq('recipe_id', recipeId),
+        supabase.from('recipes').select('page_images').eq('id', recipeId).maybeSingle(),
+      ])
+      linkPhotos = {
+        stepRows: stepPaths.flatMap((p, i) => (p ? [{ step_index: i, storage_path: p }] : [])),
+        pagePaths,
+        old: [...(oldSteps ?? []).map((r) => r.storage_path), ...(oldRecipe?.page_images ?? [])],
+      }
+      log(`link photos stored: ${linkPhotos.stepRows.length} step, ${pagePaths.length} page`)
+    }
+
     console.log(`[${executionId}] updating recipe to ready`)
     const { error: updateError } = await supabase.from('recipes').update({
       name: parsed.name,
@@ -593,11 +664,15 @@ Deno.serve(async (req) => {
       steps: parsed.steps ?? [],
       ingredient_fingerprint: fingerprint,
       ...(coverPath ? { cover_path: coverPath } : {}),
+      ...(linkPhotos ? { page_images: linkPhotos.pagePaths } : {}),
       status: 'ready',
       processing_completed_at: new Date().toISOString(),
     }).eq('id', recipeId)
 
     if (updateError) {
+      // The photos stored just now are not used.
+      const unused = linkPhotos ? [...linkPhotos.stepRows.map((r) => r.storage_path), ...linkPhotos.pagePaths] : []
+      if (unused.length > 0) await supabase.storage.from('recipe-pdfs').remove(unused)
       if (updateError.code === '23505') {
         const { data: conflict } = await supabase
           .from('recipes')
@@ -611,6 +686,16 @@ Deno.serve(async (req) => {
         await setFailed(`update_failed: ${updateError.message}`)
       }
       return new Response('OK', { status: 200 })
+    }
+
+    if (linkPhotos) {
+      // Swap in the new step photos, then remove the files stored by an earlier parse.
+      await supabase.from('recipe_step_images').delete().eq('recipe_id', recipeId)
+      if (linkPhotos.stepRows.length > 0) {
+        const { error } = await supabase.from('recipe_step_images').insert(linkPhotos.stepRows.map((r) => ({ recipe_id: recipeId, ...r })))
+        if (error) log(`step photos not saved: ${error.message}`)
+      }
+      if (linkPhotos.old.length > 0) await supabase.storage.from('recipe-pdfs').remove(linkPhotos.old)
     }
 
     console.log(`[${executionId}] done — recipe is ready`)
