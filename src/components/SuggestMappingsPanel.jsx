@@ -117,9 +117,9 @@ export default function SuggestMappingsPanel({ preview, ingredientMappings, onCl
               return (
                 <li key={item.name} className={`px-4 py-3 ${noMatch ? 'bg-destructive/5' : ''}`}>
                   <div className="flex flex-wrap items-center gap-3">
-                    {p ? <ProductThumb src={p.imageUrl} className="h-10 w-10 rounded-[10px]" />
-                      : noMatch ? <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-destructive/15 text-destructive"><AlertTriangle className="h-4 w-4" aria-hidden="true" /></span>
-                        : <span className="w-10 shrink-0" aria-hidden="true" />}
+                    {p ? <ProductThumb src={p.imageUrl} className={item.status === 'open' ? 'h-20 w-20 rounded-[10px]' : 'h-10 w-10 rounded-[10px]'} />
+                      : noMatch ? <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[10px] bg-destructive/15 text-destructive"><AlertTriangle className="h-4 w-4" aria-hidden="true" /></span>
+                        : <span className="w-20 shrink-0" aria-hidden="true" />}
                     <div className="min-w-0 flex-[1_1_200px]">
                       <p className="text-[15px] font-medium">{item.name}</p>
                       <p className={`text-[13px] ${noMatch ? 'font-semibold text-destructive' : 'text-muted-foreground'}`}>
