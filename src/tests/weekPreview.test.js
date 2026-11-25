@@ -95,7 +95,7 @@ describe('buildWeekPreview', () => {
   it('adds a due pinned staple from the cached product, without a live lookup', () => {
     const preview = buildWeekPreview({ runDate: MONDAY, staples: [milk] })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', aisle: 'Dairy & eggs', mappedFrom: [], imageUrl: null, from: 0, to: 2, sources: ['staple'] },
+      { action: 'add', productId: 101, text: null, title: 'AH Halfvolle melk', detail: '1 l', aisle: 'Dairy & eggs', mappedFrom: [], imageUrl: null, from: 0, to: 2, sources: ['staple'], recipes: [], price: 1.19 },
     ])
     expect(preview.staples).toEqual([
       { staple_id: 's-milk', name: 'Milk', included: true, reason: 'cadence', reasonText: stapleReasonText('cadence'), packs: 2 },
@@ -148,7 +148,7 @@ describe('buildWeekPreview', () => {
       adjustedItems: [{ key: 'onion|count:', buy_qty: 0 }],
     })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', aisle: 'Pantry', mappedFrom: [], imageUrl: null, from: 0, to: 1, sources: ['recipe'] },
+      { action: 'add', productId: null, text: 'Olive oil', title: 'Olive oil', detail: '90 mL', aisle: 'Pantry', mappedFrom: [], imageUrl: null, from: 0, to: 1, sources: ['recipe'], recipes: [], price: null },
     ])
   })
 
@@ -181,7 +181,7 @@ describe('buildWeekPreview', () => {
       ['add', 'Garlic', 0, 1],
       ['untick', 'Olive oil', 0, 1],
     ])
-    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', aisle: 'Produce', mappedFrom: [], imageUrl: null, quantity: 3 }])
+    expect(preview.onListAlready).toEqual([{ productId: 103, text: null, title: 'AH Bananen tros', detail: 'per tros', aisle: 'Produce', mappedFrom: [], imageUrl: null, quantity: 3, recipes: [], price: 1.69 }])
   })
 
   it('gives no changes when the list already matches (safe to run again)', () => {
@@ -235,6 +235,7 @@ describe('buildWeekPreview', () => {
   it('is empty for a household with nothing planned', () => {
     expect(buildWeekPreview({ runDate: MONDAY })).toEqual({
       weekStart: MONDAY, lines: [], changes: [], onListAlready: [], atHome: [], staples: [], review: [], stapleUpdates: [],
+      totals: { adding: { amount: 0, unpriced: 0 }, onList: { amount: 0, unpriced: 0 }, order: { amount: 0, unpriced: 0 } },
     })
   })
 })
@@ -260,7 +261,7 @@ describe('buildWeekPreview with ingredient mappings', () => {
       mappings: [oil],
     })
     expect(preview.changes).toEqual([
-      { action: 'add', productId: 301, text: null, title: 'AH Olijfolie', detail: '1 l · for 90 mL', aisle: 'Pantry', mappedFrom: [{ key: 'olive oil', label: 'Olive oil' }], imageUrl: null, from: 0, to: 1, sources: ['recipe'] },
+      { action: 'add', productId: 301, text: null, title: 'AH Olijfolie', detail: '1 l · for 90 mL', aisle: 'Pantry', mappedFrom: [{ key: 'olive oil', label: 'Olive oil' }], imageUrl: null, from: 0, to: 1, sources: ['recipe'], recipes: [], price: 1 },
     ])
     expect(preview.review).toEqual([])
   })
@@ -558,6 +559,99 @@ describe('buildWeekPreview: product photos', () => {
 // Send to AH (rollout phase 6): the preview turned into the request for the retailer-send
 // function. The server re-reads the AH list and writes only what adds something, so every
 // planned line is sent, including those already on the list (their staples' dates are saved too).
+describe('buildWeekPreview: recipes and prices', () => {
+  // An item as mergeIngredients() gives it, with the recipes it came from.
+  const fromRecipes = (base, ...recipeNames) => ({ ...base, contributions: recipeNames.map(recipeName => ({ recipeName })) })
+  const mapTo = (ingredient_key, externalId, title, price) => ({
+    ingredient_key, label: ingredient_key, pantry: false, product_external_id: externalId,
+    product: { title, sales_unit_size: '1 l', price },
+  })
+  const oil = mapTo('olive oil', 301, 'AH Olijfolie', 4.99)
+  const evoo = mapTo('extra virgin olive oil', 301, 'AH Olijfolie', 4.99)
+  const bananasDue = { ...bananas, last_added_on: null }
+
+  it('lists the recipes behind a mapped product, from every ingredient mapped to it, once each', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [
+        fromRecipes(item('olive oil|volume:metric', 'Olive oil', 30, 'mL'), 'Pasta', 'Salad'),
+        fromRecipes(item('extra virgin olive oil|volume:metric', 'Extra virgin olive oil', 15, 'mL'), 'Salad', 'Curry'),
+      ],
+      mappings: [oil, evoo],
+    })
+    expect(preview.changes).toHaveLength(1)
+    expect(preview.changes[0].recipes).toEqual(['Pasta', 'Salad', 'Curry'])
+  })
+
+  it('lists the recipes behind a free-text line', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [fromRecipes(item('garlic|count:clove', 'Garlic', 3, 'clove'), 'Curry', 'Stir fry')],
+    })
+    expect(preview.changes[0]).toMatchObject({ text: 'Garlic', recipes: ['Curry', 'Stir fry'] })
+  })
+
+  it('gives a staple line no recipes', () => {
+    expect(buildWeekPreview({ runDate: MONDAY, staples: [milk] }).changes[0].recipes).toEqual([])
+  })
+
+  it('gives the recipes on lines the AH list already covers too', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [fromRecipes(item('olive oil|volume:metric', 'Olive oil', 30, 'mL'), 'Pasta')],
+      mappings: [oil],
+      currentList: [{ productId: 301, text: 'AH Olijfolie', quantity: 1, ticked: false }],
+    })
+    expect(preview.onListAlready).toEqual([expect.objectContaining({ productId: 301, recipes: ['Pasta'], price: 4.99 })])
+  })
+
+  it("prices a staple at this week's AH price, else the cached one", () => {
+    const live = { 's-milk': { externalId: 101, title: 'AH Halfvolle melk', salesUnitSize: '1 l', price: 0.99, mechanism: '25% KORTING' } }
+    expect(buildWeekPreview({ runDate: MONDAY, staples: [milk], liveProducts: live }).changes[0].price).toBe(0.99)
+    expect(buildWeekPreview({ runDate: MONDAY, staples: [milk] }).changes[0].price).toBe(1.19)
+  })
+
+  it('prices a mapped product at its cached price, and leaves a free-text line and a product without a price unpriced', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 30, 'mL'), item('salt|volume:us', 'Salt', 1, 'tsp'), item('garlic|count:clove', 'Garlic', 3, 'clove')],
+      mappings: [oil, mapTo('salt', 305, 'AH Zout', null)],
+    })
+    expect(preview.changes.map(c => [c.title, c.price])).toEqual([['AH Olijfolie', 4.99], ['AH Zout', null], ['Garlic', null]])
+  })
+
+  it('totals what is added, what the AH list already has, and the whole order', () => {
+    const preview = buildWeekPreview({
+      runDate: MONDAY,
+      staples: [milk, bananasDue],                       // milk 2 × 1.19, bananas 1 × 1.69
+      liveProducts: bananasFound,
+      mergedItems: [item('olive oil|volume:metric', 'Olive oil', 30, 'mL'), item('garlic|count:clove', 'Garlic', 3, 'clove')],
+      mappings: [oil],                                   // 1 × 4.99; garlic has no price
+      currentList: [
+        { productId: 101, text: 'AH Halfvolle melk', quantity: 1, ticked: false }, // milk 1 → 2
+        { productId: 103, text: 'AH Bananen tros', quantity: 3, ticked: false },   // already 3
+        { productId: null, text: 'Kaarsen', quantity: 1, ticked: false },          // added by hand: not counted
+      ],
+    })
+    expect(preview.totals).toEqual({
+      adding: { amount: 6.18, unpriced: 1 },  // 1 more milk 1.19 + oil 4.99; garlic
+      onList: { amount: 6.26, unpriced: 0 },  // the milk already there 1.19 + bananas 3 × 1.69
+      order: { amount: 12.44, unpriced: 1 },
+    })
+  })
+
+  it('totals nothing as zero', () => {
+    expect(buildWeekPreview({ runDate: MONDAY }).totals).toEqual({
+      adding: { amount: 0, unpriced: 0 }, onList: { amount: 0, unpriced: 0 }, order: { amount: 0, unpriced: 0 },
+    })
+  })
+
+  it('rounds totals to whole cents', () => {
+    const cheap = staple({ id: 's-c', name: 'Cheap', product_external_id: 900, product: { title: 'AH Cheap', sales_unit_size: '1 st', price: 0.1 }, quantity: 3 })
+    expect(buildWeekPreview({ runDate: MONDAY, staples: [cheap] }).totals.adding.amount).toBe(0.3)
+  })
+})
+
 describe('toSendRequest', () => {
   const oil = {
     ingredient_key: 'olive oil', label: 'Olive oil', pantry: false, product_external_id: 301,

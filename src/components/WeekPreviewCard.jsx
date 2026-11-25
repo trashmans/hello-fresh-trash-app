@@ -12,6 +12,52 @@ import { AISLES } from '@/lib/aisles'
 import ProductThumb from '@/components/ProductThumb'
 
 const ACTION_LABEL = { add: 'Add', increase: 'Increase', untick: 'Untick' }
+const euro = (amount) => `€${Number(amount).toFixed(2)}`
+
+// "2 × €1.29 · €2.58", or "€1.29" for one pack; null without a price.
+function priceText(price, packs) {
+  if (price == null || !(packs > 0)) return null
+  return packs === 1 ? euro(price) : `${packs} × ${euro(price)} · ${euro(price * packs)}`
+}
+
+// The recipes a line is for, and its price, under the title.
+function LineExtras({ recipes, price, packs }) {
+  const cost = priceText(price, packs)
+  if (recipes.length === 0 && !cost) return null
+  return (
+    <p className="text-[13px] text-muted-foreground">
+      {recipes.length > 0 && <span>For {recipes.join(', ')}</span>}
+      {recipes.length > 0 && cost && ' · '}
+      {cost && <span className="font-semibold text-foreground tabular-nums">{cost}</span>}
+    </p>
+  )
+}
+
+const withoutPrice = (n) => (n > 0 ? ` · ${n} item${n === 1 ? '' : 's'} without a price` : '')
+
+// Estimated cost of this week's plan (buildWeekPreview().totals).
+function Totals({ totals }) {
+  if (!totals) return null
+  const row = (label, { amount, unpriced }, strong = false) => (
+    <div className={`flex items-baseline justify-between gap-3 py-1.5 ${strong ? 'border-t border-border pt-2.5 text-base font-bold' : ''}`}>
+      <span>{label}<span className="text-[13px] font-normal text-muted-foreground">{withoutPrice(unpriced)}</span></span>
+      <span className="shrink-0 tabular-nums">{euro(amount)}</span>
+    </div>
+  )
+  return (
+    <Section title="Estimated cost">
+      <div className="rounded-[14px] border border-border bg-card px-4 py-2">
+        {row('Adding', totals.adding)}
+        {row('Already on your AH list', totals.onList)}
+        {row('Estimated total for this order', totals.order, true)}
+      </div>
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        Staples use this week&apos;s AH price; mapped ingredients use the last price the app saw. Text items have no price.
+        Items you added on AH yourself aren&apos;t counted. The total at checkout can differ.
+      </p>
+    </Section>
+  )
+}
 const SOURCE_LABEL = { staple: 'Staple', stockup: 'Bonus stock-up', recipe: 'Recipe' }
 
 const weekLabel = (weekStart) =>
@@ -94,6 +140,7 @@ function ChangeRow({ change, mapping, onMap, onUndo, children }) {
             {[change.detail, ...sources.map(s => SOURCE_LABEL[s] ?? s)].filter(Boolean).join(' · ')}
             {change.action === 'untick' && ' · ticked off on your AH list now'}
           </p>
+          <LineExtras recipes={change.recipes ?? []} price={change.price ?? null} packs={change.to} />
         </div>
         <span className="shrink-0 font-semibold tabular-nums">
           {change.action === 'increase' ? `${change.from} → ${change.to}` : `× ${change.to}`}
@@ -272,6 +319,7 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
                             : <span className="w-10 shrink-0" aria-hidden="true" />}
                           <div className="min-w-0 flex-1">
                             <p className="text-[15px]">{l.title}</p>
+                            <LineExtras recipes={l.recipes ?? []} price={l.price ?? null} packs={l.quantity} />
                             {onUndo && l.mappedFrom.length > 0 && (
                               <p className="text-[13px] text-muted-foreground">
                                 {l.mappedFrom.map(m => (
@@ -300,6 +348,8 @@ export default function WeekPreviewCard({ shoppingList, ingredientMappings }) {
                 </ul>
               </Section>
             )}
+
+            <Totals totals={preview.totals} />
 
             {preview.atHome.length > 0 && (
               <Section title={`Always at home · ${preview.atHome.length}`}>
