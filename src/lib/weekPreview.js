@@ -42,6 +42,8 @@ export function stapleReasonText(reason) {
 
 const clean = (text) => (text ?? '').trim().replace(/\s+/g, ' ')
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v)
+const priceOrNull = (v) => (isNumber(Number(v)) && v !== null && v !== '' && Number(v) >= 0 ? Number(v) : null)
+const cents = (v) => Math.round(v * 100) / 100
 const formatQty = (qty) => parseFloat(qty.toFixed(2)) // same rounding as the Shopping tab
 const lineKey = (productId, text) => (productId != null ? `p:${productId}` : `t:${clean(text).toLowerCase()}`)
 
@@ -116,10 +118,16 @@ export function recipeTextLines(mergedItems = [], adjustedItems = []) {
  * Returns {
  *   weekStart      Monday of the week
  *   lines          target lines [{ productId | null, text | null, packs, sources }]
- *   changes        [{ action: 'add' | 'increase' | 'untick', productId, text, title, detail, aisle, mappedFrom, imageUrl, from, to, sources }]
+ *   changes        [{ action: 'add' | 'increase' | 'untick', productId, text, title, detail, aisle, mappedFrom, imageUrl, from, to, sources, recipes, price }]
  *                  imageUrl: the product photo (this week's AH answer, else the product cache), null for free text
  *                  mappedFrom: the ingredient mappings behind a product line [{ key, label }], [] for other lines
- *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, aisle, mappedFrom, imageUrl, quantity }]
+ *   onListAlready  target lines the AH list already covers [{ productId, text, title, detail, aisle, mappedFrom, imageUrl, quantity, recipes, price }]
+ *                  recipes: names of the recipes behind the line, once each ([] for a staple only)
+ *                  price: euros per pack (a staple's live price this week, else the product cache's), null if unknown
+ *   totals         estimates { adding, onList, order }, each { amount, unpriced }: adding = the packs this send
+ *                  adds, onList = the packs of planned lines the AH list already has, order = both (everything
+ *                  the send leaves on the list for this plan); unpriced counts the lines without a price.
+ *                  Things on the AH list that are not in the plan are not counted.
  *   atHome         ingredients left off because the household always has them [{ key, text, amount }] (key: the mapping's)
  *   staples        [{ staple_id, name, included, reason, reasonText, packs }] in the order given
  *   stapleUpdates  the planner's staple fields [{ staple_id, product_id, last_added_on?, covered_until?, skip_next? }]
@@ -143,6 +151,8 @@ export function buildWeekPreview({
   const products = {}
   const shown = new Map() // line key → { title, detail, aisle, imageUrl }
   const names = new Map()
+  const prices = new Map() // line key → euros per pack
+  const recipesByLine = new Map() // line key → recipe names
   const plannerStaples = []
 
   for (const staple of staples ?? []) {
@@ -152,13 +162,16 @@ export function buildWeekPreview({
     const live = liveProducts?.[staple.id]
     let product = null
     if (live?.externalId != null) {
+      const sameProduct = Number(staple.product_external_id) === Number(live.externalId)
       product = {
         externalId: live.externalId, title: live.title, salesUnitSize: live.salesUnitSize ?? null, mechanism: live.mechanism ?? null,
+        price: priceOrNull(live.price) ?? (sameProduct ? priceOrNull(staple.product?.price) : null),
         imageUrl: live.imageUrl ?? (Number(staple.product_external_id) === Number(live.externalId) ? staple.product?.image_url : null) ?? null,
       }
     } else if (staple.product_external_id != null) {
       product = {
         externalId: staple.product_external_id, title: staple.product?.title, salesUnitSize: staple.product?.sales_unit_size ?? null, mechanism: null,
+        price: priceOrNull(staple.product?.price),
         imageUrl: staple.product?.image_url ?? null,
       }
     }
@@ -166,6 +179,7 @@ export function buildWeekPreview({
 
     products[staple.id] = product
     const key = lineKey(product.externalId)
+    if (product.price != null && (!prices.has(key) || product.mechanism)) prices.set(key, product.price)
     if (!shown.has(key) || product.mechanism) {
       shown.set(key, {
         title: product.title || staple.name,
@@ -196,7 +210,7 @@ export function buildWeekPreview({
     const productId = `m:${mapping.product_external_id}`
     const key = lineKey(mapping.product_external_id)
     if (!mappedProducts.has(key)) {
-      mappedProducts.set(key, { mapping, text: item.text, amounts: [], from: [] })
+      mappedProducts.set(key, { mapping, text: item.text, amounts: [], from: [], recipes: new Set() })
       products[productId] = {
         externalId: mapping.product_external_id,
         salesUnitSize: mapping.product?.sales_unit_size ?? null,
@@ -206,12 +220,16 @@ export function buildWeekPreview({
     const entry = mappedProducts.get(key)
     if (!entry.from.some(f => f.key === item.key)) entry.from.push({ key: item.key, label: item.text })
     if (item.amount) entry.amounts.push(item.amount)
+    for (const r of item.recipes) entry.recipes.add(r)
     plannerMappings[item.key] = { product_id: productId, pantry: false, amount_rule: mapping.amount_rule ?? 'auto' }
     plannerIngredients.push({ canonical_name: item.key, name: item.text, quantity: item.qty, unit: item.unit, recipes: item.recipes })
   }
 
-  for (const [key, { mapping, text, amounts }] of mappedProducts) {
+  for (const [key, { mapping, text, amounts, recipes }] of mappedProducts) {
     const imageUrl = mapping.product?.image_url ?? null
+    recipesByLine.set(key, [...recipes])
+    const price = priceOrNull(mapping.product?.price)
+    if (!prices.has(key) && price != null) prices.set(key, price)
     if (shown.has(key)) { // also a staple: the staple's title and aisle stand; fill in a missing photo
       if (!shown.get(key).imageUrl && imageUrl) shown.get(key).imageUrl = imageUrl
       continue
@@ -235,7 +253,18 @@ export function buildWeekPreview({
   const plan = planWeek({ runDate, staples: plannerStaples, products, ingredients: plannerIngredients, mappings: plannerMappings })
 
   const recipeLines = toTextLines(unmapped)
-  for (const { text, amount } of recipeLines) shown.set(lineKey(null, text), { title: text, detail: amount, aisle: aisleFor(text), imageUrl: null })
+  // toTextLines groups by ingredient key in first-seen order; collect the recipes the same way.
+  const unmappedRecipes = new Map()
+  for (const { key, recipes } of unmapped) {
+    if (!unmappedRecipes.has(key)) unmappedRecipes.set(key, new Set())
+    for (const r of recipes) unmappedRecipes.get(key).add(r)
+  }
+  const unmappedRecipeLists = [...unmappedRecipes.values()].map(set => [...set])
+  recipeLines.forEach(({ text, amount }, i) => {
+    shown.set(lineKey(null, text), { title: text, detail: amount, aisle: aisleFor(text), imageUrl: null })
+    recipesByLine.set(lineKey(null, text), unmappedRecipeLists[i] ?? [])
+  })
+  const extras = (key) => ({ recipes: recipesByLine.get(key) ?? [], price: prices.get(key) ?? null })
 
   const lines = [
     ...plan.lines,
@@ -255,6 +284,7 @@ export function buildWeekPreview({
       from: change.from,
       to: change.to,
       sources: lineByKey.get(key)?.sources ?? [],
+      ...extras(key),
     }
   })
 
@@ -264,14 +294,34 @@ export function buildWeekPreview({
     .filter(line => !changed.has(lineKey(line.productId, line.text)))
     .map(line => {
       const key = lineKey(line.productId, line.text)
-      return { productId: line.productId, text: line.text, ...describe(key), mappedFrom: mappedFrom(key), quantity: onList.get(key)?.quantity ?? line.packs }
+      return { productId: line.productId, text: line.text, ...describe(key), mappedFrom: mappedFrom(key), quantity: onList.get(key)?.quantity ?? line.packs, ...extras(key) }
     })
+
+  // Estimated totals (see the docs above).
+  const total = () => ({ amount: 0, unpriced: 0 })
+  const totals = { adding: total(), onList: total(), order: total() }
+  const count = (bucket, price, packs) => {
+    if (!(packs > 0)) return
+    if (price == null) bucket.unpriced++
+    else bucket.amount += price * packs
+  }
+  for (const c of changes) {
+    count(totals.adding, c.price, c.to - (c.from ?? 0))
+    count(totals.onList, c.price, c.from ?? 0)
+    count(totals.order, c.price, c.to)
+  }
+  for (const l of onListAlready) {
+    count(totals.onList, l.price, l.quantity)
+    count(totals.order, l.price, l.quantity)
+  }
+  for (const bucket of Object.values(totals)) bucket.amount = cents(bucket.amount)
 
   return {
     weekStart: plan.weekStart,
     lines,
     changes,
     onListAlready,
+    totals,
     atHome: [...atHome.values()].map(({ key, text, amounts }) => ({ key, text, amount: amounts.length ? amounts.join(' + ') : null })),
     staples: plan.stapleDecisions.map(d => ({
       staple_id: d.staple_id,
