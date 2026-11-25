@@ -61,7 +61,7 @@ export default function IngredientMapForm({ name, searchProducts, onSave, onUndo
         <p className="text-xs text-muted-foreground">Searched AH for “{searchedFor[0]}” and “{searchedFor.slice(1).join('”, “')}”.</p>
       )}
       {results && (
-        <ul className="max-h-64 divide-y divide-border overflow-y-auto rounded-md border border-border bg-card">
+        <ul className="max-h-[26rem] divide-y divide-border overflow-y-auto rounded-md border border-border bg-card">
           {results.length === 0 && <li className="px-3 py-2 text-muted-foreground">No orderable products found.</li>}
           {results.map((p) => (
             <li key={p.externalId}>
@@ -71,7 +71,7 @@ export default function IngredientMapForm({ name, searchProducts, onSave, onUndo
                 onClick={() => choose({ product: p }, `${name} → ${p.title}`)}
                 className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent disabled:opacity-60"
               >
-                <ProductThumb src={p.imageUrl} />
+                <ProductThumb src={p.imageUrl} className="h-20 w-20 rounded-[10px]" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{p.title}</span>
                   <span className="block text-xs text-muted-foreground">{[p.salesUnitSize, euro(p.price)].filter(Boolean).join(' · ')}</span>
