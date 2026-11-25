@@ -14,7 +14,11 @@ import { supabase } from '@/lib/supabase'
 // there's no guarantee they'll agree — if they don't, we can't be confident
 // a given photo pairs with the right step, so this returns [] rather than
 // risk showing a wrong one. Same fail-safe approach as the blank-cover fix.
-export function useRecipeStepImages(recipeId, stepCount) {
+//
+// allowGaps (link recipes, docs/adr/0009): parse-recipe stores a link recipe's step
+// photos only when the steps line up exactly, so steps without a photo are fine there:
+// stepImageUrls[i] is null for them.
+export function useRecipeStepImages(recipeId, stepCount, { allowGaps = false } = {}) {
   const [stepImageUrls, setStepImageUrls] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -38,8 +42,9 @@ export function useRecipeStepImages(recipeId, stepCount) {
         const isCompleteMatch =
           !error &&
           data &&
-          data.length === stepCount &&
-          data.every((row, i) => row.step_index === i)
+          (allowGaps
+            ? data.length > 0 && data.every(row => row.step_index >= 0 && row.step_index < stepCount)
+            : data.length === stepCount && data.every((row, i) => row.step_index === i))
 
         if (!isCompleteMatch) {
           if (error) console.error('Failed to load step images:', error)
@@ -59,14 +64,20 @@ export function useRecipeStepImages(recipeId, stepCount) {
         } else {
           const urlByPath = {}
           signed.forEach(s => { if (s.signedUrl) urlByPath[s.path] = s.signedUrl })
-          const ordered = data.map(row => urlByPath[row.storage_path] ?? null)
-          setStepImageUrls(ordered.every(Boolean) ? ordered : [])
+          if (allowGaps) {
+            const byStep = Array(stepCount).fill(null)
+            for (const row of data) byStep[row.step_index] = urlByPath[row.storage_path] ?? null
+            setStepImageUrls(byStep)
+          } else {
+            const ordered = data.map(row => urlByPath[row.storage_path] ?? null)
+            setStepImageUrls(ordered.every(Boolean) ? ordered : [])
+          }
         }
         setLoading(false)
       })
 
     return () => { cancelled = true }
-  }, [recipeId, stepCount])
+  }, [recipeId, stepCount, allowGaps])
 
   return { stepImageUrls, loading }
 }

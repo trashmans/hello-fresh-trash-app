@@ -15,6 +15,7 @@ Recipes could only be added as PDFs. Many recipes people want to cook are on web
 3. **Safe fetching** (`_shared/safeFetch.ts`): https only, no IP addresses, local names, logins or odd ports; every address the host resolves to must be public, checked again on each of at most 3 redirects; only HTML (3 MB) or JPEG/PNG/WebP (5 MB); 10 s per fetch.
 4. **The cover photo is stored.** The page's main photo (Recipe image, else `og:image`) is downloaded once and stored like a PDF cover, so it always loads and no viewer's browser contacts the recipe site. It is kept for this private, invite-only app; the recipe page links to the original.
 5. **Steps are written in Gemini's own words**, as for PDFs; the original page is linked, not copied.
+6. **Step photos and "Photos from the page"** (added 25 Nov 2026). When each step has its own photo — HelloFresh.com pages (in the page's Next.js data) or schema.org `HowToStep.image` — Gemini is asked to keep the same number of steps, and the photos are stored as `recipe_step_images` only if it did (link recipes may have steps without a photo). Otherwise up to 6 photos from the post itself (`pagePhotos()`: no logos, author photos, icons, thumbnails or the cover) are stored in `recipes.page_images` and shown under the steps, not tied to steps. Both are fetched with `safeFetch` (2 MB each, 25 s in all) and stored like the cover; a reparse replaces them. Pages Gemini reads itself (url_context) get none.
 
 ## Consequences
 

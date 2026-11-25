@@ -358,6 +358,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
         recipe.storage_path,
         recipe.cover_path,
         ...(stepImages ?? []).map(row => row.storage_path),
+        ...(recipe.page_images ?? []),
       ].filter(Boolean)
       if (pathsToDelete.length > 0) {
         const { error: storageError } = await supabase.storage

@@ -6,6 +6,9 @@
 //   parseIsoDuration()   "PT1H20M" → 80 minutes
 //   extractRecipeData()  the schema.org Recipe most recipe sites publish as JSON-LD
 //   pageText()           readable page text for Gemini when there is no Recipe data
+//   helloFreshStepImages() HelloFresh.com step photos, from the page's Next.js data
+//   pagePhotos()         the photos in a post ("Photos from the page"), for sites whose
+//                        step photos are not tied to steps
 // No I/O, no Deno or Node APIs (only URL, which both have).
 
 export const MAX_URL_LENGTH = 2048
@@ -133,15 +136,22 @@ function findRecipes(node: Json, out: Json[] = []): Json[] {
   return out
 }
 
-function steps(value: Json): string[] {
-  if (typeof value === 'string') return value.split(/\n+/).map(clean).filter(Boolean)
-  if (Array.isArray(value)) return value.flatMap(steps)
+// Each step's text with its own image (HowToStep.image), or null.
+function stepItems(value: Json): { text: string; image: string | null }[] {
+  if (typeof value === 'string') return value.split(/\n+/).map(clean).filter(Boolean).map((text) => ({ text, image: null }))
+  if (Array.isArray(value)) return value.flatMap(stepItems)
   if (value && typeof value === 'object') {
-    if (value.itemListElement) return steps(value.itemListElement)
+    if (value.itemListElement) return stepItems(value.itemListElement)
     const text = clean(value.text) || clean(value.name)
-    return text ? [text] : []
+    return text ? [{ text, image: httpsUrl(imageUrl(value.image ?? null)) }] : []
   }
   return []
+}
+
+// The link when it is a valid https URL, else null.
+function httpsUrl(raw: string | null): string | null {
+  if (!raw) return null
+  try { return new URL(raw).protocol === 'https:' ? raw : null } catch { return null }
 }
 
 function imageUrl(value: Json): string | null {
@@ -164,6 +174,8 @@ export interface RecipeData {
   name: string | null
   ingredients: string[]
   steps: string[]
+  /** Each step's own image (https), lined up with steps; null where a step has none. */
+  stepImages: (string | null)[]
   image: string | null
   servings: string | null
   prepMinutes: number | null
@@ -183,10 +195,12 @@ export function extractRecipeData(html: string): RecipeData | null {
         : Array.isArray(r.ingredients) ? r.ingredients : []).map(clean).filter(Boolean)
       if (ingredients.length === 0) continue
       const yieldValue = Array.isArray(r.recipeYield) ? r.recipeYield[0] : r.recipeYield
+      const items = stepItems(r.recipeInstructions)
       return {
         name: clean(r.name) || null,
         ingredients,
-        steps: steps(r.recipeInstructions),
+        steps: items.map((i) => i.text),
+        stepImages: items.map((i) => i.image),
         image: imageUrl(r.image) ?? ogImage(html),
         servings: clean(yieldValue) || null,
         prepMinutes: parseIsoDuration(r.prepTime),
@@ -211,6 +225,98 @@ export function pageText(html: string): string {
 /** The page's og:image, for a cover when the Recipe data has none (or there is no Recipe data). */
 export function pageImage(html: string): string | null {
   return ogImage(String(html ?? ''))
+}
+
+const HELLOFRESH_HOST = /^(www\.)?hellofresh\.(com|nl|de|fr|be|at|ch|se|dk|no|ie|it|es|lu|ca|co\.uk|com\.au|co\.nz)$/
+const HELLOFRESH_PATH = /^\/[A-Za-z0-9_\-/]+\.(jpe?g|png|webp)$/i
+const HELLOFRESH_MEDIA = 'https://media.hellofresh.com/w_750,q_auto,f_auto,c_limit,fl_lossy/hellofresh_s3'
+
+// The first object (depth-first) with a steps list whose items have instructions.
+function findHfSteps(node: Json, depth = 0): Json[] | null {
+  if (!node || typeof node !== 'object' || depth > 12) return null
+  if (Array.isArray(node)) {
+    for (const n of node) { const found = findHfSteps(n, depth + 1); if (found) return found }
+    return null
+  }
+  const steps = node.steps
+  if (Array.isArray(steps) && steps.length > 0 && steps.every((st: Json) => st && typeof st === 'object' && 'instructions' in st)) return steps
+  for (const v of Object.values(node)) { const found = findHfSteps(v as Json, depth + 1); if (found) return found }
+  return null
+}
+
+/**
+ * HelloFresh.com step photos, one per step in step order (null where a step has none),
+ * from the page's Next.js data; null for other sites, or when there are no photos at all.
+ */
+export function helloFreshStepImages(html: string, pageUrl: string): (string | null)[] | null {
+  let host = ''
+  try { host = new URL(pageUrl).hostname.toLowerCase() } catch { return null }
+  if (!HELLOFRESH_HOST.test(host)) return null
+  const m = String(html ?? '').match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)
+  if (!m) return null
+  let data: Json
+  try { data = JSON.parse(m[1]) } catch { return null }
+  const steps = findHfSteps(data)
+  if (!steps) return null
+  const ordered = steps
+    .map((st, i) => ({ st, order: Number.isFinite(Number(st.index)) ? Number(st.index) : i }))
+    .sort((a, b) => a.order - b.order)
+  const urls = ordered.map(({ st }) => {
+    const path = Array.isArray(st.images) ? st.images[0]?.path : null
+    return typeof path === 'string' && HELLOFRESH_PATH.test(path) && !path.includes('..') ? `${HELLOFRESH_MEDIA}${path}` : null
+  })
+  return urls.some(Boolean) ? urls : null
+}
+
+export const PAGE_PHOTOS_MAX = 6
+const PHOTO_EXT = /\.(jpe?g|png|webp)$/i
+const NOT_A_PHOTO = /logo|avatar|author|gravatar|icon|badge|sprite|emoji|headshot|profile/i
+const SIZE_SUFFIX = /-(\d+)x(\d+)(?=\.[a-z0-9]+$)/i
+
+function imgAttributes(tag: string): Record<string, string> {
+  const attrs: Record<string, string> = {}
+  for (const a of tag.matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
+    attrs[a[1].toLowerCase()] = decodeEntities(a[2] ?? a[3] ?? a[4] ?? '')
+  }
+  return attrs
+}
+
+// Same photo, any size: host + path without a "-1024x683" size suffix, lower case.
+function photoKey(url: URL): string {
+  return `${url.hostname}${url.pathname.replace(SIZE_SUFFIX, '')}`.toLowerCase()
+}
+
+/**
+ * The photos in the post (its <article>, else the whole page), in page order, at most
+ * PAGE_PHOTOS_MAX: https JPG/PNG/WebP only; no logos, author photos, icons, small images
+ * or small thumbnails; one per photo whatever its size; none of the exclude photos (the cover).
+ */
+export function pagePhotos(html: string, pageUrl: string, exclude: string[] = []): string[] {
+  const page = String(html ?? '')
+  const region = page.match(/<article[\s>][\s\S]*?<\/article>/i)?.[0] ?? page
+  const seen = new Set<string>()
+  for (const raw of exclude) { try { seen.add(photoKey(new URL(raw))) } catch { /* skip */ } }
+  const out: string[] = []
+  for (const [tag] of region.matchAll(/<img\b[^>]*>/gi)) {
+    if (out.length >= PAGE_PHOTOS_MAX) break
+    const a = imgAttributes(tag)
+    const src = [a['data-lazy-src'], a['data-src'], a['data-original'], a.src].find((v) => v && !v.trim().startsWith('data:'))?.trim()
+    if (!src) continue
+    let url: URL
+    try { url = new URL(src, pageUrl) } catch { continue }
+    if (url.protocol !== 'https:' || !PHOTO_EXT.test(url.pathname)) continue
+    const file = url.pathname.split('/').pop() ?? ''
+    if (NOT_A_PHOTO.test(`${file} ${a.alt ?? ''} ${a.class ?? ''}`)) continue
+    const w = Number(a.width), h = Number(a.height)
+    if ((w > 0 || h > 0) && Math.max(w || 0, h || 0) < 300) continue
+    const size = file.match(SIZE_SUFFIX)
+    if (size && Math.max(Number(size[1]), Number(size[2])) < 500) continue
+    const key = photoKey(url)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(url.href)
+  }
+  return out
 }
 
 /** The Recipe data written out like a recipe card: what Gemini reads in place of a PDF. */
