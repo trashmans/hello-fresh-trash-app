@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
-import { Check, FileText, Loader2, Mail, Plus, UserPlus, X } from 'lucide-react'
+import { Check, Copy, FileText, Loader2, Mail, Plus, UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useSocial } from '@/hooks/useSocial'
 import { useSharedWithMe } from '@/hooks/useShares'
-import { INVITE_DAYS, checkInviteEmail, inviteStatus, invitesLeftToday } from '@/lib/social'
+import { useAuth } from '@/context/AuthContext'
+import { INVITE_DAYS, checkInviteEmail, inviteMessage, inviteStatus, invitesLeftToday } from '@/lib/social'
 
 const dateLabel = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
@@ -17,6 +18,37 @@ function Avatar({ person, size = 'h-11 w-11' }) {
     <img src={person.avatar_url} alt="" onError={() => setBroken(true)} className={`${size} shrink-0 rounded-full object-cover`} />
   ) : (
     <span className={`${size} flex shrink-0 items-center justify-center rounded-full bg-muted font-bold text-foreground`} aria-hidden="true">{initial}</span>
+  )
+}
+
+// Email invite / Copy invite for one invite. The app sends no email (docs/adr/0008),
+// so the inviter sends this message themselves.
+function InviteActions({ message, size = 'sm' }) {
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(message.text)
+      toast.success('Invite copied. Paste it into a message to them.')
+    } catch {
+      toast.error('Could not copy. Use Email invite instead.')
+    }
+  }
+  const cls = size === 'sm'
+    ? 'inline-flex shrink-0 items-center gap-1 text-[13px] font-semibold text-primary-text underline underline-offset-2'
+    : null
+  return size === 'sm' ? (
+    <>
+      <a href={message.mailto} className={cls}><Mail className="h-3.5 w-3.5" aria-hidden="true" />Email</a>
+      <button type="button" onClick={copy} className={cls}><Copy className="h-3.5 w-3.5" aria-hidden="true" />Copy</button>
+    </>
+  ) : (
+    <div className="flex flex-wrap gap-2">
+      <Button asChild className="h-10 rounded-full px-4 font-semibold">
+        <a href={message.mailto}><Mail className="h-4 w-4" /> Email invite</a>
+      </Button>
+      <Button type="button" variant="outline" onClick={copy} className="h-10 rounded-full px-4 font-semibold">
+        <Copy className="h-4 w-4" /> Copy invite
+      </Button>
+    </div>
   )
 }
 
@@ -154,11 +186,17 @@ export default function Social() {
   const left = invitesLeftToday(invites, now)
   const openInvites = invites.filter((i) => inviteStatus(i, now) === 'pending')
   const [confirmRemove, setConfirmRemove] = useState(null)
+  const [justInvited, setJustInvited] = useState(null)
+  const { session } = useAuth()
+  const inviterName = session?.user?.user_metadata?.full_name
+  const messageFor = (i) => inviteMessage({ inviterName, email: i.email, appUrl: window.location.origin, expiresAt: i.expires_at })
+  const newInvite = justInvited && openInvites.find((i) => i.email === justInvited)
 
   async function invite(email) {
     const { message } = await social.invite(email)
     if (message) { toast.error(message); return false }
-    toast.success(`Invited ${email}. They can sign in with Google using that address.`)
+    setJustInvited(email)
+    toast.success(`${email} can now sign in. Send them the invite so they know.`)
     return true
   }
 
@@ -269,22 +307,31 @@ export default function Social() {
             <CardContent className="space-y-4">
               <EmailForm
                 label="Their email (the one they use with Google)"
-                button="Send invite"
+                button="Invite"
                 icon={Mail}
                 onSubmit={invite}
                 disabled={left === 0}
                 hint={left === 0
                   ? 'You have used today’s invites. Try again tomorrow.'
-                  : `They can sign in once invited; the invite lasts ${INVITE_DAYS} days. ${left} left today. You will become friends when they sign in.`}
+                  : `Inviting lets them sign in for ${INVITE_DAYS} days. The app doesn’t email them, so send the invite yourself. ${left} left today. You will become friends when they sign in.`}
               />
+              {newInvite && (
+                <div className="space-y-2.5 rounded-xl bg-muted p-3">
+                  <p className="text-sm">
+                    <span className="font-semibold">Now send {newInvite.email} the invite.</span> The app doesn’t email them.
+                  </p>
+                  <InviteActions message={messageFor(newInvite)} size="lg" />
+                </div>
+              )}
               {openInvites.length > 0 && (
                 <ul className="divide-y divide-border border-t border-border">
                   {openInvites.map((i) => (
                     <li key={i.id} className="flex items-center gap-2 py-2.5 text-sm">
                       <span className="min-w-0 flex-1 truncate">{i.email}</span>
                       <span className="shrink-0 text-[13px] text-muted-foreground">until {dateLabel(i.expires_at)}</span>
+                      <InviteActions message={messageFor(i)} />
                       <button type="button" className="shrink-0 text-[13px] font-semibold text-primary-text underline underline-offset-2"
-                        onClick={() => act(social.revokeInvite(i.id), 'Invite taken back.')}>
+                        onClick={() => { if (i.email === justInvited) setJustInvited(null); act(social.revokeInvite(i.id), 'Invite taken back.') }}>
                         Take back
                       </button>
                     </li>
