@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   INVITE_DAILY_LIMIT, INVITE_DAYS, SHARE_NOTE_MAX,
-  checkInviteEmail, inviteStatus, invitesLeftToday, checkShareNote, socialErrorMessage,
+  checkInviteEmail, inviteStatus, invitesLeftToday, checkShareNote, socialErrorMessage, inviteMessage,
 } from '@/lib/social'
 
 // The rules the Social tab shows before calling the database functions, which enforce
@@ -111,5 +111,55 @@ describe('socialErrorMessage', () => {
   it('falls back to a general message', () => {
     expect(socialErrorMessage('something odd')).toMatch(/went wrong/i)
     expect(socialErrorMessage(undefined)).toMatch(/went wrong/i)
+  })
+})
+
+describe('inviteMessage', () => {
+  // The app does not send invite emails (docs/adr/0008); the inviter sends this one
+  // themselves, from their own mail app (mailto) or by pasting it (copy).
+  const args = {
+    inviterName: 'Chris',
+    email: 'Jan@Example.NL',
+    appUrl: 'https://hello-fresh-trash.vercel.app',
+    expiresAt: '2026-12-25T12:00:00Z',
+  }
+
+  it('names the inviter in the subject', () => {
+    expect(inviteMessage(args).subject).toBe('Chris invited you to Hello Fresh Trash')
+  })
+
+  it('falls back to "A friend" when the inviter has no name', () => {
+    expect(inviteMessage({ ...args, inviterName: '  ' }).subject).toBe('A friend invited you to Hello Fresh Trash')
+    expect(inviteMessage({ ...args, inviterName: null }).subject).toBe('A friend invited you to Hello Fresh Trash')
+  })
+
+  it('gives the app link, the address to sign in with, and the expiry date', () => {
+    const { body } = inviteMessage(args)
+    expect(body).toContain('https://hello-fresh-trash.vercel.app')
+    expect(body).toMatch(/sign in with Google using jan@example\.nl/i)
+    expect(body).toContain('25 December 2026')
+  })
+
+  it('does not say the app sent it', () => {
+    expect(inviteMessage(args).body).not.toMatch(/do not reply|automated|no-reply/i)
+  })
+
+  it('builds a mailto link to the invited address with the subject and body', () => {
+    const { mailto, subject, body } = inviteMessage(args)
+    expect(mailto.startsWith('mailto:jan@example.nl?')).toBe(true)
+    const params = new URLSearchParams(mailto.split('?')[1])
+    expect(params.get('subject')).toBe(subject)
+    expect(params.get('body')).toBe(body)
+  })
+
+  it('encodes spaces as %20, not +, so mail apps show them as spaces', () => {
+    const { mailto } = inviteMessage(args)
+    expect(mailto).not.toContain('+')
+    expect(mailto).toContain('Chris%20invited%20you')
+  })
+
+  it('has a copyable text with the subject first', () => {
+    const { text, subject, body } = inviteMessage(args)
+    expect(text).toBe(`${subject}\n\n${body}`)
   })
 })

@@ -65,3 +65,29 @@ export function socialErrorMessage(raw) {
   const code = Object.keys(ERROR_MESSAGES).find((c) => new RegExp(`\\b${c}\\b`).test(text))
   return code ? ERROR_MESSAGES[code] : 'Something went wrong. Try again.'
 }
+
+const APP_NAME = 'Hello Fresh Trash'
+
+/**
+ * The invite email the inviter sends themselves (the app sends no email, docs/adr/0008).
+ * → { subject, body, text, mailto }: text is subject + body for copying; mailto opens
+ * the inviter's mail app addressed to the invited person. Spaces are %20, not +.
+ */
+export function inviteMessage({ inviterName, email, appUrl, expiresAt }) {
+  const name = typeof inviterName === 'string' && inviterName.trim() ? inviterName.trim() : 'A friend'
+  const to = typeof email === 'string' ? email.trim().toLowerCase() : ''
+  const until = new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const subject = `${name} invited you to ${APP_NAME}`
+  const body = [
+    'Hi,',
+    '',
+    `${name} invited you to ${APP_NAME}, an app for saving recipes and planning the weekly shop together.`,
+    '',
+    `Open ${appUrl} and sign in with Google using ${to}. The invite only works for that address.`,
+    '',
+    `The invite is valid until ${until}.`,
+  ].join('\n')
+  const address = to.split('@').map(encodeURIComponent).join('@')
+  const mailto = `mailto:${address}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  return { subject, body, text: `${subject}\n\n${body}`, mailto }
+}
