@@ -2,7 +2,7 @@
 
 - Feature: docs/adr/0012-food-map.md
 - Prepared: 2026-11-26 (Chris, drafted with Claude)
-- To review and sign off: Chris and David, before phase F1 is built
+- Signed off: Chris and David, 2026-11-26 (with the 26 Nov changes to ADR 0012 points 6 and 7)
 - Not legal advice. Done in the spirit of GDPR Article 35 because the feature processes location data on a large scale relative to this app, and location can reveal sensitive patterns.
 
 ## 1. What the processing is
@@ -15,8 +15,9 @@ Friends upload food photos. The app reads where each photo was taken, shows the 
 | Location: nearest city (default) or exact spot (if chosen) | Photo EXIF, or the owner's pin | Yes | Owner + chosen audience |
 | Exact GPS from the file when city-level is chosen | Photo EXIF | **No** (read in the browser only) | Nobody |
 | Date taken | Photo EXIF | Yes (date only, no time) | Owner + chosen audience |
-| Dish: the uploader's choice from Gemini's top 3 (or their own name), cuisine, country, TasteAtlas link | Gemini + uploader's choice | Yes (the chosen one; the 3 suggestions are kept until a choice is made) | Owner + chosen audience |
+| Dish: the uploader's choice from Gemini's top 3 (or their own name), cuisine, country | Gemini (image recognition, no search grounding) + uploader's choice | Yes (the chosen one; the 3 suggestions are kept until a choice is made) | Owner + chosen audience |
 | Thumbnail sent for recognition | Upload | Sent to Gemini, not stored there by us | Google (processor) |
+| Dish name sent to find recipes; up to 3 recipe pages shown | Uploader's chosen dish | Sent to Gemini with Google Search grounding; the results are shown, not stored | Google (processor) |
 | Place-search text ("Bangkok") | Owner | Sent to Nominatim via our server, not stored | OSM Foundation |
 | Map area viewed | Viewer's browser | Tile requests to Protomaps | Protomaps/Cloudflare (no photo data) |
 
@@ -39,7 +40,7 @@ Data subjects: users who upload; friends and group members who view. Possibly pe
 | 3 | **Photos seen by the wrong people** | Possible / high | RLS on table and storage; private bucket with short-lived signed URLs; visibility checked in the database, not the app; tests on a scratch Postgres for every policy (as for Social) | Unlikely / medium |
 | 4 | **Metadata leaking** (GPS, camera, phone model) in stored files | Likely / medium | Browser re-encodes images, which drops all EXIF/XMP; a check in F1 refuses a stored file that still has GPS | Unlikely / low |
 | 5 | **Other people in photos** (faces at the table) | Possible / medium | App asks for food photos only; Gemini instructed to describe only food; no face detection, no tagging; owner can delete any photo; anyone shown can ask the owner or us to remove it | Possible / low |
-| 6 | **Processors** see data (Gemini, Nominatim, Protomaps) | Certain / low | Minimum sent: thumbnail, a search phrase, map areas; named in the privacy policy; Gemini already a processor with billing (no training on paid API data per Google's terms, to confirm) | Certain / low |
+| 6 | **Processors** see data (Gemini, Nominatim, Protomaps) | Certain / low | Minimum sent: thumbnail, a dish name, a search phrase, map areas; named in the privacy policy. Gemini is used as a Paid Service: under the Gemini API terms (23 Mar 2026) Google doesn't use prompts or responses to improve its products, and logs them for a limited time only to detect misuse and for legal reasons; with Google Search grounding, Google keeps prompt and output for 30 days to build the results. Grounding links and suggestions are shown, never stored or fetched by the app | Certain / low |
 | 7 | **Storage limits / cost** lead to deletions or overruns | Possible / low | Per-person cap (300 photos to start); shrunk files; monitoring before F1 | Unlikely / low |
 | 8 | **Account takeover** exposes someone's map | Unlikely / high | Google sign-in only; invite-only app; visibility limits what any account sees | Unlikely / medium |
 
@@ -55,5 +56,5 @@ Residual risk is acceptable **if** the measures above are built into F1–F2, th
 
 | Reviewer | Decision | Date |
 |---|---|---|
-| Chris | | |
-| David | | |
+| Chris | Approved | 2026-11-26 |
+| David | Approved | 2026-11-26 |
