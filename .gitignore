@@ -19,3 +19,6 @@ supabase/.temp/
 
 # AI planning docs (local only)
 docs/superpowers/
+
+# Jumbo spike raw pages
+spike/jumbo-api/out/
