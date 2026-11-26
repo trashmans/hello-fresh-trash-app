@@ -9,7 +9,8 @@ import RecipeTable from '@/components/RecipeTable'
 import { useFriendIds } from '@/hooks/useSocial'
 import RecipeDeleteMenu from '@/components/RecipeDeleteMenu'
 import WeekListButton from '@/components/WeekListButton'
-import { RECIPE_FILTERS, normalizeRecipeFilter, filterRecipes } from '@/lib/recipeFilter'
+import { RECIPE_FILTERS, normalizeRecipeFilter, filterRecipes, groupFilterKey, groupIdOf } from '@/lib/recipeFilter'
+import { useGroups } from '@/hooks/useGroups'
 import { equipmentInUse, filterByEquipment } from '@/lib/equipment'
 import { recipeCardMeta, catalogueHeading, weekListNote } from '@/lib/recipeCard'
 import { STATUS_POLL_MS, isInProgress, inProgressIdsToCheck, mergeStatusUpdates, recipeCardState } from '@/lib/recipeStatus'
@@ -164,6 +165,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   const [viewMode, setViewModeRaw] = useState(loadViewMode)
   const [ownerFilter, setOwnerFilterRaw] = useState(loadOwnerFilter)
   const friendIds = useFriendIds()
+  const { groups, loading: groupsLoading } = useGroups()
   const [equipmentFilter, setEquipmentFilter] = useState([]) // equipment chips chosen (AND)
 
   function setOwnerFilter(filter) {
@@ -474,7 +476,11 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   // ingredientMatches already contains only recipes matching every
   // selected ingredient chip (AND match) — see useIngredientFilter.
   // The owner filter (all / mine / friends) applies first; friends come from the Social tab.
-  const ownerRecipes = filterRecipes(recipes, ownerFilter, { userId: session.user.id, friendIds })
+  // A saved group filter for a group I'm no longer in goes back to All once groups have loaded.
+  const savedGroupId = groupIdOf(ownerFilter)
+  const groupGone = Boolean(savedGroupId) && !groupsLoading && !groups.some(g => g.id === savedGroupId)
+  const activeFilter = groupGone ? 'all' : ownerFilter
+  const ownerRecipes = filterRecipes(recipes, activeFilter, { userId: session.user.id, friendIds, groups })
   const ingredientRecipes = ingredientMatches
     ? ownerRecipes.filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
     : ownerRecipes
@@ -552,7 +558,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
         <div role="group" aria-label="Show recipes" className="flex flex-wrap items-center gap-2">
           {RECIPE_FILTERS.map(f => {
             const unavailable = Boolean(f.needsSocial)
-            const active = ownerFilter === f.key
+            const active = activeFilter === f.key
             return (
               <button
                 key={f.key}
@@ -564,6 +570,14 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
                 className={pill(active)}
               >
                 {f.label}
+              </button>
+            )
+          })}
+          {groups.map(g => {
+            const key = groupFilterKey(g.id)
+            return (
+              <button key={key} type="button" aria-pressed={activeFilter === key} onClick={() => setOwnerFilter(key)} className={pill(activeFilter === key)}>
+                {g.name}
               </button>
             )
           })}
@@ -637,9 +651,10 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
 
       {ownerRecipes.length === 0 && (
         <EmptyState
-          title={ownerFilter === 'mine' ? "You haven't uploaded any recipes yet" : 'No recipes here yet'}
-          text={ownerFilter === 'mine' ? 'Upload a recipe PDF, or switch to All recipes.'
-            : ownerFilter === 'friends' ? (friendIds.length ? "Your friends haven't uploaded recipes yet." : 'Add friends on the Social tab, or switch to All recipes.')
+          title={activeFilter === 'mine' ? "You haven't uploaded any recipes yet" : 'No recipes here yet'}
+          text={activeFilter === 'mine' ? 'Upload a recipe PDF, or switch to All recipes.'
+            : groupIdOf(activeFilter) ? "No one in this group has uploaded recipes yet."
+            : activeFilter === 'friends' ? (friendIds.length ? "Your friends haven't uploaded recipes yet." : 'Add friends on the Social tab, or switch to All recipes.')
             : 'Switch to All recipes to see everything.'}
         />
       )}
