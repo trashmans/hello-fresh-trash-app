@@ -10,6 +10,7 @@ import { useFriendIds } from '@/hooks/useSocial'
 import RecipeDeleteMenu from '@/components/RecipeDeleteMenu'
 import WeekListButton from '@/components/WeekListButton'
 import { RECIPE_FILTERS, normalizeRecipeFilter, filterRecipes } from '@/lib/recipeFilter'
+import { equipmentInUse, filterByEquipment } from '@/lib/equipment'
 import { recipeCardMeta, catalogueHeading, weekListNote } from '@/lib/recipeCard'
 import { STATUS_POLL_MS, isInProgress, inProgressIdsToCheck, mergeStatusUpdates, recipeCardState } from '@/lib/recipeStatus'
 
@@ -163,6 +164,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   const [viewMode, setViewModeRaw] = useState(loadViewMode)
   const [ownerFilter, setOwnerFilterRaw] = useState(loadOwnerFilter)
   const friendIds = useFriendIds()
+  const [equipmentFilter, setEquipmentFilter] = useState([]) // equipment chips chosen (AND)
 
   function setOwnerFilter(filter) {
     setOwnerFilterRaw(filter)
@@ -473,9 +475,18 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
   // selected ingredient chip (AND match) — see useIngredientFilter.
   // The owner filter (all / mine / friends) applies first; friends come from the Social tab.
   const ownerRecipes = filterRecipes(recipes, ownerFilter, { userId: session.user.id, friendIds })
-  const displayRecipes = ingredientMatches
+  const ingredientRecipes = ingredientMatches
     ? ownerRecipes.filter(r => r.status === 'ready' ? ingredientMatches.has(r.id) : true)
     : ownerRecipes
+  // Equipment chips (src/lib/equipment.js, read from the steps) narrow ready recipes only.
+  const equipmentOptions = [...new Set([...equipmentInUse(ingredientRecipes.filter(r => r.status === 'ready')), ...equipmentFilter])]
+  const equipmentMatches = new Set(filterByEquipment(ingredientRecipes.filter(r => r.status === 'ready'), equipmentFilter).map(r => r.id))
+  const displayRecipes = equipmentFilter.length
+    ? ingredientRecipes.filter(r => r.status !== 'ready' || equipmentMatches.has(r.id))
+    : ingredientRecipes
+  function toggleEquipment(label) {
+    setEquipmentFilter(prev => (prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]))
+  }
 
   // List view only applies to ready recipes — columns like cook time
   // don't mean anything for a still-processing upload, so pending/failed/
@@ -502,7 +513,7 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
     )
   }
 
-  if (ingredientMatches && ownerRecipes.length > 0 && displayRecipes.length === 0) {
+  if (ingredientMatches && ownerRecipes.length > 0 && ingredientRecipes.length === 0) {
     return (
       <EmptyState
         icon={<FileText className="h-7 w-7 text-muted-foreground" />}
@@ -581,6 +592,41 @@ export default function RecipeCatalogue({ refreshKey, onSelect, onDelete, select
           </button>
         </div>
       </div>
+
+      {equipmentOptions.length > 0 && (
+        <div role="group" aria-label="Equipment" className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-muted-foreground">Equipment</span>
+          {equipmentOptions.map(label => {
+            const active = equipmentFilter.includes(label)
+            return (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggleEquipment(label)}
+                className={`h-9 rounded-full border px-3.5 text-sm font-medium transition-colors ${
+                  active ? 'border-foreground bg-foreground text-background' : 'border-input bg-card hover:bg-accent'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+          {equipmentFilter.length > 0 && (
+            <button type="button" onClick={() => setEquipmentFilter([])} className="h-9 px-2 text-sm font-semibold text-primary-text underline underline-offset-2">
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {equipmentFilter.length > 0 && ingredientRecipes.some(r => r.status === 'ready') && equipmentMatches.size === 0 && (
+        <EmptyState
+          icon={<FileText className="h-7 w-7 text-muted-foreground" />}
+          title="No matches found"
+          text={`No recipes use ${equipmentFilter.join(' and ')}. Clear a chip to see more.`}
+        />
+      )}
 
       {ownerRecipes.length > 0 && (
         <div className="flex flex-wrap items-baseline justify-between gap-4">

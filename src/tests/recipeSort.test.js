@@ -96,3 +96,25 @@ describe('formatRecipeCell', () => {
     expect(formatRecipeCell(recipe, col('cuisine'))).toEqual({ text: 'Mexican', estimated: false, empty: false })
   })
 })
+
+describe('Equipment column', () => {
+  // Read from the steps (src/lib/equipment.js), not a stored column.
+  const wings = { id: 'w', name: 'Wings', steps: ['Air fry the wings.', 'Toss in a wok.'] }
+  const curry = { id: 'c', name: 'Instant Pot curry', steps: ['Pressure cook 8 minutes.'] }
+  const salad = { id: 's', name: 'Salad', steps: ['Toss everything.'] }
+
+  it('is in the list view', () => {
+    expect(col('equipment')).toMatchObject({ label: 'Equipment', type: 'string' })
+  })
+
+  it('shows the tags, or a dash when there are none', () => {
+    expect(formatRecipeCell(wings, col('equipment'))).toEqual({ text: 'Air fryer, Wok', estimated: false, empty: false })
+    expect(formatRecipeCell(salad, col('equipment'))).toEqual({ text: '—', estimated: false, empty: true })
+  })
+
+  it('sorts by the tags, recipes without equipment last in both directions', () => {
+    expect(sortRecipes([salad, curry, wings], 'equipment', 'asc').map(r => r.id)).toEqual(['w', 'c', 's'])
+    expect(sortRecipes([salad, wings, curry], 'equipment', 'desc').map(r => r.id)).toEqual(['c', 'w', 's'])
+    expect(compareRecipesByColumn(salad, wings, col('equipment'))).toBe(1)
+  })
+})
