@@ -289,6 +289,7 @@ src/
 │   ├── useSocial.js         # useSocial(): friends, friend requests both ways and sent invites (with names and pictures), actions through the Social database functions with readable errors (socialErrorMessage); useFriendIds() for the Friends' recipes filter
 │   ├── useShares.js         # useSharedWithMe() (shares to me with recipe, cover and sender; markSeen, remove), shareRecipe() (share_recipe RPC, readable errors), useUnseenShareCount() for the Social tab's badge (re-checked on page change, focus and after marking seen)
 │   ├── useIngredientSearch.js # useIngredientSuggestions() — debounced typeahead over stored canonical_name/name values;
+│   ├── useNewVersionNotice.jsx # checks /index.html every 5 min and when the tab comes back; shows a "new version · Reload" toast; lazyPage() shows it instead of crashing when a page file is gone (off in dev)
 │   │                           # useIngredientFilter() — given selected chips, returns recipes matching ALL of them (AND)
 │   ├── useRecipeIngredients.js # ingredient list for a single recipe, in display order
 │   ├── useRecipeSwaps.js      # protein swaps (ADR 0010): useSwapsById() loads recipe_swaps rows for the list's picks; useRecipeSwapOptions() gets a recipe's options from suggest-swaps (load / more)
@@ -321,6 +322,7 @@ src/
     ├── stockup.js             # parseBonusMechanism() reads AH deal labels ("2e GRATIS", "2+1 GRATIS", "3 VOOR 5,00") into a pack group size; planStockUp() buys non-perishable staples on bonus up to max_weeks_stock, rounded to whole deals, and returns the new covered_until
     ├── units.js               # formatTemperatureText() — replaces {{temp:VALUEU}} markers in step text with the viewer's preferred unit; convertIngredientUnit() — converts an ingredient's quantity/unit to the viewer's preferred volume/mass system for display; normalizeUnit() reads a recipe unit as a measurement (capital T = tbsp, lowercase t = tsp); bestUnitInSystem() picks the display unit for an amount within one system; unitOptionsFor() lists the units an amount can be entered in and unitOptionValueFor() gives the option that stands for the recipe's own unit ("Cup" → cup), so the scale-by-ingredient dropdowns start on the right unit
     ├── aisles.js              # AISLES (incl. Household for non-food staples), aisleFor() (keyword rules for recipe ingredients and staple names, first match wins: 'garlic powder' → Herbs & spices, 'mushroom stock concentrate' → Pantry, 'green beans' → Produce), groupByAisle() for the Shopping tab and the Staples list
+    ├── appVersion.js          # "a new version is available": buildIdFromHtml() (the hashed entry script in index.html), isNewVersion(), isChunkLoadError() (a lazy page file gone after a deploy)
     ├── recipeFilter.js        # RECIPE_FILTERS (all, mine, friends — friends needs the Social tab), normalizeRecipeFilter() for saved values, filterRecipes() by uploader
     ├── stapleForm.js          # STAPLE_LIMITS (match the household_staples checks), toStapleRow() turns the form into a row or per-field messages (stock up on bonus = non-perishable with a weeks limit), describeStaple() for the list
     ├── theme.js               # THEME_STORAGE_KEY, normalizeTheme() (only 'dark' means dark; anything else is light), toggleTheme(), themeColorFor() (browser bar colour per theme), themeToggleLabel() (what the header button says: the theme it switches to)
@@ -345,6 +347,7 @@ src/
     ├── recipeStatus.test.js   # which recipes to re-check, merging fresh statuses without needless re-renders
     ├── scaling.test.js        # scale factors from servings / a target ingredient amount, scaleIngredients(), and scaleStepText() (amounts in steps: scaling, plural units, fractions, ranges, unit preference, what is left alone)
     ├── aisles.test.js         # aisle for ~90 real ingredient names incl. the tricky ones, staple names (fruit by variety, cheeses, snacks, household items; food that only sounds like a household item stays put), case and preparation words, unknown → Other, grouping order
+    ├── appVersion.test.js     # build id from index.html, new version or not, chunk load errors in each browser
     ├── recipeFilter.test.js   # filter list, saved-value fallback, all / mine / friends, no friends yet, list not changed
     ├── stapleForm.test.js     # form → row: pinned product or search term, numbers typed as text, stock-up rules, all errors at once, ranges; one-line summaries incl. paused / skipping
     ├── theme.test.js          # theme key, light fallback for unknown values, toggling, browser bar colours, header button label
