@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { MAPPING_LIMITS, toMappingRow, describeMapping } from '@/lib/ingredientMappings'
+import { MAPPING_LIMITS, toMappingRow, describeMapping, matchSummary } from '@/lib/ingredientMappings'
 
 const olijfolie = { externalId: 301, title: 'AH Olijfolie', salesUnitSize: '1 l', price: 6.99 }
 
@@ -84,5 +84,35 @@ describe('describeMapping', () => {
 
   it('still says something when the product details are missing', () => {
     expect(describeMapping({ label: 'Olive Oil', pantry: false, product_external_id: 301, product: null })).toBe('AH product 301')
+  })
+})
+
+describe('matchSummary', () => {
+  // For "Preview AH order · 3 of 12 matched" on the Shopping tab: how many of the items
+  // still to buy are matched to an AH product or marked always at home.
+  const product = (ingredient_key) => ({ ingredient_key, pantry: false, product_external_id: 301 })
+  const atHome = (ingredient_key) => ({ ingredient_key, pantry: true, product_external_id: null })
+  const item = (name) => ({ name })
+
+  it('counts items with a product or marked always at home as matched', () => {
+    const items = [item('Olive oil'), item('Salt'), item('Garlic')]
+    expect(matchSummary(items, [product('olive oil'), atHome('salt')])).toEqual({ matched: 2, total: 3 })
+  })
+
+  it('finds the mapping however the item is spelled, like the preview does', () => {
+    expect(matchSummary([item('  Olive   Oils ')], [product('olive oil')])).toEqual({ matched: 1, total: 1 })
+  })
+
+  it('counts an ingredient once when two items share it', () => {
+    expect(matchSummary([item('Garlic'), item('garlic')], [])).toEqual({ matched: 0, total: 1 })
+  })
+
+  it('ignores a mapping without a product that is not at home', () => {
+    expect(matchSummary([item('Garlic')], [{ ingredient_key: 'garlic', pantry: false, product_external_id: null }])).toEqual({ matched: 0, total: 1 })
+  })
+
+  it('gives 0 of 0 for nothing to buy', () => {
+    expect(matchSummary([], [product('olive oil')])).toEqual({ matched: 0, total: 0 })
+    expect(matchSummary(null, null)).toEqual({ matched: 0, total: 0 })
   })
 })
