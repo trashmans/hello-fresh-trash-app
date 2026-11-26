@@ -83,6 +83,44 @@ export function shareRecipients({ me, friendIds = [], groupIds = [], groups = []
   return [...out]
 }
 
+/** "Recent in <group>" (step G4): uploads from the last uploadDays, at most max items. */
+export const GROUP_FEED = { uploadDays: 60, max: 15 }
+
+/**
+ * A group's recent activity, newest first: recipes shared in the group (one item per
+ * recipe and sender, the latest) and recipes its members uploaded in the last 60 days.
+ *   shares   recipe_shares rows I can read, with recipe: { id, name }
+ *   recipes  recipes rows with id, name, uploaded_by, created_at, status
+ * → [{ kind: 'shared' | 'uploaded', key, recipeId, recipeName, by: { user_id, display_name }, at, note }]
+ */
+export function buildGroupFeed({ groupId, members = [], shares = [], recipes = [], now = new Date() } = {}) {
+  const names = new Map((members ?? []).map((m) => [m.user_id, m.display_name]))
+  const by = (id) => ({ user_id: id, display_name: names.get(id) ?? 'Someone' })
+  const items = new Map()
+
+  for (const sh of shares ?? []) {
+    if (sh.group_id !== groupId) continue
+    const key = `s:${sh.recipe_id}:${sh.from_user}`
+    const prev = items.get(key)
+    if (prev && new Date(prev.at) >= new Date(sh.created_at)) continue
+    items.set(key, {
+      kind: 'shared', key, recipeId: sh.recipe_id, recipeName: sh.recipe?.name ?? 'A recipe',
+      by: by(sh.from_user), at: sh.created_at, note: sh.note ?? null,
+    })
+  }
+
+  const since = now.getTime() - GROUP_FEED.uploadDays * 24 * 60 * 60 * 1000
+  for (const r of recipes ?? []) {
+    if (r.status !== 'ready' || !names.has(r.uploaded_by) || new Date(r.created_at).getTime() < since) continue
+    const key = `u:${r.id}`
+    items.set(key, { kind: 'uploaded', key, recipeId: r.id, recipeName: r.name ?? 'A recipe', by: by(r.uploaded_by), at: r.created_at, note: null })
+  }
+
+  return [...items.values()]
+    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .slice(0, GROUP_FEED.max)
+}
+
 // What the app says for each code the Social database functions raise.
 const ERROR_MESSAGES = {
   invalid_email: 'Enter an email address, like name@example.com.',

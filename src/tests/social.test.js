@@ -3,6 +3,7 @@ import {
   INVITE_DAILY_LIMIT, INVITE_DAYS, SHARE_NOTE_MAX,
   checkInviteEmail, inviteStatus, invitesLeftToday, checkShareNote, socialErrorMessage, inviteMessage,
   GROUP_LIMITS, checkGroupName, friendsToAdd, shareRecipients, SHARE_RECIPIENTS_MAX,
+  buildGroupFeed, GROUP_FEED,
 } from '@/lib/social'
 
 // The rules the Social tab shows before calling the database functions, which enforce
@@ -245,5 +246,66 @@ describe('shareRecipients', () => {
 
   it(`has a limit the database also checks`, () => {
     expect(SHARE_RECIPIENTS_MAX).toBe(60)
+  })
+})
+
+describe('buildGroupFeed', () => {
+  // "Recent in <group>" (step G4): recipes shared in the group and recipes its members
+  // uploaded lately, newest first.
+  const NOW = new Date('2026-11-26T12:00:00Z')
+  const G = 'fam'
+  const members = [{ user_id: 'ann', display_name: 'Ann' }, { user_id: 'bob', display_name: 'Bob' }, { user_id: 'me', display_name: 'Chris' }]
+  const share = (id, recipe, from, at, over = {}) => ({ id, recipe_id: recipe, recipe: { id: recipe, name: `Recipe ${recipe}` }, from_user: from, group_id: G, note: null, created_at: at, ...over })
+  const recipe = (id, by, at, status = 'ready') => ({ id, name: `Recipe ${id}`, uploaded_by: by, created_at: at, status })
+  const feed = (shares = [], recipes = []) => buildGroupFeed({ groupId: G, members, shares, recipes, now: NOW })
+
+  it('has limits', () => {
+    expect(GROUP_FEED).toEqual({ uploadDays: 60, max: 15 })
+  })
+
+  it('merges shares in the group and members\' uploads, newest first', () => {
+    const out = feed(
+      [share('s1', 'r1', 'ann', '2026-11-25T10:00:00Z', { note: 'Doubled the garlic' })],
+      [recipe('r2', 'bob', '2026-11-26T09:00:00Z'), recipe('r3', 'me', '2026-11-20T09:00:00Z')],
+    )
+    expect(out).toEqual([
+      { kind: 'uploaded', key: 'u:r2', recipeId: 'r2', recipeName: 'Recipe r2', by: { user_id: 'bob', display_name: 'Bob' }, at: '2026-11-26T09:00:00Z', note: null },
+      { kind: 'shared', key: 's:r1:ann', recipeId: 'r1', recipeName: 'Recipe r1', by: { user_id: 'ann', display_name: 'Ann' }, at: '2026-11-25T10:00:00Z', note: 'Doubled the garlic' },
+      { kind: 'uploaded', key: 'u:r3', recipeId: 'r3', recipeName: 'Recipe r3', by: { user_id: 'me', display_name: 'Chris' }, at: '2026-11-20T09:00:00Z', note: null },
+    ])
+  })
+
+  it('leaves out shares made outside this group', () => {
+    expect(feed([share('s1', 'r1', 'ann', '2026-11-25T10:00:00Z', { group_id: 'other' }), share('s2', 'r9', 'ann', '2026-11-25T10:00:00Z', { group_id: null })])).toEqual([])
+  })
+
+  it('shows one item when the same person shared a recipe more than once (the latest)', () => {
+    const out = feed([share('s1', 'r1', 'ann', '2026-11-20T10:00:00Z'), share('s2', 'r1', 'ann', '2026-11-24T10:00:00Z', { note: 'Again!' })])
+    expect(out.map(i => [i.key, i.at, i.note])).toEqual([['s:r1:ann', '2026-11-24T10:00:00Z', 'Again!']])
+  })
+
+  it('leaves out uploads by non-members, unfinished uploads, and uploads older than 60 days', () => {
+    const out = feed([], [
+      recipe('r1', 'stranger', '2026-11-25T09:00:00Z'),
+      recipe('r2', 'ann', '2026-11-25T09:00:00Z', 'processing'),
+      recipe('r3', 'ann', '2026-09-26T11:00:00Z'),
+      recipe('r4', 'ann', '2026-09-27T13:00:00Z'),
+    ])
+    expect(out.map(i => i.recipeId)).toEqual(['r4'])
+  })
+
+  it('names someone who left the group "Someone"', () => {
+    expect(feed([share('s1', 'r1', 'gone', '2026-11-25T10:00:00Z')])[0].by).toEqual({ user_id: 'gone', display_name: 'Someone' })
+  })
+
+  it('keeps the newest 15', () => {
+    const recipes = Array.from({ length: 20 }, (_, i) => recipe(`r${i}`, 'ann', `2026-11-${String(i + 1).padStart(2, '0')}T09:00:00Z`))
+    const out = feed([], recipes)
+    expect(out).toHaveLength(15)
+    expect(out[0].recipeId).toBe('r19')
+  })
+
+  it('gives [] for nothing', () => {
+    expect(buildGroupFeed({ groupId: G, members, now: NOW })).toEqual([])
   })
 })
