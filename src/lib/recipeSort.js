@@ -2,9 +2,12 @@
 // list view (RecipeTable.jsx). Pulled out to src/lib/ so it can be
 // unit-tested without rendering the table.
 
-// `key` must match a column on the recipes table directly (all written by
-// parse-recipe, see its ParsedRecipe interface) so sorting can just
-// compare raw values.
+import { detectEquipment } from './equipment'
+
+// `key` matches a column on the recipes table (all written by parse-recipe,
+// see its ParsedRecipe interface) so sorting can compare raw values — unless
+// the column has a `value(recipe)`, for values worked out in the browser
+// (Equipment, read from the steps by src/lib/equipment.js).
 export const RECIPE_TABLE_COLUMNS = [
   { key: 'name', label: 'Name', type: 'string' },
   { key: 'cook_time_minutes', label: 'Cook time', type: 'number', format: (v) => v != null ? `${v} min` : '—' },
@@ -12,6 +15,7 @@ export const RECIPE_TABLE_COLUMNS = [
   { key: 'difficulty', label: 'Difficulty', type: 'string' },
   { key: 'cuisine', label: 'Cuisine', type: 'string' },
   { key: 'protein_source', label: 'Protein', type: 'string' },
+  { key: 'equipment', label: 'Equipment', type: 'string', value: (r) => detectEquipment(r).join(', ') || null },
   { key: 'calories_kcal', label: 'Calories', type: 'number', nutrition: true, format: (v) => v != null ? `${v} kcal` : '—' },
   { key: 'protein_g', label: 'Protein (g)', type: 'number', nutrition: true, format: (v) => v != null ? `${v} g` : '—' },
   { key: 'fat_g', label: 'Fat', type: 'number', nutrition: true, format: (v) => v != null ? `${v} g` : '—' },
@@ -30,8 +34,13 @@ export function isEstimated(recipe, key) {
 
 // What a table cell shows: the formatted value, prefixed with "~" when it
 // is an AI estimate. `empty` lets the table mute the "—" placeholder.
+// A column's value for a recipe (null when missing).
+export function cellValue(recipe, column) {
+  return column.value ? column.value(recipe) : recipe[column.key]
+}
+
 export function formatRecipeCell(recipe, column) {
-  const value = recipe[column.key]
+  const value = cellValue(recipe, column)
   const text = column.format ? column.format(value) : (value ?? '—')
   const estimated = Boolean(column.nutrition) && isEstimated(recipe, column.key)
   return { text: estimated ? `~${text}` : text, estimated, empty: value == null }
@@ -48,8 +57,8 @@ function compareNonNull(av, bv, type) {
 // non-null comparison, so flipping to descending never pulls nulls to
 // the front.
 export function compareRecipesByColumn(a, b, column) {
-  const av = a[column.key]
-  const bv = b[column.key]
+  const av = cellValue(a, column)
+  const bv = cellValue(b, column)
   if (av == null && bv == null) return 0
   if (av == null) return 1
   if (bv == null) return -1
@@ -64,8 +73,8 @@ export function sortRecipes(recipes, columnKey, direction = 'asc') {
   if (!column) return recipes
   const sign = direction === 'desc' ? -1 : 1
   return [...recipes].sort((a, b) => {
-    const av = a[column.key]
-    const bv = b[column.key]
+    const av = cellValue(a, column)
+    const bv = cellValue(b, column)
     if (av == null && bv == null) return 0
     if (av == null) return 1
     if (bv == null) return -1
