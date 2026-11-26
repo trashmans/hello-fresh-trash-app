@@ -71,7 +71,9 @@ export default function PrivacyPolicy() {
               You can make groups of your friends. Everyone in a group sees its name and the names and pictures of
               everyone in it, including people they are not friends with. Only the person who made a group can add or
               remove people; you can leave a group at any time. We store the group&apos;s name, who is in it and when
-              they were added, until the group is deleted or you leave it or delete your account.
+              they were added, until the group is deleted or you leave it or delete your account. Comments you post
+              on a recipe in a group are seen only by that group&apos;s members; they stay in the group if you leave it,
+              and are deleted when you or the group&apos;s creator delete them, or with the group or your account.
             </p>
           </section>
 

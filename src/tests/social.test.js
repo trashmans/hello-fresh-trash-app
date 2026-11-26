@@ -4,6 +4,7 @@ import {
   checkInviteEmail, inviteStatus, invitesLeftToday, checkShareNote, socialErrorMessage, inviteMessage,
   GROUP_LIMITS, checkGroupName, friendsToAdd, shareRecipients, SHARE_RECIPIENTS_MAX,
   buildGroupFeed, GROUP_FEED,
+  COMMENT_MAX, checkComment, commentPreview,
 } from '@/lib/social'
 
 // The rules the Social tab shows before calling the database functions, which enforce
@@ -307,5 +308,60 @@ describe('buildGroupFeed', () => {
 
   it('gives [] for nothing', () => {
     expect(buildGroupFeed({ groupId: G, members, now: NOW })).toEqual([])
+  })
+})
+
+describe('checkComment', () => {
+  // Group comments on recipes (step G5): 1–500 characters.
+  it('is at most 500 characters, like the database check', () => {
+    expect(COMMENT_MAX).toBe(500)
+    expect(checkComment('a'.repeat(500)).ok).toBe(true)
+    expect(checkComment('a'.repeat(501))).toEqual({ ok: false, message: 'Keep the comment under 500 characters.' })
+  })
+
+  it('trims the ends and keeps at most one empty line between paragraphs', () => {
+    expect(checkComment('  Made this.\n\n\n\nAdd more garlic.  ')).toEqual({ ok: true, body: 'Made this.\n\nAdd more garlic.' })
+  })
+
+  it('refuses an empty comment', () => {
+    for (const bad of ['', '   ', '\n\n', null, undefined]) expect([bad, checkComment(bad).ok]).toEqual([bad, false])
+  })
+})
+
+describe('commentPreview', () => {
+  it("gives a comment's first line, cut to 120 characters", () => {
+    expect(commentPreview('Made this.\n\nAdd more garlic.')).toBe('Made this.')
+    expect(commentPreview('x'.repeat(130))).toBe(`${'x'.repeat(119)}…`)
+    expect(commentPreview('')).toBe('')
+  })
+})
+
+describe('buildGroupFeed with comments', () => {
+  const NOW = new Date('2026-11-26T12:00:00Z')
+  const members = [{ user_id: 'ann', display_name: 'Ann' }]
+  const comment = (id, at, over = {}) => ({ id, group_id: 'fam', recipe_id: 'r1', recipe: { id: 'r1', name: 'Wings' }, author: 'ann', body: 'Made this.\nMore garlic.', created_at: at, ...over })
+
+  it("adds 'commented' items with the comment's first line, in date order with the rest", () => {
+    const out = buildGroupFeed({
+      groupId: 'fam', members, now: NOW,
+      comments: [comment('c1', '2026-11-25T10:00:00Z')],
+      recipes: [{ id: 'r2', name: 'Curry', uploaded_by: 'ann', created_at: '2026-11-26T09:00:00Z', status: 'ready' }],
+    })
+    expect(out.map(i => [i.kind, i.key, i.recipeName, i.note])).toEqual([
+      ['uploaded', 'u:r2', 'Curry', null],
+      ['comment', 'c:c1', 'Wings', 'Made this.'],
+    ])
+  })
+
+  it('leaves out comments in other groups', () => {
+    expect(buildGroupFeed({ groupId: 'fam', members, now: NOW, comments: [comment('c1', '2026-11-25T10:00:00Z', { group_id: 'club' })] })).toEqual([])
+  })
+})
+
+describe('socialErrorMessage for comments', () => {
+  it('explains the comment codes', () => {
+    expect(socialErrorMessage('invalid_comment')).toMatch(/500 characters/)
+    expect(socialErrorMessage('comment_limit')).toMatch(/30 comments/)
+    expect(socialErrorMessage('not_group_member')).toMatch(/groups you are in/)
   })
 })

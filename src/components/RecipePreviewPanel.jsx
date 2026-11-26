@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Check, ExternalLink, FileText, Minus, Plus, RotateCcw, Share2 } from 'lucide-react'
 import SharePanel from '@/components/SharePanel'
 import SwapProteinSection from '@/components/SwapProteinSection'
+import RecipeComments from '@/components/RecipeComments'
 import { useSwapsById } from '@/hooks/useRecipeSwaps'
 import { applySwap, swapModesFor } from '@/lib/proteinSwap'
 import { supabase } from '@/lib/supabase'
@@ -548,6 +549,7 @@ export default function RecipePreviewPanel({ recipe, onClose, inList = false, on
             </a>
           )}
           {tab === 'pdf' && recipe.storage_path ? <PdfView recipe={recipe} /> : <InstructionsView recipe={recipe} swap={activeSwap} />}
+          <RecipeComments recipe={recipe} />
         </section>
       </div>
     </div>
