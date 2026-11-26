@@ -101,6 +101,13 @@ export function commentPreview(body) {
   return text.length > 120 ? `${text.slice(0, 119)}…` : text
 }
 
+// The Monday (UTC) of an ISO timestamp's week, as YYYY-MM-DD.
+function weekStartOf(iso) {
+  const d = new Date(iso)
+  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7)))
+  return monday.toISOString().slice(0, 10)
+}
+
 /** "Recent in <group>" (step G4): uploads from the last uploadDays, at most max items. */
 export const GROUP_FEED = { uploadDays: 60, max: 15 }
 
@@ -110,6 +117,7 @@ export const GROUP_FEED = { uploadDays: 60, max: 15 }
  *   shares   recipe_shares rows I can read, with recipe: { id, name }
  *   recipes  recipes rows with id, name, uploaded_by, created_at, status
  *   comments group comments with recipe: { id, name } (step G5)
+ * Uploads are one item per person per week, with recipes: [{ id, name }] (newest first).
  * → [{ kind: 'shared' | 'uploaded' | 'comment', key, recipeId, recipeName, by: { user_id, display_name }, at, note }]
  */
 export function buildGroupFeed({ groupId, members = [], shares = [], recipes = [], comments = [], now = new Date() } = {}) {
@@ -128,11 +136,17 @@ export function buildGroupFeed({ groupId, members = [], shares = [], recipes = [
     })
   }
 
+  // Uploads: one line per person per week (Monday to Sunday, UTC), newest recipe first.
   const since = now.getTime() - GROUP_FEED.uploadDays * 24 * 60 * 60 * 1000
-  for (const r of recipes ?? []) {
-    if (r.status !== 'ready' || !names.has(r.uploaded_by) || new Date(r.created_at).getTime() < since) continue
-    const key = `u:${r.id}`
-    items.set(key, { kind: 'uploaded', key, recipeId: r.id, recipeName: r.name ?? 'A recipe', by: by(r.uploaded_by), at: r.created_at, note: null })
+  const uploads = (recipes ?? [])
+    .filter((r) => r.status === 'ready' && names.has(r.uploaded_by) && new Date(r.created_at).getTime() >= since)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  for (const r of uploads) {
+    const key = `u:${r.uploaded_by}:${weekStartOf(r.created_at)}`
+    const recipeRef = { id: r.id, name: r.name ?? 'A recipe' }
+    const item = items.get(key)
+    if (item) { item.recipes.push(recipeRef); continue }
+    items.set(key, { kind: 'uploaded', key, recipeId: r.id, recipeName: recipeRef.name, recipes: [recipeRef], by: by(r.uploaded_by), at: r.created_at, note: null })
   }
 
   for (const c of comments ?? []) {

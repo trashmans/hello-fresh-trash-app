@@ -68,7 +68,24 @@ function GroupFeed({ group }) {
         <p className="text-sm text-muted-foreground">Nothing yet. Share a recipe with {group.name} from its Share button.</p>
       ) : (
         <ul className="flex flex-col gap-1.5">
-          {items.map(i => (
+          {items.map(i => (i.kind === 'uploaded' && i.recipes.length > 1 ? (
+            <li key={i.key} className="text-[15px]">
+              <details>
+                <summary className="cursor-pointer">
+                  <span className="font-semibold">{i.by.display_name}</span> added {i.recipes.length} recipes
+                  <span className="text-[13px] text-muted-foreground"> · week of {when(i.key.split(':')[2])}</span>
+                </summary>
+                <ul className="mt-1 flex flex-col gap-0.5 pl-4">
+                  {i.recipes.map(r => (
+                    <li key={r.id}>
+                      <button type="button" onClick={() => navigate('/recipes', { state: { openRecipeId: r.id } })}
+                        className="text-left font-semibold text-primary-text underline underline-offset-2 hover:opacity-80">{r.name}</button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </li>
+          ) : (
             <li key={i.key} className="text-[15px]">
               <span className="font-semibold">{i.by.display_name}</span> {i.kind === 'shared' ? 'shared' : i.kind === 'comment' ? 'commented on' : 'added'}{' '}
               <button type="button" onClick={() => navigate('/recipes', { state: { openRecipeId: i.recipeId } })}
@@ -76,7 +93,7 @@ function GroupFeed({ group }) {
               <span className="text-[13px] text-muted-foreground"> · {when(i.at)}</span>
               {i.note && <span className="block text-[13px] text-muted-foreground">“{i.note}”</span>}
             </li>
-          ))}
+          )))}
         </ul>
       )}
     </div>

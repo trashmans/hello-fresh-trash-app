@@ -20,7 +20,7 @@ export function useGroupFeed(group) {
       memberIds.length
         ? supabase.from('recipes').select('id, name, uploaded_by, created_at, status')
           .in('uploaded_by', memberIds).eq('status', 'ready').gte('created_at', since)
-          .order('created_at', { ascending: false }).limit(GROUP_FEED.max)
+          .order('created_at', { ascending: false }).limit(100)
         : Promise.resolve({ data: [] }),
       supabase.from('recipe_group_comments').select('id, group_id, recipe_id, author, body, created_at, recipe:recipes(id, name)')
         .eq('group_id', group.id).order('created_at', { ascending: false }).limit(GROUP_FEED.max),
