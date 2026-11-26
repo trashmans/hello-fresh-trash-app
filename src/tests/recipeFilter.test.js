@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RECIPE_FILTERS, normalizeRecipeFilter, filterRecipes } from '@/lib/recipeFilter'
+import { RECIPE_FILTERS, normalizeRecipeFilter, filterRecipes, groupFilterKey, groupIdOf } from '@/lib/recipeFilter'
 
 const ME = 'user-me'
 const FRIEND = 'user-friend'
@@ -63,5 +63,32 @@ describe('filterRecipes', () => {
     const copy = recipes.map((r) => ({ ...r }))
     filterRecipes(recipes, 'mine', { userId: ME })
     expect(recipes).toEqual(copy)
+  })
+})
+
+describe('group filters (Social groups, step G3)', () => {
+  const FAMILY = '5d0c1b8e-3f2a-4c47-9a0e-1b2c3d4e5f60'
+  const groups = [{ id: FAMILY, name: 'Family', members: [{ user_id: ME }, { user_id: OTHER }] }]
+
+  it("names a group's filter 'group:<id>', and reads the id back", () => {
+    expect(groupFilterKey(FAMILY)).toBe(`group:${FAMILY}`)
+    expect(groupIdOf(`group:${FAMILY}`)).toBe(FAMILY)
+    expect(groupIdOf('friends')).toBeNull()
+    expect(groupIdOf(null)).toBeNull()
+  })
+
+  it('keeps a saved group filter, but not a malformed one', () => {
+    expect(normalizeRecipeFilter(`group:${FAMILY}`)).toBe(`group:${FAMILY}`)
+    for (const bad of ['group:', 'group:abc', `group:${FAMILY}x`, `GROUP:${FAMILY}`]) expect(normalizeRecipeFilter(bad)).toBe('all')
+  })
+
+  it('shows recipes uploaded by anyone in the group, me included', () => {
+    expect(ids(filterRecipes(recipes, groupFilterKey(FAMILY), { userId: ME, groups }))).toEqual(['r1', 'r3', 'r4'])
+  })
+
+  it('shows everything while the group is not loaded or no longer exists', () => {
+    expect(ids(filterRecipes(recipes, groupFilterKey(FAMILY), { userId: ME }))).toEqual(['r1', 'r2', 'r3', 'r4', 'r5'])
+    expect(ids(filterRecipes(recipes, groupFilterKey('0f0f0f0f-0000-4000-8000-000000000000'), { userId: ME, groups })))
+      .toEqual(['r1', 'r2', 'r3', 'r4', 'r5'])
   })
 })
