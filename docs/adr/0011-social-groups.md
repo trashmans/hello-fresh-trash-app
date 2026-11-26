@@ -22,6 +22,7 @@ Social v1 (ADR 0008) has friends and one-to-one recipe shares on a shared catalo
 - A member's name and picture are shown to the other members of a group even if they are not friends. The privacy policy and record of processing say so.
 - Deleting a group removes its memberships (and, from G5, its comments); recipes shared through it stay, since each share is a row per recipient.
 - No group invites: people join only by being added by a friend who made the group.
+- G2 (migration 20261126000002): sharing with a group reaches every other member, including members who aren't the sender's friends; any member can share with the group. One share row per person, marked with the group (`recipe_shares.group_id`, set null if the group is deleted). At most 60 people per share.
 
 ## Alternatives considered
 

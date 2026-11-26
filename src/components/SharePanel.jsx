@@ -1,31 +1,40 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, Loader2, Send, X } from 'lucide-react'
+import { Check, Loader2, Send, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useSocial } from '@/hooks/useSocial'
+import { useGroups } from '@/hooks/useGroups'
 import { shareRecipe } from '@/hooks/useShares'
-import { SHARE_NOTE_MAX, checkShareNote } from '@/lib/social'
+import { SHARE_NOTE_MAX, SHARE_RECIPIENTS_MAX, checkShareNote, shareRecipients } from '@/lib/social'
 
-// "Share" on the recipe page: pick friends, add an optional note, send. A share is a
+// "Share" on the recipe page: pick friends and/or groups (docs/adr/0011), add an optional note, send. A share is a
 // recommendation (friends can already see every recipe) and includes only the recipe and
 // its PDF, never a shopping list or AH data.
 export default function SharePanel({ recipe, onClose }) {
-  const { friends, loading } = useSocial()
+  const { me, friends, loading } = useSocial()
+  const { groups, loading: groupsLoading } = useGroups()
   const [picked, setPicked] = useState([])
+  const [pickedGroups, setPickedGroups] = useState([])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const noteCheck = checkShareNote(note)
 
   const toggle = (id) => setPicked(list => (list.includes(id) ? list.filter(x => x !== id) : [...list, id]))
+  const toggleGroup = (id) => setPickedGroups(list => (list.includes(id) ? list.filter(x => x !== id) : [...list, id]))
+  const recipients = shareRecipients({ me, friendIds: picked, groupIds: pickedGroups, groups })
+  const tooMany = recipients.length > SHARE_RECIPIENTS_MAX
 
   async function send() {
-    if (!noteCheck.ok || picked.length === 0) return
+    if (!noteCheck.ok || recipients.length === 0 || tooMany) return
     setBusy(true)
-    const message = await shareRecipe(recipe.id, picked, noteCheck.note)
+    const message = await shareRecipe(recipe.id, picked, pickedGroups, noteCheck.note)
     setBusy(false)
     if (message) { toast.error(message); return }
-    const names = friends.filter(f => picked.includes(f.id)).map(f => f.display_name)
+    const names = [
+      ...groups.filter(g => pickedGroups.includes(g.id)).map(g => g.name),
+      ...friends.filter(f => picked.includes(f.id)).map(f => f.display_name),
+    ]
     toast.success(`Shared with ${names.join(', ')}`)
     onClose()
   }
@@ -39,14 +48,35 @@ export default function SharePanel({ recipe, onClose }) {
         </button>
       </div>
 
-      {loading ? (
+      {loading || groupsLoading ? (
         <p className="text-sm text-muted-foreground">Loading friends…</p>
-      ) : friends.length === 0 ? (
+      ) : friends.length === 0 && groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           You have no friends in the app yet. <Link to="/social" className="font-semibold text-primary-text underline">Invite or add someone on the Social tab.</Link>
         </p>
       ) : (
         <>
+          {groups.length > 0 && (
+            <div role="group" aria-label="Share with a group" className="flex flex-wrap gap-2">
+              {groups.map(g => {
+                const on = pickedGroups.includes(g.id)
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggleGroup(g.id)}
+                    className={`flex h-11 items-center gap-1.5 rounded-full border px-4 text-[15px] font-medium transition-colors ${
+                      on ? 'border-foreground bg-foreground text-background' : 'border-input bg-card hover:bg-accent'
+                    }`}
+                  >
+                    {on ? <Check className="h-4 w-4" aria-hidden="true" /> : <Users className="h-4 w-4" aria-hidden="true" />} {g.name}
+                    <span className="text-[13px] opacity-70">· {g.members.length - 1}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
           <div role="group" aria-label="Share with" className="flex flex-wrap gap-2">
             {friends.map(f => {
               const on = picked.includes(f.id)
@@ -79,10 +109,13 @@ export default function SharePanel({ recipe, onClose }) {
               {noteCheck.ok ? `${note.trim().length} / ${SHARE_NOTE_MAX}` : noteCheck.message}
             </p>
           </div>
-          <p className="text-[13px] text-muted-foreground">They see the recipe and its PDF, never your shopping list or AH order.</p>
+          <p className="text-[13px] text-muted-foreground">
+            {tooMany ? `That's ${recipients.length} people; one share can reach ${SHARE_RECIPIENTS_MAX}. ` : ''}
+            They see the recipe and its PDF, never your shopping list or AH order.
+          </p>
           <div className="flex gap-2">
-            <Button onClick={send} disabled={busy || picked.length === 0 || !noteCheck.ok} className="h-11 rounded-full px-5 font-semibold">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Share{picked.length > 1 ? ` with ${picked.length}` : ''}
+            <Button onClick={send} disabled={busy || recipients.length === 0 || tooMany || !noteCheck.ok} className="h-11 rounded-full px-5 font-semibold">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Share{recipients.length > 1 ? ` with ${recipients.length} people` : ''}
             </Button>
             <Button variant="ghost" onClick={onClose} className="h-11 rounded-full px-5">Cancel</Button>
           </div>

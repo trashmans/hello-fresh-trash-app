@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   INVITE_DAILY_LIMIT, INVITE_DAYS, SHARE_NOTE_MAX,
   checkInviteEmail, inviteStatus, invitesLeftToday, checkShareNote, socialErrorMessage, inviteMessage,
-  GROUP_LIMITS, checkGroupName, friendsToAdd,
+  GROUP_LIMITS, checkGroupName, friendsToAdd, shareRecipients, SHARE_RECIPIENTS_MAX,
 } from '@/lib/social'
 
 // The rules the Social tab shows before calling the database functions, which enforce
@@ -216,5 +216,34 @@ describe('socialErrorMessage for groups', () => {
     expect(socialErrorMessage('group_full')).toMatch(/30 people/)
     expect(socialErrorMessage('not_group_owner')).toMatch(/only.*made the group/i)
     expect(socialErrorMessage('not_friends')).toMatch(/friends/i)
+  })
+})
+
+describe('shareRecipients', () => {
+  // Who gets a share (step G2): the friends picked plus everyone in the groups picked,
+  // each once, never the sender — the database works out the same list.
+  const group = (id, ...userIds) => ({ id, members: userIds.map(user_id => ({ user_id })) })
+  const groups = [group('fam', 'me', 'ann', 'bob'), group('club', 'me', 'bob', 'cas', 'dee')]
+
+  it('adds up friends and group members, each once, leaving out the sender', () => {
+    expect(shareRecipients({ me: 'me', friendIds: ['eve', 'ann'], groupIds: ['fam', 'club'], groups }))
+      .toEqual(['eve', 'ann', 'bob', 'cas', 'dee'])
+  })
+
+  it('works with only friends or only groups', () => {
+    expect(shareRecipients({ me: 'me', friendIds: ['eve'], groupIds: [], groups })).toEqual(['eve'])
+    expect(shareRecipients({ me: 'me', friendIds: [], groupIds: ['fam'], groups })).toEqual(['ann', 'bob'])
+  })
+
+  it('ignores a group that is not loaded', () => {
+    expect(shareRecipients({ me: 'me', friendIds: [], groupIds: ['gone'], groups })).toEqual([])
+  })
+
+  it('gives [] for nothing picked', () => {
+    expect(shareRecipients({ me: 'me' })).toEqual([])
+  })
+
+  it(`has a limit the database also checks`, () => {
+    expect(SHARE_RECIPIENTS_MAX).toBe(60)
   })
 })

@@ -130,7 +130,7 @@ function SharedWithYou({ shoppingList }) {
                 <li key={s.id} className="flex flex-col gap-3 py-4">
                   <div className="flex items-center gap-2.5 text-sm">
                     <Avatar person={s.from} size="h-8 w-8" />
-                    <span><span className="font-semibold">{s.from.display_name}</span> <span className="text-muted-foreground">shared · {dateLabel(s.created_at)}</span></span>
+                    <span><span className="font-semibold">{s.from.display_name}</span> <span className="text-muted-foreground">shared{s.group?.name ? ` in ${s.group.name}` : ''} · {dateLabel(s.created_at)}</span></span>
                     {isNew && <span className="rounded-full bg-badge px-2 py-0.5 text-xs font-bold text-badge-foreground">New</span>}
                     <button type="button" aria-label={`Remove this share of ${r.name ?? r.filename}`}
                       onClick={async () => { const m = await remove(s.id); if (m) toast.error(m) }}

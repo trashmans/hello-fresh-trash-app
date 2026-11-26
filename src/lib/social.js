@@ -10,6 +10,8 @@ export const INVITE_DAYS = 30
 export const SHARE_NOTE_MAX = 280
 /** Groups (docs/adr/0011): name length, groups one person can make, members per group (creator included). */
 export const GROUP_LIMITS = { name: 40, groupsPerPerson: 10, members: 30 }
+/** Most people one share can reach, friends and group members together (step G2). */
+export const SHARE_RECIPIENTS_MAX = 60
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -67,6 +69,20 @@ export function friendsToAdd(friends, members) {
     })
 }
 
+/**
+ * Who gets a share (step G2): the friends picked, then everyone in the groups picked,
+ * each once, never the sender. groups: [{ id, members: [{ user_id }] }] as useGroups loads them.
+ */
+export function shareRecipients({ me, friendIds = [], groupIds = [], groups = [] } = {}) {
+  const out = new Set()
+  for (const id of friendIds ?? []) if (id !== me) out.add(id)
+  for (const gid of groupIds ?? []) {
+    const group = (groups ?? []).find((g) => g.id === gid)
+    for (const m of group?.members ?? []) if (m.user_id !== me) out.add(m.user_id)
+  }
+  return [...out]
+}
+
 // What the app says for each code the Social database functions raise.
 const ERROR_MESSAGES = {
   invalid_email: 'Enter an email address, like name@example.com.',
@@ -83,6 +99,7 @@ const ERROR_MESSAGES = {
   group_limit: `You can make up to ${GROUP_LIMITS.groupsPerPerson} groups. Delete one first.`,
   group_full: `A group can have up to ${GROUP_LIMITS.members} people.`,
   not_group_owner: 'Only the person who made the group can change it.',
+  not_group_member: 'You can only share with groups you are in.',
 }
 
 /** A readable message for an error from a Social database function (its message holds the code). */
