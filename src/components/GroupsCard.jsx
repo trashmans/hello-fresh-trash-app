@@ -70,7 +70,7 @@ function GroupFeed({ group }) {
         <ul className="flex flex-col gap-1.5">
           {items.map(i => (
             <li key={i.key} className="text-[15px]">
-              <span className="font-semibold">{i.by.display_name}</span> {i.kind === 'shared' ? 'shared' : 'added'}{' '}
+              <span className="font-semibold">{i.by.display_name}</span> {i.kind === 'shared' ? 'shared' : i.kind === 'comment' ? 'commented on' : 'added'}{' '}
               <button type="button" onClick={() => navigate('/recipes', { state: { openRecipeId: i.recipeId } })}
                 className="font-semibold text-primary-text underline underline-offset-2 hover:opacity-80">{i.recipeName}</button>
               <span className="text-[13px] text-muted-foreground"> · {when(i.at)}</span>

@@ -23,6 +23,8 @@ Social v1 (ADR 0008) has friends and one-to-one recipe shares on a shared catalo
 - Deleting a group removes its memberships (and, from G5, its comments); recipes shared through it stay, since each share is a row per recipient.
 - No group invites: people join only by being added by a friend who made the group.
 - G2 (migration 20261126000002): sharing with a group reaches every other member, including members who aren't the sender's friends; any member can share with the group. One share row per person, marked with the group (`recipe_shares.group_id`, set null if the group is deleted). At most 60 people per share.
+- G3 (no migration): a pill per group on the Recipes tab shows recipes uploaded by its members. G4 (no migration): an open group shows "Recent in <group>": shares made in it (from each member's own copy, so someone who joins later sees only later shares), members' uploads from the last 60 days, and comments.
+- G5 (migration 20261126000003): `recipe_group_comments`, 1–500 characters, read only by the group's members, 30 per person per hour, no editing. The author can delete their own (also after leaving); the group's creator can delete any. Kept while the group exists; deleted with the group, the recipe or the author's account. A member who leaves keeps their comments in the group.
 
 ## Alternatives considered
 

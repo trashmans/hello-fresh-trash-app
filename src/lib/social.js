@@ -83,6 +83,24 @@ export function shareRecipients({ me, friendIds = [], groupIds = [], groups = []
   return [...out]
 }
 
+/** Longest group comment on a recipe (step G5). */
+export const COMMENT_MAX = 500
+
+/** → { ok: true, body } (ends trimmed, at most one empty line between paragraphs) or { ok: false, message }. */
+export function checkComment(raw) {
+  const body = typeof raw === 'string' ? raw.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim() : ''
+  if (!body) return { ok: false, message: 'Write something first.' }
+  if (body.length > COMMENT_MAX) return { ok: false, message: `Keep the comment under ${COMMENT_MAX} characters.` }
+  return { ok: true, body }
+}
+
+/** A comment's first line, at most 120 characters (for the group feed). */
+export function commentPreview(body) {
+  const line = (typeof body === 'string' ? body : '').split('\n').find((l) => l.trim()) ?? ''
+  const text = line.trim()
+  return text.length > 120 ? `${text.slice(0, 119)}…` : text
+}
+
 /** "Recent in <group>" (step G4): uploads from the last uploadDays, at most max items. */
 export const GROUP_FEED = { uploadDays: 60, max: 15 }
 
@@ -91,9 +109,10 @@ export const GROUP_FEED = { uploadDays: 60, max: 15 }
  * recipe and sender, the latest) and recipes its members uploaded in the last 60 days.
  *   shares   recipe_shares rows I can read, with recipe: { id, name }
  *   recipes  recipes rows with id, name, uploaded_by, created_at, status
- * → [{ kind: 'shared' | 'uploaded', key, recipeId, recipeName, by: { user_id, display_name }, at, note }]
+ *   comments group comments with recipe: { id, name } (step G5)
+ * → [{ kind: 'shared' | 'uploaded' | 'comment', key, recipeId, recipeName, by: { user_id, display_name }, at, note }]
  */
-export function buildGroupFeed({ groupId, members = [], shares = [], recipes = [], now = new Date() } = {}) {
+export function buildGroupFeed({ groupId, members = [], shares = [], recipes = [], comments = [], now = new Date() } = {}) {
   const names = new Map((members ?? []).map((m) => [m.user_id, m.display_name]))
   const by = (id) => ({ user_id: id, display_name: names.get(id) ?? 'Someone' })
   const items = new Map()
@@ -114,6 +133,12 @@ export function buildGroupFeed({ groupId, members = [], shares = [], recipes = [
     if (r.status !== 'ready' || !names.has(r.uploaded_by) || new Date(r.created_at).getTime() < since) continue
     const key = `u:${r.id}`
     items.set(key, { kind: 'uploaded', key, recipeId: r.id, recipeName: r.name ?? 'A recipe', by: by(r.uploaded_by), at: r.created_at, note: null })
+  }
+
+  for (const c of comments ?? []) {
+    if (c.group_id !== groupId) continue
+    const key = `c:${c.id}`
+    items.set(key, { kind: 'comment', key, recipeId: c.recipe_id, recipeName: c.recipe?.name ?? 'A recipe', by: by(c.author), at: c.created_at, note: commentPreview(c.body) })
   }
 
   return [...items.values()]
@@ -137,7 +162,9 @@ const ERROR_MESSAGES = {
   group_limit: `You can make up to ${GROUP_LIMITS.groupsPerPerson} groups. Delete one first.`,
   group_full: `A group can have up to ${GROUP_LIMITS.members} people.`,
   not_group_owner: 'Only the person who made the group can change it.',
-  not_group_member: 'You can only share with groups you are in.',
+  not_group_member: 'That only works for groups you are in.',
+  invalid_comment: `Write a comment of up to ${COMMENT_MAX} characters.`,
+  comment_limit: 'You can post 30 comments an hour. Try again a bit later.',
 }
 
 /** A readable message for an error from a Social database function (its message holds the code). */
