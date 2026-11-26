@@ -12,6 +12,8 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { mergeIngredients } from '@/lib/ingredientMerge'
+import { matchSummary } from '@/lib/ingredientMappings'
+import { useIngredientMappings } from '@/hooks/useIngredientMappings'
 import { SWAP_MODES, swapIngredientsMap } from '@/lib/proteinSwap'
 import { useSwapsById } from '@/hooks/useRecipeSwaps'
 import { groupByAisle } from '@/lib/aisles'
@@ -131,6 +133,7 @@ function IngredientScaleControl({ ingredients, baseServings, onApply }) {
 export default function ShoppingListPanel({ shoppingList }) {
   // Shopping list lines follow the same volume / mass preference as the recipe view.
   const { unitPrefs } = useAuth()
+  const ingredientMappings = useIngredientMappings()
   const {
     recipeSelections,
     adjustedItems,
@@ -252,6 +255,11 @@ export default function ShoppingListPanel({ shoppingList }) {
   const groupedItems = groupByAisle(sortedItems.filter(item => !isChecked(item)))
   const checkedItems = sortedItems.filter(item => isChecked(item))
   const openCount = sortedItems.length - checkedItems.length
+  // "3 of 12 matched": items still to buy that the AH order sends as products (or skips
+  // as always at home); the rest go to AH as text. Only for households with AH set up.
+  const matches = ingredientMappings.available
+    ? matchSummary(sortedItems.filter(item => !isChecked(item)), ingredientMappings.mappings)
+    : null
 
   const mini = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-input bg-card text-foreground hover:bg-accent transition-colors'
 
@@ -475,7 +483,10 @@ export default function ShoppingListPanel({ shoppingList }) {
                 to="/ordering"
                 className="flex h-11 items-center gap-1.5 rounded-full bg-secondary px-[18px] text-sm font-bold text-secondary-foreground hover:opacity-90 transition-opacity"
               >
-                Send to AH
+                Preview AH order
+                {matches && matches.total > 0 && (
+                  <span className="font-semibold opacity-80">· {matches.matched} of {matches.total} matched</span>
+                )}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </>

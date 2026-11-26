@@ -49,3 +49,19 @@ export const AMOUNT_RULE_OPTIONS = [
   { value: 'per_recipe', label: '1 pack per recipe' },
   { value: 'per_week', label: '1 pack for the week' },
 ]
+
+/**
+ * How many of the items still to buy are matched — mapped to a product or marked always
+ * at home — for "Preview AH order · 3 of 12 matched" on the Shopping tab. Items are
+ * counted once per ingredient, found the way the AH preview finds them (ingredientKey).
+ * → { matched, total }
+ */
+export function matchSummary(items, mappings) {
+  const matchedKeys = new Set((mappings ?? [])
+    .filter((m) => m?.pantry || m?.product_external_id != null)
+    .map((m) => m.ingredient_key))
+  const keys = new Set((items ?? []).map((i) => ingredientKey(clean(i?.name))).filter(Boolean))
+  let matched = 0
+  for (const key of keys) if (matchedKeys.has(key)) matched++
+  return { matched, total: keys.size }
+}
