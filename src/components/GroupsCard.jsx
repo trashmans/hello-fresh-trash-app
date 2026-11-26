@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useGroupFeed } from '@/hooks/useGroupFeed'
 import { Check, ChevronDown, Pencil, Plus, Trash2, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -51,6 +53,36 @@ function NameForm({ initial = '', button, onSubmit, onCancel }) {
   )
 }
 
+const when = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+
+// "Recent in <group>" (step G4): shares in the group and members' recent uploads.
+function GroupFeed({ group }) {
+  const items = useGroupFeed(group)
+  const navigate = useNavigate()
+  return (
+    <div className="flex flex-col gap-2">
+      <h4 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">Recent in {group.name}</h4>
+      {items === null ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nothing yet. Share a recipe with {group.name} from its Share button.</p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {items.map(i => (
+            <li key={i.key} className="text-[15px]">
+              <span className="font-semibold">{i.by.display_name}</span> {i.kind === 'shared' ? 'shared' : 'added'}{' '}
+              <button type="button" onClick={() => navigate('/recipes', { state: { openRecipeId: i.recipeId } })}
+                className="font-semibold text-primary-text underline underline-offset-2 hover:opacity-80">{i.recipeName}</button>
+              <span className="text-[13px] text-muted-foreground"> · {when(i.at)}</span>
+              {i.note && <span className="block text-[13px] text-muted-foreground">“{i.note}”</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function GroupRow({ group, friends, actions }) {
   const [open, setOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -79,6 +111,8 @@ function GroupRow({ group, friends, actions }) {
 
       {open && (
         <div className="mt-3 flex flex-col gap-3 pl-0 sm:pl-[52px]">
+          <GroupFeed group={group} />
+          <h4 className="pt-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-secondary">People</h4>
           {renaming && (
             <NameForm initial={group.name} button="Save" onCancel={() => setRenaming(false)}
               onSubmit={async (name) => { const ok = await run(actions.renameGroup(group.id, name), 'Group renamed.'); if (ok) setRenaming(false); return ok }} />
