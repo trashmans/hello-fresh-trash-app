@@ -19,7 +19,7 @@ export function useSharedWithMe() {
     if (!me) return
     const { data, error: loadError } = await supabase
       .from('recipe_shares')
-      .select('id, note, created_at, seen_at, from_user, recipe:recipes(id, name, filename, cover_path, cook_time_minutes, prep_time_minutes, servings, status)')
+      .select('id, note, created_at, seen_at, from_user, group:social_groups(name), recipe:recipes(id, name, filename, cover_path, cook_time_minutes, prep_time_minutes, servings, status)')
       .eq('to_user', me)
       .order('created_at', { ascending: false })
     if (loadError) { setError(loadError.message); setLoading(false); return }
@@ -64,9 +64,9 @@ export function useSharedWithMe() {
   return { shares, coverUrls, loading, error, reload: load, markSeen, remove }
 }
 
-/** Shares a recipe with friends. → null on success, or a message to show. */
-export async function shareRecipe(recipeId, friendIds, note) {
-  const { error } = await supabase.rpc('share_recipe', { p_recipe: recipeId, p_to: friendIds, p_note: note })
+/** Shares a recipe with friends and groups (step G2). → null on success, or a message to show. */
+export async function shareRecipe(recipeId, friendIds, groupIds, note) {
+  const { error } = await supabase.rpc('share_recipe_to', { p_recipe: recipeId, p_to: friendIds, p_groups: groupIds, p_note: note })
   return error ? socialErrorMessage(error.message) : null
 }
 
