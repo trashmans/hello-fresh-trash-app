@@ -15,7 +15,7 @@ Friends upload food photos. The app reads where each photo was taken, shows the 
 | Location: nearest city (default) or exact spot (if chosen) | Photo EXIF, or the owner's pin | Yes | Owner + chosen audience |
 | Exact GPS from the file when city-level is chosen | Photo EXIF | **No** (read in the browser only) | Nobody |
 | Date taken | Photo EXIF | Yes (date only, no time) | Owner + chosen audience |
-| Dish name, cuisine, country, TasteAtlas link | Gemini + owner's confirmation | Yes | Owner + chosen audience |
+| Dish: the uploader's choice from Gemini's top 3 (or their own name), cuisine, country, TasteAtlas link | Gemini + uploader's choice | Yes (the chosen one; the 3 suggestions are kept until a choice is made) | Owner + chosen audience |
 | Thumbnail sent for recognition | Upload | Sent to Gemini, not stored there by us | Google (processor) |
 | Place-search text ("Bangkok") | Owner | Sent to Nominatim via our server, not stored | OSM Foundation |
 | Map area viewed | Viewer's browser | Tile requests to Protomaps | Protomaps/Cloudflare (no photo data) |
