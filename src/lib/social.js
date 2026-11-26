@@ -8,6 +8,8 @@ export const INVITE_DAILY_LIMIT = 5
 export const INVITE_DAYS = 30
 /** Longest note on a shared recipe. */
 export const SHARE_NOTE_MAX = 280
+/** Groups (docs/adr/0011): name length, groups one person can make, members per group (creator included). */
+export const GROUP_LIMITS = { name: 40, groupsPerPerson: 10, members: 30 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -45,6 +47,26 @@ export function checkShareNote(raw) {
   return { ok: true, note: note || null }
 }
 
+/** → { ok: true, name } (trimmed, spaces squeezed) or { ok: false, message }. */
+export function checkGroupName(raw) {
+  const name = typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : ''
+  if (!name) return { ok: false, message: 'Give the group a name.' }
+  if (name.length > GROUP_LIMITS.name) return { ok: false, message: `Keep the name under ${GROUP_LIMITS.name} characters.` }
+  return { ok: true, name }
+}
+
+/** The friends a group's creator can still add (not in it yet), by name; people without a name last. */
+export function friendsToAdd(friends, members) {
+  const inGroup = new Set((members ?? []).map((m) => m.user_id))
+  return (friends ?? [])
+    .filter((f) => !inGroup.has(f.id))
+    .sort((a, b) => {
+      if (!a.display_name) return b.display_name ? 1 : 0
+      if (!b.display_name) return -1
+      return a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' })
+    })
+}
+
 // What the app says for each code the Social database functions raise.
 const ERROR_MESSAGES = {
   invalid_email: 'Enter an email address, like name@example.com.',
@@ -57,6 +79,10 @@ const ERROR_MESSAGES = {
   invalid_note: `Keep the note under ${SHARE_NOTE_MAX} characters.`,
   not_ready: 'That recipe is not ready yet.',
   not_signed_in: 'Sign in again, then try once more.',
+  invalid_group_name: `Give the group a name under ${GROUP_LIMITS.name} characters.`,
+  group_limit: `You can make up to ${GROUP_LIMITS.groupsPerPerson} groups. Delete one first.`,
+  group_full: `A group can have up to ${GROUP_LIMITS.members} people.`,
+  not_group_owner: 'Only the person who made the group can change it.',
 }
 
 /** A readable message for an error from a Social database function (its message holds the code). */

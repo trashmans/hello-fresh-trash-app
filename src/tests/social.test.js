@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   INVITE_DAILY_LIMIT, INVITE_DAYS, SHARE_NOTE_MAX,
   checkInviteEmail, inviteStatus, invitesLeftToday, checkShareNote, socialErrorMessage, inviteMessage,
+  GROUP_LIMITS, checkGroupName, friendsToAdd,
 } from '@/lib/social'
 
 // The rules the Social tab shows before calling the database functions, which enforce
@@ -161,5 +162,59 @@ describe('inviteMessage', () => {
   it('has a copyable text with the subject first', () => {
     const { text, subject, body } = inviteMessage(args)
     expect(text).toBe(`${subject}\n\n${body}`)
+  })
+})
+
+describe('GROUP_LIMITS', () => {
+  it('matches the database checks (supabase/migrations/…_social_groups.sql)', () => {
+    expect(GROUP_LIMITS).toEqual({ name: 40, groupsPerPerson: 10, members: 30 })
+  })
+})
+
+describe('checkGroupName', () => {
+  it('cleans up a name: trims and squeezes spaces, keeps the case', () => {
+    expect(checkGroupName('  Family   dinners ')).toEqual({ ok: true, name: 'Family dinners' })
+  })
+
+  it('refuses an empty name', () => {
+    for (const bad of ['', '   ', null, undefined, 42]) {
+      expect([bad, checkGroupName(bad).ok]).toEqual([bad, false])
+    }
+    expect(checkGroupName('').message).toMatch(/name/i)
+  })
+
+  it(`refuses a name over ${40} characters`, () => {
+    expect(checkGroupName('a'.repeat(40)).ok).toBe(true)
+    expect(checkGroupName('a'.repeat(41))).toEqual({ ok: false, message: 'Keep the name under 40 characters.' })
+  })
+})
+
+describe('friendsToAdd', () => {
+  // The friends a group's creator can still add: not in it yet, in name order.
+  const friend = (id, display_name) => ({ id, display_name })
+
+  it('leaves out people already in the group', () => {
+    const friends = [friend('b', 'Bea'), friend('a', 'Ann'), friend('c', 'Cas')]
+    expect(friendsToAdd(friends, [{ user_id: 'b' }]).map(f => f.id)).toEqual(['a', 'c'])
+  })
+
+  it('sorts by name, people without a name last', () => {
+    const friends = [friend('x', null), friend('c', 'cas'), friend('a', 'Ann')]
+    expect(friendsToAdd(friends, []).map(f => f.id)).toEqual(['a', 'c', 'x'])
+  })
+
+  it('gives [] when there is no one to add', () => {
+    expect(friendsToAdd([], [])).toEqual([])
+    expect(friendsToAdd(null, null)).toEqual([])
+  })
+})
+
+describe('socialErrorMessage for groups', () => {
+  it('explains the group codes', () => {
+    expect(socialErrorMessage('invalid_group_name')).toMatch(/name/i)
+    expect(socialErrorMessage('group_limit')).toMatch(/10 groups/)
+    expect(socialErrorMessage('group_full')).toMatch(/30 people/)
+    expect(socialErrorMessage('not_group_owner')).toMatch(/only.*made the group/i)
+    expect(socialErrorMessage('not_friends')).toMatch(/friends/i)
   })
 })

@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useSocial } from '@/hooks/useSocial'
+import { useGroups } from '@/hooks/useGroups'
+import GroupsCard from '@/components/GroupsCard'
 import { useSharedWithMe } from '@/hooks/useShares'
 import { useAuth } from '@/context/AuthContext'
 import { INVITE_DAYS, checkInviteEmail, inviteMessage, inviteStatus, invitesLeftToday } from '@/lib/social'
@@ -181,6 +183,7 @@ function SharedWithYou({ shoppingList }) {
 export default function Social() {
   const { shoppingList } = useOutletContext()
   const social = useSocial()
+  const groups = useGroups()
   const { friends, incoming, outgoing, invites, loading, error } = social
   const now = new Date()
   const left = invitesLeftToday(invites, now)
@@ -299,6 +302,8 @@ export default function Social() {
               )}
             </CardContent>
           </Card>
+
+          <GroupsCard groups={groups} friends={friends} />
         </div>
 
         <aside className="flex min-w-0 flex-[1_1_340px] flex-col gap-7">

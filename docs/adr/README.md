@@ -14,6 +14,7 @@ Short records of decisions that are expensive to reverse. One file per decision,
 | [0008](0008-social-on-shared-catalogue.md) | Social is built on the shared recipe catalogue | Accepted |
 | [0009](0009-recipes-from-links.md) | Recipes can be imported from a web link | Accepted |
 | [0010](0010-protein-swaps.md) | Protein swaps: vegetarian, meat, or half and half | Accepted |
+| [0011](0011-social-groups.md) | Social groups: friends only, the creator manages, members see each other | Accepted |
 
 Design context: the AH Weekly Shop high-level design and the API spike findings in `spike/ah-api/FINDINGS.md`.
 

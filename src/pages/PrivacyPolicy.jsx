@@ -67,6 +67,12 @@ export default function PrivacyPolicy() {
               recipe and its PDF, never your shopping list, staples or Albert Heijn data. Shares are deleted when the
               sender or recipient deletes them or their account.
             </p>
+            <p className="mt-2">
+              You can make groups of your friends. Everyone in a group sees its name and the names and pictures of
+              everyone in it, including people they are not friends with. Only the person who made a group can add or
+              remove people; you can leave a group at any time. We store the group&apos;s name, who is in it and when
+              they were added, until the group is deleted or you leave it or delete your account.
+            </p>
           </section>
 
           <section>
