@@ -270,9 +270,9 @@ describe('buildGroupFeed', () => {
       [recipe('r2', 'bob', '2026-11-26T09:00:00Z'), recipe('r3', 'me', '2026-11-20T09:00:00Z')],
     )
     expect(out).toEqual([
-      { kind: 'uploaded', key: 'u:r2', recipeId: 'r2', recipeName: 'Recipe r2', by: { user_id: 'bob', display_name: 'Bob' }, at: '2026-11-26T09:00:00Z', note: null },
+      { kind: 'uploaded', key: 'u:bob:2026-11-23', recipeId: 'r2', recipeName: 'Recipe r2', recipes: [{ id: 'r2', name: 'Recipe r2' }], by: { user_id: 'bob', display_name: 'Bob' }, at: '2026-11-26T09:00:00Z', note: null },
       { kind: 'shared', key: 's:r1:ann', recipeId: 'r1', recipeName: 'Recipe r1', by: { user_id: 'ann', display_name: 'Ann' }, at: '2026-11-25T10:00:00Z', note: 'Doubled the garlic' },
-      { kind: 'uploaded', key: 'u:r3', recipeId: 'r3', recipeName: 'Recipe r3', by: { user_id: 'me', display_name: 'Chris' }, at: '2026-11-20T09:00:00Z', note: null },
+      { kind: 'uploaded', key: 'u:me:2026-11-16', recipeId: 'r3', recipeName: 'Recipe r3', recipes: [{ id: 'r3', name: 'Recipe r3' }], by: { user_id: 'me', display_name: 'Chris' }, at: '2026-11-20T09:00:00Z', note: null },
     ])
   })
 
@@ -299,9 +299,25 @@ describe('buildGroupFeed', () => {
     expect(feed([share('s1', 'r1', 'gone', '2026-11-25T10:00:00Z')])[0].by).toEqual({ user_id: 'gone', display_name: 'Someone' })
   })
 
+  it("puts one person's uploads in the same week (Monday to Sunday) on one line, newest recipe first", () => {
+    const out = feed([], [
+      recipe('r1', 'ann', '2026-11-23T09:00:00Z'), // Monday
+      recipe('r2', 'ann', '2026-11-25T09:00:00Z'),
+      recipe('r3', 'ann', '2026-11-24T09:00:00Z'),
+      recipe('r4', 'ann', '2026-11-22T09:00:00Z'), // Sunday: the week before
+      recipe('r5', 'bob', '2026-11-24T10:00:00Z'),
+    ])
+    expect(out.map(i => [i.key, i.at, i.recipes.map(r => r.id)])).toEqual([
+      ['u:ann:2026-11-23', '2026-11-25T09:00:00Z', ['r2', 'r3', 'r1']],
+      ['u:bob:2026-11-23', '2026-11-24T10:00:00Z', ['r5']],
+      ['u:ann:2026-11-16', '2026-11-22T09:00:00Z', ['r4']],
+    ])
+    expect(out[0]).toMatchObject({ recipeId: 'r2', recipeName: 'Recipe r2' })
+  })
+
   it('keeps the newest 15', () => {
-    const recipes = Array.from({ length: 20 }, (_, i) => recipe(`r${i}`, 'ann', `2026-11-${String(i + 1).padStart(2, '0')}T09:00:00Z`))
-    const out = feed([], recipes)
+    const shares = Array.from({ length: 20 }, (_, i) => share(`s${i}`, `r${i}`, 'ann', `2026-11-${String(i + 1).padStart(2, '0')}T09:00:00Z`))
+    const out = feed(shares)
     expect(out).toHaveLength(15)
     expect(out[0].recipeId).toBe('r19')
   })
@@ -348,7 +364,7 @@ describe('buildGroupFeed with comments', () => {
       recipes: [{ id: 'r2', name: 'Curry', uploaded_by: 'ann', created_at: '2026-11-26T09:00:00Z', status: 'ready' }],
     })
     expect(out.map(i => [i.kind, i.key, i.recipeName, i.note])).toEqual([
-      ['uploaded', 'u:r2', 'Curry', null],
+      ['uploaded', 'u:ann:2026-11-23', 'Curry', null],
       ['comment', 'c:c1', 'Wings', 'Made this.'],
     ])
   })
