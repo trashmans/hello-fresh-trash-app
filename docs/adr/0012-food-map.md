@@ -45,3 +45,7 @@ Why points 6 and 7 work this way: the Gemini API terms (effective 23 Mar 2026) r
 - **Storing exact GPS for every photo and coarsening on display:** simpler, but keeps sensitive data we don't need.
 - **Scraping TasteAtlas** for dish data: against our approach to other sites' terms; Gemini recognises dishes itself.
 - **MapTiler / Stadia Maps:** smaller free allowances and no self-host route; Protomaps preferred.
+
+## Notes
+
+- **27 Nov 2026 (F1b):** storage and access rules in `supabase/migrations/20261127000001_food_photos.sql`. `food_photos` holds only the shrunk files' paths, the chosen place (city or exact), the date taken and the visibility. Who can read follows point 5: owner always, friends for friends photos, members for group photos; files in the private `food-photos` bucket are readable exactly when the row is. The 300-photo limit is enforced in the database (`add_food_photo`). When a group is deleted its photos become only_me rather than visible to friends. Files: the upload screen (F1d) deletes a photo's two files with its row; deleting an account deletes the rows (CASCADE), and its files are left for the account-deletion clean-up (Phase 8) to remove, as for recipe files.
