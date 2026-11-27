@@ -53,9 +53,9 @@ Everything goes through one call: `PATCH /mobile-services/shoppinglist/v2/items`
 
 ## Terms of use (checked 2026-11-26)
 
-Read: AH consumer terms of 4 Oct 2024 (`static.ah.nl/…/alg-vw-ah-2024-10-04.pdf`; the current version, dated 7 Sep 2026, is linked from ah.nl/algemene-voorwaarden and should be re-checked). Not legal advice.
+Read: AH's current consumer terms of 7 Sep 2026 (`alg-vw-b2c-ah-nl-2026-09-07-.pdf`, linked from ah.nl/algemene-voorwaarden), checked against the 4 Oct 2024 version: the clauses below are unchanged. Not legal advice.
 
-- **No clause on automated access, scraping, robots or database rights**, in either the ah.nl part (II) or the AH app part (III). Jumbo's terms, by contrast, forbid scraping outright.
+- **No clause on automated access, scraping, robots, crawling or database rights** anywhere in the 2026 document (all parts searched), in particular not in the ah.nl part (II) or the AH app part (III). Jumbo's terms, by contrast, forbid scraping outright.
 - **ah.nl (part II):** the account is for your own use only (lid 10); the site's content may not be copied or modified except for personal use (lid 14); AH may cancel orders that conflict with its terms and block accounts (lid 40), including for proven misuse or fraud (lid 43).
 - **AH app (part III, art. 1 and 4):** a non-exclusive, non-transferable licence to use the app on your own device; no redistributing it; no decompiling or reverse engineering; no connecting it to a network so other devices can use it; no publishing or copying its information without consent except for personal use.
 - **robots.txt (ah.nl):** blocks search and product URLs with query strings (`/zoeken?*`, `/producten?*`); says nothing about the mobile API, which this spike and the app's adapter use.
