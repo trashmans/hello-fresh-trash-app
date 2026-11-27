@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useSocial } from '@/hooks/useSocial'
 import { useGroups } from '@/hooks/useGroups'
 import GroupsCard from '@/components/GroupsCard'
+import FoodPhotosCard from '@/components/FoodPhotosCard'
 import { useSharedWithMe } from '@/hooks/useShares'
 import { useAuth } from '@/context/AuthContext'
 import { INVITE_DAYS, checkInviteEmail, inviteMessage, inviteStatus, invitesLeftToday } from '@/lib/social'
@@ -304,6 +305,8 @@ export default function Social() {
           </Card>
 
           <GroupsCard groups={groups} friends={friends} />
+
+          <FoodPhotosCard groups={groups.groups} />
         </div>
 
         <aside className="flex min-w-0 flex-[1_1_340px] flex-col gap-7">
