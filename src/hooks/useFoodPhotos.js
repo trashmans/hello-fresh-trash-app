@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
-import { foodPhotoErrorMessage } from '@/lib/foodPhotoUpload'
+import { foodPhotoErrorMessage, updatePhotoArgs } from '@/lib/foodPhotoUpload'
 
 const BUCKET = 'food-photos'
 
-// Food photos (docs/adr/0012, F1d): my photos with signed thumbnail links, my default
-// visibility (Settings), place search through the place-search Edge Function, and delete.
+// Food photos (docs/adr/0012, F1d/F1e): my photos with signed thumbnail links, my default
+// visibility (Settings), place search through the place-search Edge Function, change and delete.
 // Adding is done by FoodPhotosCard (it needs the browser-only shrinking).
 export function useFoodPhotos() {
   const { session } = useAuth()
@@ -44,7 +44,21 @@ export function useFoodPhotos() {
     return {}
   }, [])
 
-  return { me, photos, loading, error, reload: load, remove }
+  // Changes a photo's place and/or who can see it (update_food_photo), then reloads.
+  const update = useCallback(async (photo, changes) => {
+    const { error: e } = await supabase.rpc('update_food_photo', updatePhotoArgs(photo, changes))
+    if (e) return { message: foodPhotoErrorMessage(e.message) }
+    await load()
+    return {}
+  }, [load])
+
+  return { me, photos, loading, error, reload: load, remove, update }
+}
+
+/** A signed link to a photo file (1 hour), or null. */
+export async function foodPhotoUrl(path) {
+  const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600)
+  return data?.signedUrl ?? null
 }
 
 /** { mode: 'reverse', lat, lon } or { mode: 'search', q } → the function's answer, or { message }. */

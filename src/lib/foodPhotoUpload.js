@@ -79,3 +79,46 @@ export function visibilityLabel(visibility, groupName) {
   if (visibility === 'only_me') return 'Only you'
   return groupName || 'A group'
 }
+
+// F1e: changing one photo ----------------------------------------------------------------
+
+/**
+ * Arguments for update_food_photo. changes: { place?, visibility?, groupId? } — a key left out
+ * keeps the photo's current value; place: null removes the place.
+ */
+export function updatePhotoArgs(photo, changes = {}) {
+  const place = changes.place === undefined
+    ? (photo.place_name ? { label: photo.place_name, lat: photo.lat, lon: photo.lon, precision: photo.precision } : null)
+    : changes.place
+  const visibility = changes.visibility ?? photo.visibility
+  const groupId = changes.visibility === undefined ? photo.group_id : (changes.groupId ?? null)
+  return {
+    p_photo: photo.id,
+    p_place: place ? place.label : null,
+    p_lat: place ? place.lat : null,
+    p_lon: place ? place.lon : null,
+    p_precision: place ? (place.precision === 'exact' ? 'exact' : 'city') : null,
+    p_visibility: visibility,
+    p_group: visibility === 'group' ? groupId ?? null : null,
+  }
+}
+
+/** Who can see one photo: friends, each of my groups (by name), or only me. */
+export function visibilityChoices(groups = []) {
+  const byName = [...groups].sort((a, b) => a.name.localeCompare(b.name))
+  return [
+    { value: 'friends', label: visibilityLabel('friends') },
+    ...byName.map((g) => ({ value: `group:${g.id}`, label: g.name })),
+    { value: 'only_me', label: visibilityLabel('only_me') },
+  ]
+}
+
+/** A photo's current choice in visibilityChoices(). */
+export const choiceFor = (photo) => (photo.visibility === 'group' && photo.group_id ? `group:${photo.group_id}` : photo.visibility)
+
+/** 'group:<id>' | 'friends' | 'only_me' → { visibility, groupId }. */
+export function parseVisibilityChoice(value) {
+  return value?.startsWith('group:')
+    ? { visibility: 'group', groupId: value.slice(6) }
+    : { visibility: value, groupId: null }
+}
