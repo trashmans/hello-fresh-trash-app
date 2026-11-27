@@ -19,6 +19,7 @@ Friends upload food photos. The app reads where each photo was taken, shows the 
 | Thumbnail sent for recognition | Upload | Sent to Gemini, not stored there by us | Google (processor) |
 | Dish name sent to find recipes; up to 3 recipe pages shown | Uploader's chosen dish | Sent to Gemini with Google Search grounding; the results are shown, not stored | Google (processor) |
 | Place-search text ("Bangkok") | Owner | Sent to Nominatim via our server, not stored | OSM Foundation |
+| Location rounded to 1 decimal (~11 km), to find the nearest city | Photo EXIF (rounded in the browser and again on our server) | Sent to Nominatim via our server; the city found is cached 30 days with no user (added 27 Nov, F1c) | OSM Foundation |
 | Map area viewed | Viewer's browser | Tile requests to Protomaps | Protomaps/Cloudflare (no photo data) |
 
 Data subjects: users who upload; friends and group members who view. Possibly people who appear in photos (see risk 5).
