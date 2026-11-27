@@ -3,6 +3,7 @@ import { ArrowLeft, Moon, Sun } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/hooks/useTheme'
+import FoodPhotoSettingsCard from '@/components/FoodPhotoSettingsCard'
 
 function AppearanceCard() {
   const { theme, setTheme } = useTheme()
@@ -37,6 +38,7 @@ export default function Settings() {
       </div>
       <h1 className="text-2xl font-semibold">Settings</h1>
       <AppearanceCard />
+      <FoodPhotoSettingsCard />
       <p className="text-sm text-muted-foreground">
         Albert Heijn linking has moved to the <Link to="/ordering" className="underline">Automated ordering</Link> tab.
       </p>

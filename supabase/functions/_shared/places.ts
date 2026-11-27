@@ -16,7 +16,10 @@ const MAX_RESULTS = 5
 
 export type Cell = { lat: number; lon: number }
 export type PlaceRequest = ({ mode: 'reverse' } & Cell) | { mode: 'search'; q: string }
-export type Place = { label: string; detail: string; lat: number; lon: number }
+export type Place = { label: string; detail: string; lat: number; lon: number; precision: 'city' | 'exact' }
+
+// Nominatim's addresstype for a whole town, region or country: stored as city level, not an exact spot.
+const AREA_TYPES = new Set(['city', 'town', 'village', 'hamlet', 'suburb', 'municipality', 'county', 'state_district', 'state', 'province', 'region', 'country'])
 
 // Rounds and turns -0 into 0.
 const round = (n: number, decimals: number) => Math.round(n * 10 ** decimals) / 10 ** decimals + 0
@@ -87,10 +90,11 @@ export function placeFromReverse(data: unknown): Place | null {
   const a = record(r.address)
   const city = locality(a) || text(a.county) || text(a.state) || text(r.name)
   if (!city) return null
-  return { label: join([city, a.country], MAX_LABEL), detail: join([city, a.state, a.country], MAX_DETAIL), ...at }
+  return { label: join([city, a.country], MAX_LABEL), detail: join([city, a.state, a.country], MAX_DETAIL), ...at, precision: 'city' }
 }
 
-// Up to 5 places for a typed search: a short label (name, town, country) and the full address.
+// Up to 5 places for a typed search: a short label (name, town, country), the full address, and
+// whether it is a town or area ('city') or a spot such as a restaurant ('exact').
 export function placesFromSearch(data: unknown): Place[] {
   if (!Array.isArray(data)) return []
   const out: Place[] = []
@@ -105,7 +109,8 @@ export function placesFromSearch(data: unknown): Place[] {
     const label = join([name, locality(a), a.country], MAX_LABEL)
     if (seen.has(label.toLowerCase())) continue
     seen.add(label.toLowerCase())
-    out.push({ label, detail: join([r.display_name], MAX_DETAIL) || label, ...at })
+    const precision = AREA_TYPES.has(text(r.addresstype)) ? 'city' : 'exact'
+    out.push({ label, detail: join([r.display_name], MAX_DETAIL) || label, ...at, precision })
     if (out.length === MAX_RESULTS) break
   }
   return out

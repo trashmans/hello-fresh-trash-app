@@ -66,7 +66,7 @@ describe('Nominatim requests', () => {
 describe('placeFromReverse', () => {
   it("gives the city and country with the city's own coordinates", () => {
     expect(placeFromReverse(haarlem)).toEqual({
-      label: 'Haarlem, Netherlands', detail: 'Haarlem, North Holland, Netherlands', lat: 52.38121, lon: 4.63684,
+      label: 'Haarlem, Netherlands', detail: 'Haarlem, North Holland, Netherlands', lat: 52.38121, lon: 4.63684, precision: 'city',
     })
   })
   it('falls back to town, village, municipality, county, state, then the name', () => {
@@ -94,12 +94,17 @@ describe('placesFromSearch', () => {
   }
   it('gives a short label (name, town, country) and the full address as detail', () => {
     expect(placesFromSearch([klos])).toEqual([{
-      label: 'Café de Klos, Amsterdam, Netherlands', detail: klos.display_name, lat: 52.3667, lon: 4.8822,
+      label: 'Café de Klos, Amsterdam, Netherlands', detail: klos.display_name, lat: 52.3667, lon: 4.8822, precision: 'exact',
     }])
   })
   it("doesn't repeat the town when the place is the town", () => {
     const bkk = { lat: '13.7525', lon: '100.4935', name: 'Bangkok', display_name: 'Bangkok, Thailand', address: { city: 'Bangkok', country: 'Thailand' } }
     expect(placesFromSearch([bkk])[0].label).toBe('Bangkok, Thailand')
+  })
+  it('marks towns, regions and countries as city level and anything smaller as an exact spot', () => {
+    const kind = (addresstype) => placesFromSearch([{ ...klos, addresstype }])[0].precision
+    for (const t of ['city', 'town', 'village', 'municipality', 'county', 'state', 'province', 'region', 'country']) expect(kind(t)).toBe('city')
+    for (const t of ['amenity', 'shop', 'road', 'house_number', undefined]) expect(kind(t)).toBe('exact')
   })
   it('skips broken results and duplicates, and gives at most 5', () => {
     const many = Array.from({ length: 8 }, (_, i) => ({ ...klos, name: `Place ${i}` }))

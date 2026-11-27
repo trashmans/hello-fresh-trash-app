@@ -83,8 +83,9 @@ export default function PrivacyPolicy() {
               You can add photos of food you have eaten. Your browser makes smaller copies and removes everything
               stored inside the files (camera, time, exact location) before uploading; only those copies are stored,
               in private storage. For each photo we keep where it was eaten, the date it was taken and who can see
-              it: your friends (the default), one of your groups, or only you. You can change this later or delete
-              the photo.
+              it: your friends (the default; you can choose only you in Settings), one of your groups, or only you.
+              You can change this later or delete the photo. If you leave a group or are removed from it, your
+              photos shared with that group become visible only to you.
             </p>
             <p className="mt-2">
               The place is the nearest city unless you choose an exact spot (for example a restaurant). To find the
