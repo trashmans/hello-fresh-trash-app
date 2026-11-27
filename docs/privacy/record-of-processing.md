@@ -5,7 +5,7 @@ Hello Fresh Trash is an invite-only app. This record lists what personal data it
 - **Controllers:** Chris and David, joint maintainers
 - **Contact:** chris@aps75.com (primary), trashmanss@gmail.com (backup)
 - **Data requests:** see [data-requests.md](data-requests.md)
-- **Last reviewed:** 2026-11-21
+- **Last reviewed:** 2026-11-27
 
 Rows marked **Planned** belong to the AH weekly shop feature and apply once it ships.
 
@@ -19,6 +19,7 @@ Rows marked **Planned** belong to the AH weekly shop feature and apply once it s
 | Invites, friends and recipe shares | Invited people (before and after they sign in); users | Invitee email, who invited them, created / expiry / used / revoked dates; friend requests and friendships (two user IDs and a date); shared recipe, sender, recipient, optional note (280 characters), seen date, the group it was shared in (if any) | Let users invite people and recommend recipes to friends (docs/adr/0008) | Contract (users); legitimate interest (the invitee's email, so the person who knows them can let them in) | Unused invites deleted once expired (30 days) or revoked; the rest while both accounts exist |
 | Social groups | Users | Group name, who made it and when; members (user IDs, date added, date they saw they were added). Members see each other's names and pictures | Let users group friends to share recipes and talk about them together (docs/adr/0011) | Contract | While the group exists; a member is removed when they leave, are removed or delete their account; deleting the group or the creator's account deletes it |
 | Group comments on recipes | Users | Comment text (up to 500 characters), author, group, recipe, date | Let group members talk about recipes together (docs/adr/0011) | Contract | While the group exists; deleted by the author or the group's creator, or with the group, the recipe or the author's account |
+| Food photos (food map) | Users; friends and group members who view | Shrunk photo and thumbnail with no file metadata; place (nearest city by default, or an exact spot the owner chose) with its coordinates; date taken (no time); visibility (friends, a group, only me); owner. For the city lookup: the location rounded to 1 decimal, and any place-search text typed | Show users' food photos to the friends or group they choose, on a map (docs/adr/0012, DPIA docs/privacy/dpia-food-map.md) | Consent (optional feature; each photo added by the user) | Until the user deletes the photo or their account (300 photos per person). Cities found for rounded locations: 30 days, with no user. Search text: not stored. Hourly lookup counts: 1 day |
 | Households | Household members | Household name, membership, role; the household's recipe picks and list adjustments | Share shopping data within a household | Contract | While the household exists |
 | Albert Heijn link | The member who links AH | Envelope-encrypted AH refresh token, link status, linked and last-used dates, who linked. No AH member ID, no access tokens, no password | Write shopping list lines to the household's AH account | Consent (explicit opt-in on the Automated ordering tab, revocable by unlinking) | Until unlinked; deleted immediately on unlink and with the household |
 | This week's preview | Household members | The household's current AH shopping list (items, quantities, ticked or not, including items added in the AH app), read through the link when a member asks for the preview | Show what the weekly shop would change before anything is sent | Consent (part of the AH link) | Not stored: shown in the member's browser and discarded. Products seen in staple searches go to the product cache, which holds no personal data |
@@ -29,7 +30,7 @@ Rows marked **Planned** belong to the AH weekly shop feature and apply once it s
 | Audit log | Household members | Actor, action, time (no shopping contents) | Security and accountability | Legitimate interest | 12 months; actor removed when a member is erased |
 | Data-request log | Requesters | Request type, dates, outcome (no request contents) | Show requests were handled on time | Legal obligation | 3 years |
 
-Retention is enforced by a nightly job (`private.run_retention`, scheduled with pg_cron, migration 20261121000004) for weekly runs (12 weeks), the audit log (12 months), the data-request log (3 years) and unused invites; each run logs only counts.
+Retention is enforced by a nightly job (`private.run_retention`, scheduled with pg_cron, migration 20261121000004) for weekly runs (12 weeks), the audit log (12 months), the data-request log (3 years) and unused invites; each run logs only counts. A second nightly job (`private.purge_place_search`, migration 20261127000002) deletes cached cities after 30 days and lookup counts after a day.
 
 Shopping data can reveal sensitive traits by inference (diet, religion, health, pregnancy). It is treated as potentially sensitive: kept minimal, never shared, never analysed for profiling. Past AH orders and receipts are out of scope until a data protection impact assessment has been done.
 
@@ -42,10 +43,11 @@ Shopping data can reveal sensitive traits by inference (diet, religion, health, 
 | Google | Sign-in provider | Name, email, picture at sign-in | Global |
 | Google (Gemini API) | Processor: recipe PDF and web-page parsing (page text, or the link via url_context); suggesting protein swaps (recipe content only); translating staple product searches into Dutch; finding AH's product name for an ingredient with Google Search grounding (Suggest AH products) | Uploaded recipe PDFs; staple search words and ingredient names (no user data) | Global |
 | Apple, Google, Mozilla push services | Deliver push messages (**planned**) | Encrypted push payload with no item names | Global |
+| OpenStreetMap Foundation (Nominatim) | Recipient: place search for food photos, through our server | A location rounded to 1 decimal (~11 km), or the place-search text typed; our server's IP and the app's User-Agent. No user ID, photo or exact location | UK (the Foundation); servers as OSMF runs them |
 | Albert Heijn | Recipient at the user's request | Shopping list lines written to the user's own AH account | Netherlands |
 | Albert Heijn image server (static.ah.nl) | Third party the browser contacts directly | Request metadata (IP address, user agent) when a product photo is shown; no referrer, no app data | Netherlands / AH's CDN |
 
-**To check:** transfer mechanisms (EU-US Data Privacy Framework or Standard Contractual Clauses) for Vercel, Google and the push services.
+**To check:** transfer mechanisms (EU-US Data Privacy Framework or Standard Contractual Clauses) for Vercel, Google and the push services. Also for the OpenStreetMap Foundation (UK): confirm the EU adequacy decision for the UK is still in force.
 
 ## Security measures
 

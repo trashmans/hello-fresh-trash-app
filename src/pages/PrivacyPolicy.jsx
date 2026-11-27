@@ -78,6 +78,26 @@ export default function PrivacyPolicy() {
           </section>
 
           <section>
+            <h2 className="font-semibold text-base mb-2">Food photos (optional)</h2>
+            <p>
+              You can add photos of food you have eaten. Your browser makes smaller copies and removes everything
+              stored inside the files (camera, time, exact location) before uploading; only those copies are stored,
+              in private storage. For each photo we keep where it was eaten, the date it was taken and who can see
+              it: your friends (the default), one of your groups, or only you. You can change this later or delete
+              the photo.
+            </p>
+            <p className="mt-2">
+              The place is the nearest city unless you choose an exact spot (for example a restaurant). To find the
+              city, your browser sends our server the photo&apos;s location rounded to about 10 km; our server asks
+              OpenStreetMap&apos;s place search (Nominatim, run by the OpenStreetMap Foundation) for the city there.
+              The exact location never leaves your device unless you pick an exact spot. When you search for a place
+              by name, the words you type go the same way. OpenStreetMap sees our server, not you, and nothing about
+              who you are; we keep the cities found (without who asked) for 30 days and don&apos;t keep what you type.
+              Place names &copy; OpenStreetMap contributors.
+            </p>
+          </section>
+
+          <section>
             <h2 className="font-semibold text-base mb-2">Albert Heijn link (optional)</h2>
             <p>
               If Albert Heijn linking is switched on for your household, you can choose to link your AH account on
@@ -121,7 +141,8 @@ export default function PrivacyPolicy() {
               deletion, your account and all associated data will be removed within 30 days.
               An Albert Heijn login token is kept only until you unlink, and is deleted together
               with your household. The log of AH link events is kept for 12 months. Unused invites are deleted
-              once they expire (30 days) or are taken back.
+              once they expire (30 days) or are taken back. Food photos are kept until you delete them or your
+              account; a photo shared with a group becomes visible only to you if the group is deleted.
             </p>
           </section>
 
@@ -159,7 +180,7 @@ export default function PrivacyPolicy() {
               </a>
               , a hosted PostgreSQL database provider. Data is stored in the EU (West EU, Ireland).
               The app itself is hosted on Vercel, and uploaded recipe PDFs are read by Google's
-              Gemini API.
+              Gemini API. Place names for food photos come from OpenStreetMap&apos;s Nominatim.
             </p>
           </section>
         </CardContent>

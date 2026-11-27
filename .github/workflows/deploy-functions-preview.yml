@@ -44,5 +44,6 @@ jobs:
           supabase functions deploy retailer-week --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
           supabase functions deploy retailer-send --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
           supabase functions deploy suggest-swaps --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
+          supabase functions deploy place-search --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
