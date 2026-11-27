@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   cellKey, lookupCells, foodPhotoPaths, addPhotoArgs, foodPhotoErrorMessage, visibilityLabel, VISIBILITY_DEFAULTS,
+  updatePhotoArgs, visibilityChoices, choiceFor, parseVisibilityChoice,
 } from '@/lib/foodPhotoUpload'
 
 const at = (lat, lon) => ({ exif: { gps: { lat, lon }, takenOn: null } })
@@ -84,5 +85,51 @@ describe('visibility', () => {
     expect(visibilityLabel('only_me')).toBe('Only you')
     expect(visibilityLabel('group', 'Family')).toBe('Family')
     expect(visibilityLabel('group')).toBe('A group')
+  })
+})
+
+// F1e: changing one photo's place and who can see it.
+describe('updatePhotoArgs', () => {
+  const photo = { id: 'p1', place_name: 'Haarlem, Netherlands', lat: 52.38, lon: 4.63, precision: 'city', visibility: 'group', group_id: 'g1' }
+  it('keeps everything not changed', () => {
+    expect(updatePhotoArgs(photo, {})).toEqual({
+      p_photo: 'p1', p_place: 'Haarlem, Netherlands', p_lat: 52.38, p_lon: 4.63, p_precision: 'city', p_visibility: 'group', p_group: 'g1',
+    })
+  })
+  it('sets a new place with its precision', () => {
+    const args = updatePhotoArgs(photo, { place: { label: 'Café de Klos, Amsterdam, Netherlands', lat: 52.3667, lon: 4.8822, precision: 'exact' } })
+    expect([args.p_place, args.p_lat, args.p_lon, args.p_precision]).toEqual(['Café de Klos, Amsterdam, Netherlands', 52.3667, 4.8822, 'exact'])
+    expect(args.p_group).toBe('g1')
+  })
+  it('removes the place', () => {
+    const args = updatePhotoArgs(photo, { place: null })
+    expect([args.p_place, args.p_lat, args.p_lon, args.p_precision]).toEqual([null, null, null, null])
+  })
+  it('changes who can see it, dropping the group when it is no longer a group photo', () => {
+    expect(updatePhotoArgs(photo, { visibility: 'friends' })).toMatchObject({ p_visibility: 'friends', p_group: null })
+    expect(updatePhotoArgs({ ...photo, visibility: 'only_me', group_id: null }, { visibility: 'group', groupId: 'g2' })).toMatchObject({ p_visibility: 'group', p_group: 'g2' })
+  })
+  it('keeps a photo without a place without one', () => {
+    const args = updatePhotoArgs({ ...photo, place_name: null, lat: null, lon: null, precision: null }, { visibility: 'only_me' })
+    expect([args.p_place, args.p_precision, args.p_group]).toEqual([null, null, null])
+  })
+})
+
+describe('visibility choices', () => {
+  const groups = [{ id: 'g2', name: 'Work lunch' }, { id: 'g1', name: 'Family' }]
+  it('offers friends, each group by name, then only you', () => {
+    expect(visibilityChoices(groups)).toEqual([
+      { value: 'friends', label: 'Friends' },
+      { value: 'group:g1', label: 'Family' },
+      { value: 'group:g2', label: 'Work lunch' },
+      { value: 'only_me', label: 'Only you' },
+    ])
+    expect(visibilityChoices()).toHaveLength(2)
+  })
+  it("reads a photo's current choice and turns a choice back into visibility and group", () => {
+    expect(choiceFor({ visibility: 'group', group_id: 'g1' })).toBe('group:g1')
+    expect(choiceFor({ visibility: 'friends', group_id: null })).toBe('friends')
+    expect(parseVisibilityChoice('group:g1')).toEqual({ visibility: 'group', groupId: 'g1' })
+    expect(parseVisibilityChoice('only_me')).toEqual({ visibility: 'only_me', groupId: null })
   })
 })

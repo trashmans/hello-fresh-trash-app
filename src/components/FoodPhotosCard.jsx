@@ -1,80 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Camera, Check, ImageOff, Loader2, Lock, MapPin, Search, Trash2, Users, X } from 'lucide-react'
+import { Camera, Check, ImageOff, Loader2, Lock, MapPin, Trash2, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { FOOD_PHOTO_LIMIT, photoPlan } from '@/lib/foodPhotos'
 import { readPhotoBatch, shrinkPhoto } from '@/lib/photoShrink'
 import { addPhotoArgs, cellKey, foodPhotoErrorMessage, foodPhotoPaths, lookupCells, visibilityLabel } from '@/lib/foodPhotoUpload'
 import { addFoodPhoto, getFoodPhotoDefault, placeSearch, useFoodPhotos } from '@/hooks/useFoodPhotos'
+import FoodPhotoEditSheet from '@/components/FoodPhotoEditSheet'
+import PlacePicker, { Attribution } from '@/components/PlacePicker'
 
 // Food photos on the Social tab (docs/adr/0012, F1d). Add photos or a Google Photos ZIP; the
 // browser reads each photo's location and date, sends only the location rounded to ~10 km to
 // find the nearest city, shrinks the photo (no metadata) and uploads it. Photos without a
 // place can get one by search, or are added without one (not on the map). Who sees new photos
-// comes from Settings. Below: my photos, newest first, with delete.
+// comes from Settings. Below: my photos, newest first; tap one to change its place or who can
+// see it (FoodPhotoEditSheet, F1e), or delete it.
 
 const WORKERS = 3
-const ATTRIBUTION_URL = 'https://www.openstreetmap.org/copyright'
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
-
-function Attribution() {
-  return (
-    <p className="text-[12px] text-muted-foreground">
-      Place names{' '}
-      <a href={ATTRIBUTION_URL} target="_blank" rel="noreferrer" className="underline">© OpenStreetMap contributors</a>
-    </p>
-  )
-}
-
-// Search for a place by name; results only when Search is pressed (no autocomplete).
-export function PlacePicker({ onPick, onCancel, autoFocus = true }) {
-  const [q, setQ] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [results, setResults] = useState(null)
-  const [message, setMessage] = useState(null)
-
-  async function search(e) {
-    e.preventDefault()
-    const text = q.replace(/\s+/g, ' ').trim()
-    if (text.length < 2) { setMessage('Type at least 2 characters.'); return }
-    setBusy(true); setMessage(null)
-    const answer = await placeSearch({ mode: 'search', q: text })
-    setBusy(false)
-    if (answer?.message) { setMessage(answer.message); return }
-    setResults(answer?.places ?? [])
-  }
-
-  return (
-    <div className="space-y-2 rounded-[14px] border border-input p-3">
-      <form onSubmit={search} className="flex flex-wrap gap-2">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="City or restaurant, e.g. Bangkok" autoFocus={autoFocus} className="h-10 min-w-0 flex-[1_1_180px]" aria-label="Place" />
-        <Button type="submit" disabled={busy} className="h-10 rounded-full px-4 font-semibold">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Search
-        </Button>
-        {onCancel && <Button type="button" variant="ghost" onClick={onCancel} className="h-10 rounded-full px-3">Cancel</Button>}
-      </form>
-      {message && <p className="text-sm text-destructive">{message}</p>}
-      {results && (results.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No places found. Try another name.</p>
-      ) : (
-        <ul className="space-y-1">
-          {results.map((p) => (
-            <li key={`${p.label}|${p.lat}|${p.lon}`}>
-              <button type="button" onClick={() => onPick(p)} className="w-full rounded-lg px-2 py-1.5 text-left hover:bg-muted">
-                <span className="block text-sm font-semibold">{p.label}</span>
-                <span className="block truncate text-[12px] text-muted-foreground">{p.precision === 'exact' ? 'Exact spot · ' : ''}{p.detail}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ))}
-      {results && <Attribution />}
-    </div>
-  )
-}
 
 function Preview({ url, className = 'h-14 w-14' }) {
   const [broken, setBroken] = useState(false)
@@ -108,7 +53,7 @@ function NoPlaceRow({ item, onSetPlace }) {
   )
 }
 
-function PhotoTile({ photo, groupName, onDelete }) {
+function PhotoTile({ photo, groupName, onOpen, onDelete }) {
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const Icon = photo.visibility === 'friends' ? Users : photo.visibility === 'only_me' ? Lock : Users
@@ -120,7 +65,9 @@ function PhotoTile({ photo, groupName, onDelete }) {
   return (
     <li className="space-y-1">
       <div className="relative">
-        <Preview url={photo.thumbUrl} className="aspect-square w-full" />
+        <button type="button" onClick={() => onOpen(photo)} aria-label={`Change ${photo.place_name ?? 'photo'}`} className="block w-full">
+          <Preview url={photo.thumbUrl} className="aspect-square w-full" />
+        </button>
         {confirming ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg bg-black/60 p-2 text-white">
             <span className="text-sm font-semibold">Delete?</span>
@@ -146,7 +93,8 @@ function PhotoTile({ photo, groupName, onDelete }) {
 }
 
 export default function FoodPhotosCard({ groups = [] }) {
-  const { me, photos, loading, reload, remove } = useFoodPhotos()
+  const { me, photos, loading, reload, remove, update } = useFoodPhotos()
+  const [editing, setEditing] = useState(null)
   const inputRef = useRef(null)
   const [step, setStep] = useState('idle') // idle | reading | finding | review | adding
   const [progress, setProgress] = useState({ done: 0, total: 0 })
@@ -341,7 +289,7 @@ export default function FoodPhotosCard({ groups = [] }) {
         ) : (
           <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
             {photos.map(p => (
-              <PhotoTile key={p.id} photo={p} groupName={groupNames[p.group_id]} onDelete={async (photo) => {
+              <PhotoTile key={p.id} photo={p} groupName={groupNames[p.group_id]} onOpen={setEditing} onDelete={async (photo) => {
                 const { message } = await remove(photo)
                 if (message) { toast.error(message); return false }
                 return true
@@ -349,6 +297,16 @@ export default function FoodPhotosCard({ groups = [] }) {
             ))}
           </ul>
         )}
+        <FoodPhotoEditSheet
+          photo={editing}
+          groups={groups}
+          onClose={() => setEditing(null)}
+          onSave={async (photo, changes) => {
+            const { message } = await update(photo, changes)
+            if (message) { toast.error(message); return false }
+            return true
+          }}
+        />
       </CardContent>
     </Card>
   )
