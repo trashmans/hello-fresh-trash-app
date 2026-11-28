@@ -90,11 +90,11 @@ export default function PrivacyPolicy() {
             <p className="mt-2">
               The place is the nearest city unless you choose an exact spot (for example a restaurant). To find the
               city, your browser sends our server the photo&apos;s location rounded to about 10 km; our server asks
-              OpenStreetMap&apos;s place search (Nominatim, run by the OpenStreetMap Foundation) for the city there.
-              The exact location never leaves your device unless you pick an exact spot. When you search for a place
-              by name, the words you type go the same way. OpenStreetMap sees our server, not you, and nothing about
-              who you are; we keep the cities found (without who asked) for 30 days and don&apos;t keep what you type.
-              Place names &copy; OpenStreetMap contributors.
+              Geoapify, a place search service with data centres in the EU, for the city there. The exact location
+              never leaves your device unless you pick an exact spot. When you search for a place by name, the words
+              you type go the same way. Geoapify sees our server, not you, and nothing about who you are; we keep
+              the cities found (without who asked) for 30 days and don&apos;t keep what you type. Place names come
+              from OpenStreetMap (&copy; OpenStreetMap contributors).
             </p>
           </section>
 
@@ -181,7 +181,7 @@ export default function PrivacyPolicy() {
               </a>
               , a hosted PostgreSQL database provider. Data is stored in the EU (West EU, Ireland).
               The app itself is hosted on Vercel, and uploaded recipe PDFs are read by Google's
-              Gemini API. Place names for food photos come from OpenStreetMap&apos;s Nominatim.
+              Gemini API. Place names for food photos are looked up with Geoapify, in the EU.
             </p>
           </section>
         </CardContent>
