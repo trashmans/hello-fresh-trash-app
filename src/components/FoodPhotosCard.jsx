@@ -21,6 +21,14 @@ import PlacePicker, { Attribution } from '@/components/PlacePicker'
 const WORKERS = 3
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
+// A chosen photo shown large (whole photo, not cropped) while it gets a place.
+function LargePreview({ url }) {
+  const [broken, setBroken] = useState(false)
+  return url && !broken
+    ? <img src={url} alt="" onError={() => setBroken(true)} className="max-h-80 w-full rounded-[14px] bg-muted object-contain" />
+    : null
+}
+
 function Preview({ url, className = 'h-14 w-14' }) {
   const [broken, setBroken] = useState(false)
   return url && !broken
@@ -28,13 +36,15 @@ function Preview({ url, className = 'h-14 w-14' }) {
     : <span className={`${className} flex shrink-0 items-center justify-center rounded-lg bg-muted`}><ImageOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></span>
 }
 
-// One photo without a place in the review list.
+// One photo without a place in the review list. The preview is 96 px; while a place is being
+// added it shows full width (up to 320 px tall) so you can see which photo you're pinning.
 function NoPlaceRow({ item, onSetPlace }) {
   const [picking, setPicking] = useState(false)
+  const open = picking && !item.place
   return (
     <li className="space-y-2 py-2">
       <div className="flex items-center gap-3">
-        <Preview url={item.previewUrl} />
+        {!open && <Preview url={item.previewUrl} className="h-24 w-24" />}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{item.name}</p>
           <p className="text-[12px] text-muted-foreground">
@@ -48,7 +58,12 @@ function NoPlaceRow({ item, onSetPlace }) {
           <button type="button" onClick={() => setPicking(true)} className="text-[13px] font-semibold text-primary-text underline underline-offset-2">Add a place</button>
         )}
       </div>
-      {picking && !item.place && <PlacePicker onPick={(p) => { onSetPlace(p); setPicking(false) }} onCancel={() => setPicking(false)} />}
+      {open && (
+        <>
+          <LargePreview url={item.previewUrl} />
+          <PlacePicker onPick={(p) => { onSetPlace(p); setPicking(false) }} onCancel={() => setPicking(false)} />
+        </>
+      )}
     </li>
   )
 }
