@@ -1,7 +1,8 @@
 import { Suspense, useState } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { BookOpen, Loader2, Moon, RefreshCw, ShoppingBasket, Sun, Users } from 'lucide-react'
 import UserMenu from '@/components/UserMenu'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import PDFUploader from '@/components/PDFUploader'
 import { useShoppingList } from '@/hooks/useShoppingList'
 import { useTheme } from '@/hooks/useTheme'
@@ -23,6 +24,7 @@ const TABS = [
 // (adding recipes), the Shopping tab (the list) and the header's cart count share one copy.
 export default function AppShell() {
   const shoppingList = useShoppingList()
+  const { pathname } = useLocation()
   const [refreshKey, setRefreshKey] = useState(0)
   const count = shoppingList.selectedIds.length
   const { theme, toggle } = useTheme()
@@ -97,15 +99,18 @@ export default function AppShell() {
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto pb-20 lg:pb-0">
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          }
-        >
-          <Outlet context={{ shoppingList, refreshKey }} />
-        </Suspense>
+        {/* A page that fails shows a message here (header and tabs stay); another tab retries. */}
+        <ErrorBoundary resetKey={pathname}>
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            }
+          >
+            <Outlet context={{ shoppingList, refreshKey }} />
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       <nav aria-label="Main" className="lg:hidden fixed bottom-0 inset-x-0 z-40 flex border-t border-border bg-header pb-[env(safe-area-inset-bottom)]">

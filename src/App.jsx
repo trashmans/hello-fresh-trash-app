@@ -4,6 +4,7 @@ import { Toaster } from 'sonner'
 import { AuthProvider } from '@/context/AuthContext'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import AppShell from '@/components/AppShell'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import { lazyPage, useNewVersionNotice } from '@/hooks/useNewVersionNotice'
 
 const Login = lazyPage(() => import('./pages/Login'))
@@ -16,7 +17,10 @@ const Settings = lazyPage(() => import('./pages/Settings'))
 
 export default function App() {
   useNewVersionNotice()
+  // The outer ErrorBoundary is the backstop: an error outside a page (header, sign-in) shows
+  // a message instead of a blank screen. Pages have their own inside AppShell.
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <Toaster position="bottom-right" richColors />
       <AuthProvider>
@@ -44,5 +48,6 @@ export default function App() {
         </Suspense>
       </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   )
 }
