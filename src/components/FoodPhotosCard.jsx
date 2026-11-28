@@ -123,7 +123,7 @@ export default function FoodPhotosCard({ groups = [] }) {
       return
     }
 
-    // Find the city for each rounded location, one at a time (the server keeps to Nominatim's pace).
+    // Find the city for each rounded location, one at a time (the server keeps the place service's pace).
     const cells = lookupCells(plan.withLocation)
     const places = {}
     setStep('finding'); setProgress({ done: 0, total: cells.length })

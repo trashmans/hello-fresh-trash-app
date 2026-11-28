@@ -5,15 +5,18 @@ import { Input } from '@/components/ui/input'
 import { placeSearch } from '@/hooks/useFoodPhotos'
 
 // Place search for food photos (docs/adr/0012): results only when Search is pressed (no
-// autocomplete, Nominatim usage policy), shown with OpenStreetMap's attribution.
+// autocomplete), shown with Geoapify's and OpenStreetMap's credit (Geoapify free plan).
 
-const ATTRIBUTION_URL = 'https://www.openstreetmap.org/copyright'
+const OSM_URL = 'https://www.openstreetmap.org/copyright'
+const GEOAPIFY_URL = 'https://www.geoapify.com/'
 
 export function Attribution() {
   return (
     <p className="text-[12px] text-muted-foreground">
-      Place names{' '}
-      <a href={ATTRIBUTION_URL} target="_blank" rel="noreferrer" className="underline">© OpenStreetMap contributors</a>
+      Powered by{' '}
+      <a href={GEOAPIFY_URL} target="_blank" rel="noreferrer" className="underline">Geoapify</a>
+      {' · '}
+      <a href={OSM_URL} target="_blank" rel="noreferrer" className="underline">© OpenStreetMap contributors</a>
     </p>
   )
 }

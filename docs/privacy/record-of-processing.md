@@ -5,7 +5,7 @@ Hello Fresh Trash is an invite-only app. This record lists what personal data it
 - **Controllers:** Chris and David, joint maintainers
 - **Contact:** chris@aps75.com (primary), trashmanss@gmail.com (backup)
 - **Data requests:** see [data-requests.md](data-requests.md)
-- **Last reviewed:** 2026-11-27
+- **Last reviewed:** 2026-11-28
 
 Rows marked **Planned** belong to the AH weekly shop feature and apply once it ships.
 
@@ -43,11 +43,11 @@ Shopping data can reveal sensitive traits by inference (diet, religion, health, 
 | Google | Sign-in provider | Name, email, picture at sign-in | Global |
 | Google (Gemini API) | Processor: recipe PDF and web-page parsing (page text, or the link via url_context); suggesting protein swaps (recipe content only); translating staple product searches into Dutch; finding AH's product name for an ingredient with Google Search grounding (Suggest AH products) | Uploaded recipe PDFs; staple search words and ingredient names (no user data) | Global |
 | Apple, Google, Mozilla push services | Deliver push messages (**planned**) | Encrypted push payload with no item names | Global |
-| OpenStreetMap Foundation (Nominatim) | Recipient: place search for food photos, through our server | A location rounded to 1 decimal (~11 km), or the place-search text typed; our server's IP and the app's User-Agent. No user ID, photo or exact location | UK (the Foundation); servers as OSMF runs them |
+| Geoapify | Processor: place search for food photos, through our server (since 28 Nov 2026; replaced OpenStreetMap's Nominatim, which blocked Supabase's servers) | A location rounded to 1 decimal (~11 km), or the place-search text typed; our server's IP. No user ID, photo or exact location | EU data centres |
 | Albert Heijn | Recipient at the user's request | Shopping list lines written to the user's own AH account | Netherlands |
 | Albert Heijn image server (static.ah.nl) | Third party the browser contacts directly | Request metadata (IP address, user agent) when a product photo is shown; no referrer, no app data | Netherlands / AH's CDN |
 
-**To check:** transfer mechanisms (EU-US Data Privacy Framework or Standard Contractual Clauses) for Vercel, Google and the push services. Also for the OpenStreetMap Foundation (UK): confirm the EU adequacy decision for the UK is still in force.
+**To check:** transfer mechanisms (EU-US Data Privacy Framework or Standard Contractual Clauses) for Vercel, Google and the push services. Geoapify: accept its data processing agreement (DPA) for the account. (The OpenStreetMap Foundation is no longer used; the EU adequacy decision for the UK was confirmed in force on 27 Nov 2026.)
 
 ## Security measures
 

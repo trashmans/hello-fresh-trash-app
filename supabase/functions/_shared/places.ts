@@ -1,14 +1,14 @@
-// Food map place search (docs/adr/0012, F1c): what we ask OpenStreetMap's Nominatim and what
-// we keep of its answer. Pure functions; place-search/index.ts does the fetching.
+// Food map place search (docs/adr/0012): what we ask Geoapify and what we keep of its answer.
+// Pure functions; place-search/index.ts does the fetching.
 //
-// Nominatim usage policy (https://operations.osmfoundation.org/policies/nominatim/): at most
-// one request a second for the whole app, an identifying User-Agent, caching, attribution,
-// no autocomplete (search only when the person presses Search), no systematic or bulk lookups,
-// no personal data. Reverse lookups only ever get the coarse cell (1 decimal, ~11 km).
+// Geoapify (EU-hosted, OpenStreetMap data) replaced OpenStreetMap's own Nominatim on 28 Nov
+// 2026: Nominatim blocked Supabase's shared servers (403 on every request). Free plan: 3,000
+// lookups a day, 5 a second; results shown with "Powered by Geoapify" and OpenStreetMap's
+// credit. Reverse lookups only ever get the coarse cell (1 decimal, ~11 km); typed searches
+// run only when the person presses Search.
 
-export const NOMINATIM = 'https://nominatim.openstreetmap.org'
-export const USER_AGENT = 'HelloFreshTrash/1.0 (+https://hello-fresh-trash-app.vercel.app)'
-export const ATTRIBUTION = '© OpenStreetMap contributors'
+export const GEOAPIFY = 'https://api.geoapify.com/v1/geocode'
+export const ATTRIBUTION = 'Powered by Geoapify · © OpenStreetMap contributors'
 const LANGUAGE = 'en'
 const MAX_LABEL = 200
 const MAX_DETAIL = 300
@@ -18,8 +18,9 @@ export type Cell = { lat: number; lon: number }
 export type PlaceRequest = ({ mode: 'reverse' } & Cell) | { mode: 'search'; q: string }
 export type Place = { label: string; detail: string; lat: number; lon: number; precision: 'city' | 'exact' }
 
-// Nominatim's addresstype for a whole town, region or country: stored as city level, not an exact spot.
-const AREA_TYPES = new Set(['city', 'town', 'village', 'hamlet', 'suburb', 'municipality', 'county', 'state_district', 'state', 'province', 'region', 'country'])
+// Geoapify's result_type for a whole town, part of one, region or country: stored as city
+// level, not an exact spot.
+const AREA_TYPES = new Set(['city', 'suburb', 'district', 'postcode', 'county', 'state', 'country'])
 
 // Rounds and turns -0 into 0.
 const round = (n: number, decimals: number) => Math.round(n * 10 ** decimals) / 10 ** decimals + 0
@@ -42,17 +43,17 @@ export function checkPlaceRequest(body: unknown): PlaceRequest | null {
   return null
 }
 
-const url = (path: string, params: Record<string, string>) => `${NOMINATIM}/${path}?${new URLSearchParams(params)}`
+const url = (path: string, params: Record<string, string>) => `${GEOAPIFY}/${path}?${new URLSearchParams(params)}`
 
-export const reverseUrl = (cell: Cell) => url('reverse', {
-  format: 'jsonv2', lat: String(cell.lat), lon: String(cell.lon), zoom: '10', addressdetails: '1', 'accept-language': LANGUAGE,
+export const reverseUrl = (cell: Cell, apiKey: string) => url('reverse', {
+  lat: String(cell.lat), lon: String(cell.lon), type: 'city', lang: LANGUAGE, format: 'json', apiKey,
 })
 
-export const searchUrl = (q: string) => url('search', {
-  format: 'jsonv2', q, limit: String(MAX_RESULTS), addressdetails: '1', 'accept-language': LANGUAGE,
+export const searchUrl = (q: string, apiKey: string) => url('search', {
+  text: q, limit: String(MAX_RESULTS), lang: LANGUAGE, format: 'json', apiKey,
 })
 
-export const cacheKey = (cell: Cell) => `reverse:${cell.lat.toFixed(1)},${cell.lon.toFixed(1)}:${LANGUAGE}`
+export const cacheKey = (cell: Cell) => `geoapify:${cell.lat.toFixed(1)},${cell.lon.toFixed(1)}:${LANGUAGE}`
 
 const text = (v: unknown) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
 
@@ -68,49 +69,48 @@ function join(parts: unknown[], max: number): string {
 }
 
 function coords(r: Record<string, unknown>): Cell | null {
+  if (typeof r.lat !== 'number' && typeof r.lat !== 'string') return null
+  if (typeof r.lon !== 'number' && typeof r.lon !== 'string') return null
   const lat = Number(r.lat)
   const lon = Number(r.lon)
-  if (typeof r.lat !== 'string' && typeof r.lat !== 'number') return null
-  if (typeof r.lon !== 'string' && typeof r.lon !== 'number') return null
   return inRange(lat, lon) ? { lat: round(lat, 5), lon: round(lon, 5) } : null
 }
 
 const record = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 
-const locality = (a: Record<string, unknown>) =>
-  text(a.city) || text(a.town) || text(a.village) || text(a.municipality)
+// The results list of a Geoapify reply (format=json), or [] for an error or anything else.
+const results = (data: unknown): unknown[] => {
+  const list = record(data).results
+  return Array.isArray(list) ? list : []
+}
 
 // The nearest city for a coarse cell, with the city's own coordinates; null for the sea or an error.
 export function placeFromReverse(data: unknown): Place | null {
-  const r = record(data)
-  if (r.error) return null
+  const r = record(results(data)[0])
   const at = coords(r)
   if (!at) return null
-  const a = record(r.address)
-  const city = locality(a) || text(a.county) || text(a.state) || text(r.name)
+  const city = text(r.city) || text(r.county) || text(r.state) || text(r.name)
   if (!city) return null
-  return { label: join([city, a.country], MAX_LABEL), detail: join([city, a.state, a.country], MAX_DETAIL), ...at, precision: 'city' }
+  return { label: join([city, r.country], MAX_LABEL), detail: join([city, r.state, r.country], MAX_DETAIL), ...at, precision: 'city' }
 }
 
 // Up to 5 places for a typed search: a short label (name, town, country), the full address, and
 // whether it is a town or area ('city') or a spot such as a restaurant ('exact').
 export function placesFromSearch(data: unknown): Place[] {
-  if (!Array.isArray(data)) return []
   const out: Place[] = []
   const seen = new Set<string>()
-  for (const item of data) {
+  for (const item of results(data)) {
     const r = record(item)
     const at = coords(r)
     if (!at) continue
-    const a = record(r.address)
-    const name = text(r.name) || text(r.display_name).split(',')[0]?.trim() || ''
+    const name = text(r.name) || text(r.address_line1)
     if (!name) continue
-    const label = join([name, locality(a), a.country], MAX_LABEL)
+    const label = join([name, r.city, r.country], MAX_LABEL)
     if (seen.has(label.toLowerCase())) continue
     seen.add(label.toLowerCase())
-    const precision = AREA_TYPES.has(text(r.addresstype)) ? 'city' : 'exact'
-    out.push({ label, detail: join([r.display_name], MAX_DETAIL) || label, ...at, precision })
+    const precision = AREA_TYPES.has(text(r.result_type)) ? 'city' : 'exact'
+    out.push({ label, detail: join([r.formatted], MAX_DETAIL) || label, ...at, precision })
     if (out.length === MAX_RESULTS) break
   }
   return out
